@@ -54,8 +54,8 @@ fn test_ipc_bridge_write() {
 
     bridge.write_response(&resp).unwrap();
 
-    let event = RasCoreEvent::TokenReceived {
-        token: "hello".to_string(),
+    let event = RasCoreEvent::HttpChunkReceived {
+        chunk: "hello".to_string(),
     };
 
     bridge.write_event(&event).unwrap();
@@ -70,10 +70,10 @@ fn test_ipc_bridge_write() {
     let event_line = lines.next().unwrap();
     let decoded_event: RasCoreEvent = serde_json::from_str(event_line).unwrap();
     match decoded_event {
-        RasCoreEvent::TokenReceived { token } => {
-            assert_eq!(token, "hello");
+        RasCoreEvent::HttpChunkReceived { chunk } => {
+            assert_eq!(chunk, "hello");
         }
-        _ => panic!("Expected TokenReceived event"),
+        _ => panic!("Expected HttpChunkReceived event"),
     }
 }
 
@@ -81,8 +81,8 @@ fn test_ipc_bridge_write() {
 fn test_route_event_to_terminal() {
     use crate::ipc::route_event_to_terminal;
 
-    let ev1 = RasCoreEvent::TokenReceived {
-        token: "hello".to_string(),
+    let ev1 = RasCoreEvent::HttpChunkReceived {
+        chunk: "hello".to_string(),
     };
     let ev2 = RasCoreEvent::ProcessStdout {
         pgid: 1,

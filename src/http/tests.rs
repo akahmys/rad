@@ -31,7 +31,7 @@ fn test_http_streaming_success() {
     let mut tokens = Vec::new();
     while let Ok(event) = rx.recv_timeout(Duration::from_secs(2)) {
         match event {
-            RasCoreEvent::TokenReceived { token } => tokens.push(token),
+            RasCoreEvent::HttpChunkReceived { chunk } => tokens.push(chunk),
             _ => tokens.push(format!("{:?}", event)),
         }
     }
@@ -121,8 +121,8 @@ fn test_http_streaming_dynamic_policy_update() {
     let mut hello_received = false;
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(1) {
-        if let Ok(RasCoreEvent::TokenReceived { token }) = rx.recv_timeout(Duration::from_millis(100))
-            && token.contains("hello")
+        if let Ok(RasCoreEvent::HttpChunkReceived { chunk }) = rx.recv_timeout(Duration::from_millis(100))
+            && chunk.contains("hello")
         {
             hello_received = true;
             break;

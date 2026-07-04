@@ -123,6 +123,11 @@ pub fn execute_rpc_command(
             }
             Ok(serde_json::Value::Null)
         }
+        RasRpcCommand::WriteStdout { text } => {
+            print!("{text}");
+            std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {e}"))?;
+            Ok(serde_json::Value::Null)
+        }
     }
 }
 

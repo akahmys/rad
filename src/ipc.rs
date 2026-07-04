@@ -26,8 +26,8 @@ pub enum TimeoutPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", content = "payload")]
 pub enum RasCoreEvent {
-    TokenReceived {
-        token: String,
+    HttpChunkReceived {
+        chunk: String,
     },
     ToolCallRequested {
         call_id: String,
@@ -114,6 +114,9 @@ pub enum RasRpcCommand {
         target: Target,
         policy: TimeoutPolicy,
     },
+    WriteStdout {
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -188,10 +191,6 @@ impl<R: BufRead, W: Write> IpcBridge<R, W> {
 /// Returns error if standard stream writing or flushing fails.
 pub fn route_event_to_terminal(event: &RasCoreEvent) -> Result<(), String> {
     match event {
-        RasCoreEvent::TokenReceived { token } => {
-            print!("{token}");
-            std::io::stdout().flush().map_err(|e| format!("Stdout flush error: {e}"))?;
-        }
         RasCoreEvent::ProcessStdout { data, .. } => {
             std::io::stdout().write_all(data).map_err(|e| format!("Stdout write error: {e}"))?;
             std::io::stdout().flush().map_err(|e| format!("Stdout flush error: {e}"))?;

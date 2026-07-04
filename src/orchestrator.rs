@@ -57,8 +57,7 @@ impl Orchestrator {
 
         drop(event_tx);
 
-        let mut token_buffer = String::new();
-        self.process_event_loop(event_rx, &mut wasm_runtime, &mut token_buffer)?;
+        self.process_event_loop(event_rx, &mut wasm_runtime)?;
 
         Ok(())
     }
@@ -91,24 +90,15 @@ impl Orchestrator {
         &self,
         event_rx: Receiver<RasCoreEvent>,
         wasm_runtime: &mut Option<WasmRuntime>,
-        token_buffer: &mut String,
     ) -> Result<(), String> {
         while let Ok(event) = event_rx.recv() {
             // Route events to terminal in real-time
             let _ = route_event_to_terminal(&event);
 
             match event {
-                RasCoreEvent::TokenReceived { token } => {
-                    token_buffer.push_str(&token);
-                    if let Some(tool_call) = self.try_parse_tool_call(token_buffer) {
-                        token_buffer.clear();
-                        if let Some(runtime) = wasm_runtime {
-                            runtime.on_event(&RasCoreEvent::ToolCallRequested {
-                                call_id: tool_call.call_id,
-                                name: tool_call.name,
-                                args: tool_call.args,
-                            })?;
-                        }
+                RasCoreEvent::HttpChunkReceived { chunk } => {
+                    if let Some(runtime) = wasm_runtime {
+                        runtime.on_event(&RasCoreEvent::HttpChunkReceived { chunk })?;
                     }
                 }
                 RasCoreEvent::ProcessExited { pgid, exit_code } => {
@@ -132,20 +122,6 @@ impl Orchestrator {
         Ok(())
     }
 
-    fn try_parse_tool_call(&self, buffer: &str) -> Option<ParsedToolCall> {
-        let value: serde_json::Value = serde_json::from_str(buffer).ok()?;
-        let obj = value.as_object()?;
-        let call_id = obj.get("call_id")?.as_str()?.to_string();
-        let name = obj.get("name")?.as_str()?.to_string();
-        let args = obj.get("args")?.clone();
-        Some(ParsedToolCall { call_id, name, args })
-    }
-}
-
-struct ParsedToolCall {
-    call_id: String,
-    name: String,
-    args: serde_json::Value,
 }
 
 #[cfg(test)]
