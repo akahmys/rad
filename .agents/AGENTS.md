@@ -39,7 +39,8 @@ Perform verification in this strict order:
 **Upon Success**:
 1. Mark completed task in `TASKS.md` with `[x]`.
 2. Run `git add .` and propose `git commit -m "<type>(<scope>): <description>"` (Conventional Commits) for user approval.
-3. Report audit results, proposed commit, and ask to proceed to the next AWU.
+3. Once approved, execute the commit and immediately push to the remote repository (`git push`).
+4. Report audit results, successful commit and push, and ask to proceed to the next AWU.
 
 **Upon Failure**:
 - Fix errors immediately. Do not commit or ask for help unless completely blocked.
