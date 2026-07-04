@@ -5,6 +5,11 @@
 ## 🌀 Rust Design Constraints
 - Strictly adhere to all rules in [CODING_RULES.md](file:///Users/akahmys/projects/rad/CODING_RULES.md) (Clippy, file/function size, test separation, safety).
 
+## 🌐 Language Policy
+- **Files & Code**: All files, code, documentation, schemas, and inline comments in the repository must be written exclusively in **English**.
+- **Chat Communication**: All conversations and responses to the user in the chat must be conducted in **Japanese**.
+
+
 ## 🔍 Context Economy in Search & Directory Listing
 - **Minimize Scope**: Restrict search paths and use file filters (e.g., specific globs) in `grep_search` / `list_dir`. Do not search the whole workspace.
 - **Limit Output**: Always limit terminal command outputs (e.g., `head -n 30` or `-n 5` flags) to avoid token bloat.
