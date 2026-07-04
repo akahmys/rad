@@ -38,8 +38,14 @@
   - [x] Implement snapshot restoration (`checkout_snapshot`) restoring workspace files from `.rad/snapshots/<node_id>/`
   - [x] Write unit tests for filesystem sandbox and snapshots in `src/fs/tests.rs`
   - [x] Verify compliance with `#![deny(clippy::pedantic)]`, check_secrets.sh, and cargo test
-- [ ] (Current) AWU 4: DAG Tracking & Dual-Channel JSON IPC Bridge
-- [ ] AWU 5: WebAssembly Runtime Integration (wasmtime)
+- [x] AWU 4: DAG Tracking & Dual-Channel JSON IPC Bridge
+  - [x] Implement `Dag` structure managing `DagNode` history in `src/dag.rs`
+  - [x] Implement DAG operations: `create_node`, `set_node_text`, `merge_nodes`, `delete_node`
+  - [x] Define communication protocols (`RasCoreEvent`, `RasRpcCommand`, `RasRpcResponse`) in `src/ipc.rs`
+  - [x] Implement `IpcBridge` utilizing JSON Lines over `Read` / `Write` streams
+  - [x] Add comprehensive tests in `src/dag/tests.rs` and `src/ipc/tests.rs`
+  - [x] Verify compliance with `#![deny(clippy::pedantic)]`, check_secrets.sh, and cargo test
+- [ ] (Current) AWU 5: WebAssembly Runtime Integration (wasmtime)
 - [ ] AWU 6: PTY Support & Filesystem Watcher Sensor
 - [ ] AWU 7: HTTP Streaming Client & Dynamic Timeout Policies
 - [ ] AWU 8: Security Audit & E2E Integration Tests

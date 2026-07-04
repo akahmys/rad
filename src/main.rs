@@ -3,6 +3,8 @@
 mod config;
 pub mod fs;
 pub mod process;
+pub mod dag;
+pub mod ipc;
 
 use clap::Parser;
 
