@@ -91,8 +91,8 @@
   - [x] Intercept privileged RPC commands (spawn process, write file) and prompt user `Approve? (y/n)` on terminal synchronously
 - [x] AWU 13: Session State Persistence & DAG Recovery
   - [x] Implement JSON serialization for DAG state, saving sessions to `.rad/sessions/` and reloading via `rad --session <id>`
-- [ ] AWU 14: Autonomous Execution Loop Integration
-  - [ ] Link LLM orchestrator inside the single-process REPL, allowing autonomous execution to progress until goal completion or approval request
+- [x] AWU 14: Autonomous Execution Loop Integration
+  - [x] Link LLM orchestrator inside the single-process REPL, allowing autonomous execution to progress until goal completion or approval request
 - [ ] AWU 15: Single-Process E2E Integration Tests & Zero-Warning Audit
   - [ ] Implement E2E integration test for the full REPL pipeline (task input, stream output, approval, and exit)
   - [ ] Conduct full path security audit, zero Clippy warnings, and ensure all tests pass
