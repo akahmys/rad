@@ -15,9 +15,11 @@
 - [x] Audit all files for consistency and redundancy (specifically ARCHITECTURE.md vs CONFIG.md schemas)
 
 ## Version 0.1 Implementation Phase (Atomic Work Units)
-- [ ] (Current) AWU 1: Project Initialization & Configuration File (`rad.json`) Parser
-- [ ] AWU 2: PGID Management & Child Process SIGKILL Cleanup (Process Subsystem)
-- [ ] AWU 3: Filesystem Subsystem & Capability Mask Path Validation
-- [ ] AWU 4: In-Memory DAG Tracking & Physical Snapshots Backup/Restore
-- [ ] AWU 5: Dual-Channel JSON IPC Bridge & Builtin Verification Extension
-- [ ] AWU 6: Scenario-Based Integration Tests & Quality Audit
+- [ ] (Current) AWU 1: Project Setup & Configuration Parser
+- [ ] AWU 2: Process Subsystem with PGID Isolation & Group Cleanup
+- [ ] AWU 3: Filesystem Sandbox & Snapshot Backup/Restoration
+- [ ] AWU 4: DAG Tracking & Dual-Channel JSON IPC Bridge
+- [ ] AWU 5: WebAssembly Runtime Integration (wasmtime)
+- [ ] AWU 6: PTY Support & Filesystem Watcher Sensor
+- [ ] AWU 7: HTTP Streaming Client & Dynamic Timeout Policies
+- [ ] AWU 8: Security Audit & E2E Integration Tests
