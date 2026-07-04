@@ -45,7 +45,15 @@
   - [x] Implement `IpcBridge` utilizing JSON Lines over `Read` / `Write` streams
   - [x] Add comprehensive tests in `src/dag/tests.rs` and `src/ipc/tests.rs`
   - [x] Verify compliance with `#![deny(clippy::pedantic)]`, check_secrets.sh, and cargo test
-- [ ] (Current) AWU 5: WebAssembly Runtime Integration (wasmtime)
-- [ ] AWU 6: PTY Support & Filesystem Watcher Sensor
+- [x] AWU 5: WebAssembly Runtime Integration (wasmtime)
+  - [x] Add `wasmtime = "29.0.0"` (or compatible version) to `Cargo.toml`
+  - [x] Create `src/wasm.rs` and its internal helper structures (`WasmRuntime`, `WasmState`)
+  - [x] Implement Wasm Guest Memory management helpers (alloc/dealloc invocation from Host)
+  - [x] Implement Host Imports (`rad_host_rpc`) mapping JSON RPC commands to `FsSandbox`, `ProcessManager`, `Dag` with permission enforcement
+  - [x] Implement `WasmRuntime::on_event` to dispatch events to Wasm Guest
+  - [x] Create a test Wasm fixture (e.g. `tests/fixtures/test_extension.wat` or raw wat compilation)
+  - [x] Add tests in `src/wasm/tests.rs` verifying event dispatch, RPC command invocation, memory management, and permission checking
+  - [x] Verify compliance with `#![deny(clippy::pedantic)]`, check_secrets.sh, and cargo test
+- [ ] (Current) AWU 6: PTY Support & Filesystem Watcher Sensor
 - [ ] AWU 7: HTTP Streaming Client & Dynamic Timeout Policies
 - [ ] AWU 8: Security Audit & E2E Integration Tests
