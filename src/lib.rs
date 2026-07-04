@@ -5,3 +5,5 @@ pub mod dag;
 pub mod ipc;
 pub mod wasm;
 pub mod http;
+pub mod session;
+

@@ -89,8 +89,8 @@
   - [x] Route LLM tokens (`TokenReceived`) and spawned PTY process stdout/stderr directly to the terminal stdout/stderr in real-time
 - [x] AWU 12: In-Process Human-in-the-Loop Approval Prompt
   - [x] Intercept privileged RPC commands (spawn process, write file) and prompt user `Approve? (y/n)` on terminal synchronously
-- [ ] AWU 13: Session State Persistence & DAG Recovery
-  - [ ] Implement JSON serialization for DAG state, saving sessions to `.rad/sessions/` and reloading via `rad --session <id>`
+- [x] AWU 13: Session State Persistence & DAG Recovery
+  - [x] Implement JSON serialization for DAG state, saving sessions to `.rad/sessions/` and reloading via `rad --session <id>`
 - [ ] AWU 14: Autonomous Execution Loop Integration
   - [ ] Link LLM orchestrator inside the single-process REPL, allowing autonomous execution to progress until goal completion or approval request
 - [ ] AWU 15: Single-Process E2E Integration Tests & Zero-Warning Audit
