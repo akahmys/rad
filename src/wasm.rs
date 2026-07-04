@@ -21,6 +21,8 @@ pub struct WasmState {
     pub dag: Arc<Mutex<Dag>>,
     pub permissions: PermissionConfig,
     pub active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
+    pub event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
+    pub llm_timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
 }
 
 pub struct WasmRuntime {
@@ -42,6 +44,7 @@ impl WasmRuntime {
         process_manager: Arc<ProcessManager>,
         dag: Arc<Mutex<Dag>>,
         active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
+        event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
     ) -> Result<Self, String> {
         let mut config = wasmtime::Config::new();
         config.wasm_multi_memory(true);
@@ -49,19 +52,19 @@ impl WasmRuntime {
         let module = Module::from_file(&engine, wasm_path)
             .map_err(|e| format!("Failed to load Wasm module from file: {e}"))?;
 
-        Self::new_with_module(&engine, &module, permissions, sandbox, process_manager, dag, active_processes)
+        Self::new_with_module(&module, permissions, sandbox, process_manager, dag, active_processes, event_tx)
     }
 
     fn new_with_module(
-        engine: &Engine,
         module: &Module,
         permissions: PermissionConfig,
         sandbox: Arc<FsSandbox>,
         process_manager: Arc<ProcessManager>,
         dag: Arc<Mutex<Dag>>,
         active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
+        event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
     ) -> Result<Self, String> {
-        let mut linker = Linker::new(engine);
+        let mut linker = Linker::new(module.engine());
 
         linker.func_wrap(
             "env",
@@ -77,9 +80,11 @@ impl WasmRuntime {
             dag,
             permissions,
             active_processes,
+            event_tx,
+            llm_timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Infinite)),
         };
 
-        let mut store = Store::new(engine, state);
+        let mut store = Store::new(module.engine(), state);
         let instance = linker
             .instantiate(&mut store, module)
             .map_err(|e| format!("Failed to instantiate module: {e}"))?;
@@ -191,6 +196,8 @@ fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i3
         &state.process_manager,
         &state.dag,
         &state.active_processes,
+        &state.event_tx,
+        &state.llm_timeout_policy,
     );
 
     let resp = RasRpcResponse {

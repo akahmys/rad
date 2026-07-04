@@ -49,8 +49,10 @@ graph TD
   - Integrate PTY (pseudoterminal) allocation to run interactive shells and capture raw terminals.
   - Implement filesystem monitoring via `notify` crate.
 * **AWU 7: HTTP Streaming Client & Dynamic Timeouts**
-  - Build asynchronous HTTP client supporting stream connections to OpenAI/Anthropic.
-  - Implement stream monitors supporting dynamic timeout policies (`heartbeat_timeout_ms` / `max_silent_wait_ms`).
+  - Add asynchronous dependencies (`reqwest`, `tokio`, `futures-util`) to enable stream connection to OpenAI/Anthropic.
+  - Implement dynamic timeout monitoring structure (`HttpStreamClient`) using shared state (`Arc<Mutex<TimeoutPolicy>>`) for real-time heartbeat and connection timeout.
+  - Update `RunningProcess` and host RPC handling to spawn background polling threads for process stdout/stderr capture and inactivity timeout.
+  - Expose `OpenHttpStream` and `SetStreamTimeoutPolicy` RPC methods, bridging streaming tokens and timeout triggers back to the Extension through `RasCoreEvent`.
 * **AWU 8: Security Audit & E2E Integration Tests**
   - Conduct path traversal prevention audit.
   - Run comprehensive integration tests verifying the full flow (Wasm Extension -> PTY command -> file edit -> snapshot -> rollback -> cleanup).

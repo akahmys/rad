@@ -82,6 +82,7 @@ impl ProcessManager {
             stderr_rx,
             last_activity: Instant::now(),
             active_pgids: self.active_pgids.clone(),
+            timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Infinite)),
         })
     }
 }
@@ -111,12 +112,13 @@ fn spawn_reader_thread<R: Read + Send + 'static>(mut reader: R, tx: mpsc::Sender
 }
 
 pub struct RunningProcess {
-    child: Box<dyn Child + Send + Sync>,
+    pub child: Box<dyn Child + Send + Sync>,
     pgid: Pid,
     stdout_rx: Receiver<Vec<u8>>,
     stderr_rx: Receiver<Vec<u8>>,
-    last_activity: Instant,
+    pub last_activity: Instant,
     active_pgids: Arc<Mutex<Vec<Pid>>>,
+    pub timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
 }
 
 impl RunningProcess {
@@ -179,7 +181,7 @@ impl RunningProcess {
         self.unregister_pgid();
     }
 
-    fn unregister_pgid(&mut self) {
+    pub fn unregister_pgid(&mut self) {
         if let Ok(mut pgids) = self.active_pgids.lock() {
             pgids.retain(|&x| x != self.pgid);
         }

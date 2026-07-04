@@ -61,5 +61,12 @@
   - [x] Integrate watcher and PTY into the runner core/test scenarios
   - [x] Add unit tests in `src/process/tests.rs` and `src/fs/tests.rs` for verification
   - [x] Adhere to `#![deny(clippy::pedantic)]` and ensure zero warnings or leaks
-- [ ] (Current) AWU 7: HTTP Streaming Client & Dynamic Timeout Policies
+- [x] AWU 7: HTTP Streaming Client & Dynamic Timeout Policies
+  - [x] Add `reqwest`, `tokio` and `futures-util` dependencies to `Cargo.toml`
+  - [x] Update `WasmState` and `WasmRuntime` to hold an event channel sender
+  - [x] Implement `HttpStreamClient` in `src/http.rs` to handle streaming and dynamic timeout policies
+  - [x] Implement background process monitoring emitting standard I/O events and enforcing timeouts
+  - [x] Implement RPC handlers for `OpenHttpStream` and `SetStreamTimeoutPolicy` in `src/wasm/rpc.rs`
+  - [x] Write tests verifying streaming response chunks, timeout detection, and policy dynamic updates
+  - [x] Verify compliance with clippy, check_secrets.sh, and cargo test
 - [ ] AWU 8: Security Audit & E2E Integration Tests

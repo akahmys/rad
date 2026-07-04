@@ -129,14 +129,15 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let engine = Engine::new(&config).unwrap();
     let module = Module::new(&engine, TEST_WAT).unwrap();
 
+    let (event_tx, _event_rx) = std::sync::mpsc::channel();
     let runtime = WasmRuntime::new_with_module(
-        &engine,
         &module,
         perms,
         sandbox.clone(),
         process_manager.clone(),
         dag.clone(),
         active_processes.clone(),
+        event_tx,
     ).unwrap();
 
     TestContext {
