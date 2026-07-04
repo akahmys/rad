@@ -96,3 +96,28 @@ graph TD
   - Add comprehensive E2E tests validating the REPL flow (startup -> stdin task -> auto stream output -> human approval -> completion).
   - Run clippy, tests, secret checks, and achieve zero warning status.
 
+---
+
+## Version 0.2.1 OpenAI-Compatible Wasm Extension (openai-orchestrator)
+
+```mermaid
+graph TD
+    AWU16[AWU 16: Setup Wasm Extension Cargo Project] --> AWU17[AWU 17: Implement OpenAI-Compatible Chat completions in Wasm]
+    AWU17 --> AWU18[AWU 18: Build, Configure, and E2E Verify Connection]
+```
+
+### Atomic Work Units (AWUs)
+
+* **AWU 16: Setup Wasm Extension Cargo Project**
+  - Create a new directory `ext/openai-orchestrator/` containing a Rust library project.
+  - Configure `Cargo.toml` with `crate-type = ["cdylib"]` and dependency settings for parsing JSON and calling host imports (`rad_host_rpc`).
+* **AWU 17: Implement OpenAI-Compatible Chat completions in Wasm**
+  - Implement memory allocator functions (`alloc`, `dealloc`) and event handler (`rad_on_event`) in Wasm guest.
+  - Implement state machine in Wasm that receives user task input (`HumanInputReceived`), constructs the chat history payload, and initiates the streaming chat completions request to `/v1/chat/completions` using the `OpenHttpStream` RPC command.
+  - Parse returning LLM tokens and tool call requests, dispatching subsequent file/process operations back to the Core host.
+* **AWU 18: Build, Configure, and E2E Verify Connection**
+  - Compile the extension to Wasm (`wasm32-wasip1` or `wasm32-unknown-unknown`).
+  - Copy or point the `rad.json` configuration `"source"` directly to the compiled `.wasm` file.
+  - Verify `rad` successfully runs, connects to the local endpoint, prints the streaming output, prompts for approvals, and completes tasks.
+
+
