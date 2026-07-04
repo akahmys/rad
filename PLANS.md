@@ -9,7 +9,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) Version
 
 ```mermaid
 graph TD
-    AWU1[AWU 1: Project Setup & Config Loader] --> AWU2[AWU 2: Process Isolation & PGID Cleanup]
+    AWU0[AWU 0: Security Rules & Secret Leak Prevention Harness] --> AWU1[AWU 1: Project Setup & Config Loader]
+    AWU1 --> AWU2[AWU 2: Process Isolation & PGID Cleanup]
     AWU2 --> AWU3[AWU 3: Filesystem Sandbox & Snapshots]
     AWU3 --> AWU4[AWU 4: DAG Tracking & JSON IPC Bridge]
     AWU4 --> AWU5[AWU 5: WebAssembly Runtime Integration]
@@ -20,6 +21,11 @@ graph TD
 
 ### Atomic Work Units (AWUs)
 
+* **AWU 0: Security Rules & Secret Leak Prevention Harness**
+  - Define rules in `CODING_RULES.md` and `.agents/AGENTS.md` to prevent committing secrets (API keys, tokens) and local absolute paths.
+  - Implement a verification script `scripts/check_secrets.sh` to scan for secrets and absolute paths.
+  - Install a Git `pre-commit` hook that runs the verification script on staged changes.
+  - Add the verification script run to the Strict Audit phase in `.agents/AGENTS.md`.
 * **AWU 1: Project Setup & Configuration Parser**
   - Setup Cargo project structure and define core data structures.
   - Implement comments-supported (JSONC) loader merging `rad.json` and `rad.local.json`.
