@@ -219,7 +219,7 @@ pub trait RasExtensionFacingApi {
 
 ### 4.2 単一設定ファイルによるケイパビリティアクセス制御 (Capability Mask)
 
-セキュリティポリシーを簡素かつ堅牢にするため、設定ファイルは `rad.config.json` の1つのみに限定します。
+セキュリティポリシーを簡素かつ堅牢にするため、設定ファイルは `rad.json` の1つのみに限定します。
 
 ```json
 {
