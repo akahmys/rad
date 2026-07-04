@@ -62,3 +62,37 @@ graph TD
   - Enforce Rust toolchain (stable, compatible with edition 2024).
   - Run `cargo check`, `cargo clippy`, and `cargo test` on all target platforms in CI.
   - Integrate secret and absolute path check script into the workflow to ensure commit safety.
+
+---
+
+## Detailed Version 0.2 Implementation Plan (Single-Process Agent Shell / REPL)
+
+```mermaid
+graph TD
+    AWU10[AWU 10: In-Process REPL Loop & Stdin Monitoring] --> AWU11[AWU 11: Real-time Event-to-Stdout Streaming Router]
+    AWU11 --> AWU12[AWU 12: In-Process Human-in-the-Loop Approval Prompt]
+    AWU12 --> AWU13[AWU 13: Session State Persistence & DAG Recovery]
+    AWU13 --> AWU14[AWU 14: Autonomous Execution Loop Integration]
+    AWU14 --> AWU15[AWU 15: Single-Process E2E Integration Tests & Zero-Warning Audit]
+```
+
+### Atomic Work Units (AWUs)
+
+* **AWU 10: In-Process REPL Loop & Stdin Monitoring**
+  - Implement a terminal-based REPL loop in `src/main.rs` that defaults to showing `rad > ` when launched with no subcommands.
+  - Parse CLI arguments, routing execution flow directly into the interactive REPL.
+* **AWU 11: Real-time Event-to-Stdout Streaming Router**
+  - Route Wasm Extension events (like `TokenReceived` and process execution stdout/stderr) directly to the active terminal's stdout/stderr in real-time.
+  - Ensure zero network socket overhead by executing Wasm and OS primitives within the same single process.
+* **AWU 12: In-Process Human-in-the-Loop Approval Prompt**
+  - Intercept privileged RPC commands (e.g. executing commands, writing files) to request manual confirmation.
+  - Present approval requests directly on the active terminal (`Approve? (y/n): `) and halt execution synchronously until the user responds.
+* **AWU 13: Session State Persistence & DAG Recovery**
+  - Implement JSON serialization for DAG state.
+  - Save sessions to `.rad/sessions/` on changes and add support for reloading session on startup via CLI (e.g. `rad --session <session_id>`).
+* **AWU 14: Autonomous Execution Loop Integration**
+  - Integrate orchestrator loop inside the REPL thread, ensuring LLM calls keep running autonomously until task goal is met or human interaction is triggered.
+* **AWU 15: Single-Process E2E Integration Tests & Zero-Warning Audit**
+  - Add comprehensive E2E tests validating the REPL flow (startup -> stdin task -> auto stream output -> human approval -> completion).
+  - Run clippy, tests, secret checks, and achieve zero warning status.
+

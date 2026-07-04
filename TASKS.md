@@ -82,6 +82,22 @@
   - [x] Integrate secret and path leak scanner validation check in CI
   - [x] Verify compliance with clippy, check_secrets.sh, and cargo test locally
 
+## Version 0.2 Implementation Phase (Single-Process Agent Shell / REPL)
+- [x] AWU 10: In-Process REPL Loop & Stdin Monitoring
+  - [x] Implement stdin reader loop in `src/main.rs` showing the `rad > ` prompt by default when no args are provided
+- [ ] AWU 11: Real-time Event-to-Stdout Streaming Router
+  - [ ] Route LLM tokens (`TokenReceived`) and spawned PTY process stdout/stderr directly to the terminal stdout/stderr in real-time
+- [ ] AWU 12: In-Process Human-in-the-Loop Approval Prompt
+  - [ ] Intercept privileged RPC commands (spawn process, write file) and prompt user `Approve? (y/n)` on terminal synchronously
+- [ ] AWU 13: Session State Persistence & DAG Recovery
+  - [ ] Implement JSON serialization for DAG state, saving sessions to `.rad/sessions/` and reloading via `rad --session <id>`
+- [ ] AWU 14: Autonomous Execution Loop Integration
+  - [ ] Link LLM orchestrator inside the single-process REPL, allowing autonomous execution to progress until goal completion or approval request
+- [ ] AWU 15: Single-Process E2E Integration Tests & Zero-Warning Audit
+  - [ ] Implement E2E integration test for the full REPL pipeline (task input, stream output, approval, and exit)
+  - [ ] Conduct full path security audit, zero Clippy warnings, and ensure all tests pass
+
+
 
 
 
