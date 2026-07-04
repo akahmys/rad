@@ -6,6 +6,7 @@ pub mod process;
 pub mod dag;
 pub mod ipc;
 pub mod wasm;
+pub mod http;
 
 use clap::Parser;
 
