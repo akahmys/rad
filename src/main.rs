@@ -38,13 +38,16 @@ fn main() {
             .to_string()
     });
 
-    let mut dag = if let Ok(loaded) = rad::session::load_session(&cfg.core.workspace, &session_id) {
+    let dag = if let Ok(loaded) = rad::session::load_session(&cfg.core.workspace, &session_id) {
         println!("Resumed session: {session_id}");
         loaded
     } else {
         println!("Started new session: {session_id}");
         rad::dag::Dag::new()
     };
+    let dag_arc = std::sync::Arc::new(std::sync::Mutex::new(dag));
+
+    let orchestrator = rad::orchestrator::Orchestrator::new(cfg.clone(), session_id.clone(), dag_arc.clone());
 
     println!("Starting rad agent shell. Type 'exit' or 'quit' to end the session.");
 
@@ -73,13 +76,15 @@ fn main() {
                 }
                 println!("Task received: {trimmed}");
                 
-                // For demonstration, create a task node and save DAG
-                if let Ok(node_id) = dag.create_node("", "task") {
-                    let _ = dag.set_node_text(&node_id, trimmed);
+                if let Err(e) = orchestrator.run_task(trimmed.to_string()) {
+                    eprintln!("Execution error: {e}");
                 }
                 
-                if let Err(e) = rad::session::save_session(&cfg.core.workspace, &session_id, &dag) {
-                    eprintln!("Failed to auto-save session: {e}");
+                if let Ok(dag_guard) = dag_arc.lock() {
+                    let res = rad::session::save_session(&cfg.core.workspace, &session_id, &dag_guard);
+                    if let Err(e) = res {
+                        eprintln!("Failed to auto-save session: {e}");
+                    }
                 }
             }
             Err(e) => {

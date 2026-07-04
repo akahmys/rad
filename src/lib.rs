@@ -6,4 +6,6 @@ pub mod ipc;
 pub mod wasm;
 pub mod http;
 pub mod session;
+pub mod orchestrator;
+
 
