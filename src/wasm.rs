@@ -158,6 +158,11 @@ impl WasmRuntime {
 
         Ok(())
     }
+
+    pub fn set_event_tx(&mut self, event_tx: std::sync::mpsc::Sender<RasCoreEvent>) {
+        let state = self.store.data_mut();
+        state.event_tx = event_tx;
+    }
 }
 
 fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i32) -> u64 {

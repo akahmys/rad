@@ -16,6 +16,7 @@ pub struct Orchestrator {
     pub dag: Arc<Mutex<Dag>>,
     active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
     pub session_id: String,
+    wasm_runtime: Mutex<Option<WasmRuntime>>,
 }
 
 impl Orchestrator {
@@ -36,6 +37,7 @@ impl Orchestrator {
             dag,
             active_processes,
             session_id,
+            wasm_runtime: Mutex::new(None),
         }
     }
 
@@ -46,10 +48,12 @@ impl Orchestrator {
     /// Returns an error if Wasm runtime initialization or execution fails.
     pub fn run_task(&self, instruction: String) -> Result<(), String> {
         let (event_tx, event_rx) = channel::<RasCoreEvent>();
-        let mut wasm_runtime = self.init_runtime(event_tx.clone())?;
+        
+        let mut wasm_guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
+        let wasm_runtime = self.get_or_init_runtime(&mut *wasm_guard, event_tx.clone())?;
 
         let init_event = RasCoreEvent::HumanInputReceived { text: instruction };
-        if let Some(ref mut runtime) = wasm_runtime {
+        if let Some(ref mut runtime) = *wasm_runtime {
             runtime.on_event(&init_event)?;
         } else {
             let _ = event_tx.send(init_event);
@@ -57,15 +61,24 @@ impl Orchestrator {
 
         drop(event_tx);
 
-        self.process_event_loop(event_rx, &mut wasm_runtime)?;
+        self.process_event_loop(event_rx, wasm_runtime)?;
 
         Ok(())
     }
 
-    fn init_runtime(&self, event_tx: Sender<RasCoreEvent>) -> Result<Option<WasmRuntime>, String> {
+    fn get_or_init_runtime<'a>(
+        &self,
+        guard: &'a mut Option<WasmRuntime>,
+        event_tx: Sender<RasCoreEvent>,
+    ) -> Result<&'a mut Option<WasmRuntime>, String> {
+        if let Some(ref mut runtime) = *guard {
+            runtime.set_event_tx(event_tx);
+            return Ok(guard);
+        }
+
         let ext_config = self.config.extensions.iter().find(|e| e.enabled);
         let Some(ext) = ext_config else {
-            return Ok(None);
+            return Ok(guard);
         };
 
         let permissions = ext.permissions.clone().unwrap_or_default();
@@ -80,10 +93,9 @@ impl Orchestrator {
                 self.active_processes.clone(),
                 event_tx,
             )?;
-            Ok(Some(runtime))
-        } else {
-            Ok(None)
+            *guard = Some(runtime);
         }
+        Ok(guard)
     }
 
     fn process_event_loop(
