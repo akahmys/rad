@@ -102,8 +102,13 @@
   - [x] Initialize Rust sub-project in `ext/openai-orchestrator` targetting `wasm32-wasip1` (or `wasm32-unknown-unknown`)
 - [x] AWU 17: Implement OpenAI-Compatible Chat completions in Wasm
   - [x] Write client logic in Wasm parsing events and calling Core host RPC (`OpenHttpStream`) for `/chat/completions`
-- [ ] (Current) AWU 18: Build, Configure, and E2E Verify Connection
-  - [ ] Compile the Wasm extension, point `rad.json` to the built Wasm file, and verify it successfully talks to local LLM endpoint (127.0.0.1:8080)
+- [x] AWU 18: Build, Configure, and E2E Verify Connection
+  - [x] Compile the Wasm extension, point `rad.json` to the built Wasm file, and verify it successfully talks to local LLM endpoint (127.0.0.1:8080)
+- [ ] (Current) AWU 19: Add WriteStdout RPC and Refactor to Decouple Stream Parsing
+  - [ ] Add `WriteStdout` RPC to `RasRpcCommand`
+  - [ ] Refactor `http.rs` and `Orchestrator` to dispatch `HttpChunkReceived` raw events
+  - [ ] Update Wasm `openai-orchestrator` to receive `HttpChunkReceived` and print via `WriteStdout`
+
 
 
 
