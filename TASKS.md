@@ -16,8 +16,15 @@
 
 ## Version 0.1 Implementation Phase (Atomic Work Units)
 - [x] AWU 0: Security Rules & Secret Leak Prevention Harness
-- [ ] (Current) AWU 1: Project Setup & Configuration Parser
-- [ ] AWU 2: Process Subsystem with PGID Isolation & Group Cleanup
+- [x] AWU 1: Project Setup & Configuration Parser
+  - [x] Initialize Cargo project structure (`Cargo.toml`, `src/main.rs`, `src/config.rs`)
+  - [x] Add dependencies (`serde`, `serde_json`, `jsonc-parser`, `dirs`, `clap`)
+  - [x] Define Rust configuration structs (`Config`, `CoreConfig`, `TimeoutConfig`, `ExtensionConfig`, `PermissionConfig`, etc.) based on `CONFIG.md`
+  - [x] Implement XDG/Windows configuration lookup logic
+  - [x] Implement JSONC loading and merging for `rad.local.json`
+  - [x] Write integration and unit tests in companion files (e.g., `src/config/tests.rs`)
+  - [x] Ensure all code adheres to `#![deny(clippy::pedantic)]` and passes Clippy, check_secrets.sh, and cargo test
+- [ ] (Current) AWU 2: Process Subsystem with PGID Isolation & Group Cleanup
 - [ ] AWU 3: Filesystem Sandbox & Snapshot Backup/Restoration
 - [ ] AWU 4: DAG Tracking & Dual-Channel JSON IPC Bridge
 - [ ] AWU 5: WebAssembly Runtime Integration (wasmtime)
