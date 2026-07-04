@@ -78,6 +78,9 @@ pub enum RasRpcCommand {
         target: Target,
         policy: TimeoutPolicy,
     },
+    WriteStdout {
+        text: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -96,8 +99,8 @@ pub struct RasRpcResponse {
 #[derive(Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum RasCoreEvent {
-    TokenReceived {
-        token: String,
+    HttpChunkReceived {
+        chunk: String,
     },
     HumanInputReceived {
         text: String,
@@ -241,10 +244,10 @@ fn handle_event(event: RasCoreEvent) -> Result<(), String> {
             
             trigger_llm_stream(state)?;
         }
-        RasCoreEvent::TokenReceived { token } => {
+        RasCoreEvent::HttpChunkReceived { chunk } => {
             let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
             if let Some(state) = state_guard.as_mut() {
-                state.stream_buffer.push_str(&token);
+                state.stream_buffer.push_str(&chunk);
                 process_sse_buffer(state)?;
             }
         }
@@ -292,8 +295,9 @@ fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
             
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) {
                 if let Some(content) = val.pointer("/choices/0/delta/content").and_then(|v| v.as_str()) {
-                    // LLM からのトークン出力。ログまたは内部管理としてのみ保持
-                    println!("Token parsed: {content}");
+                    let _ = call_host(RasRpcCommand::WriteStdout {
+                        text: content.to_string(),
+                    })?;
                 }
             }
         }
