@@ -116,6 +116,9 @@ impl Orchestrator {
                         runtime.on_event(&RasCoreEvent::StreamTimeout { target, duration_ms })?;
                     }
                 }
+                RasCoreEvent::TaskCompleted => {
+                    break;
+                }
                 _ => {}
             }
         }

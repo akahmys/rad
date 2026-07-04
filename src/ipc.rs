@@ -63,6 +63,7 @@ pub enum RasCoreEvent {
     HumanInputReceived {
         text: String,
     },
+    TaskCompleted,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -117,6 +118,7 @@ pub enum RasRpcCommand {
     WriteStdout {
         text: String,
     },
+    CompleteTask,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -128,6 +128,10 @@ pub fn execute_rpc_command(
             std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {e}"))?;
             Ok(serde_json::Value::Null)
         }
+        RasRpcCommand::CompleteTask => {
+            let _ = event_tx.send(crate::ipc::RasCoreEvent::TaskCompleted);
+            Ok(serde_json::Value::Null)
+        }
     }
 }
 
