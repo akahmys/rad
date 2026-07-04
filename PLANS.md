@@ -14,3 +14,5 @@
 8. 設定ファイル名を `rad.json` に統一し、配置ルールを反映した `CONFIG.md` の改定および `ARCHITECTURE.md` の修正 (完了)
 9. 推奨案に基づくグローバルな配置ルールを `CONFIG.md` に追記・アップデート (完了)
 10. 最低限の `rad.json` スキーマの検討と `CONFIG.md` の改定、および `rad.json` ファイルの新規作成 (完了)
+11. 全設定項目を網羅しコメント（説明）を記載した `rad.json` の作成、および `CONFIG.md` への JSONC サポート仕様の追記 (完了)
+12. `rad.json` および `CONFIG.md` から `version` フィールドを完全に削除 (完了)

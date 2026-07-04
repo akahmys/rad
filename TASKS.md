@@ -9,3 +9,5 @@
 - [x] Unify configuration file to `rad.json` and update `CONFIG.md` and `ARCHITECTURE.md`
 - [x] Add global path layout rules based on the recommended proposal to `CONFIG.md`
 - [x] Refine `rad.json` schema to be minimal, update `CONFIG.md`, and create `rad.json` at root
+- [x] Create full `rad.json` with explanatory comments, and update `CONFIG.md` to support JSONC
+- [x] Delete `version` field from both `rad.json` and `CONFIG.md`
