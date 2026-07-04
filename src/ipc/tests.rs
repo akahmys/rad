@@ -76,3 +76,30 @@ fn test_ipc_bridge_write() {
         _ => panic!("Expected TokenReceived event"),
     }
 }
+
+#[test]
+fn test_route_event_to_terminal() {
+    use crate::ipc::route_event_to_terminal;
+
+    let ev1 = RasCoreEvent::TokenReceived {
+        token: "hello".to_string(),
+    };
+    let ev2 = RasCoreEvent::ProcessStdout {
+        pgid: 1,
+        data: b"test_stdout".to_vec(),
+    };
+    let ev3 = RasCoreEvent::ProcessStderr {
+        pgid: 1,
+        data: b"test_stderr".to_vec(),
+    };
+    let ev4 = RasCoreEvent::ProcessSpawned {
+        pgid: 1,
+        pid: 123,
+    };
+
+    assert!(route_event_to_terminal(&ev1).is_ok());
+    assert!(route_event_to_terminal(&ev2).is_ok());
+    assert!(route_event_to_terminal(&ev3).is_ok());
+    assert!(route_event_to_terminal(&ev4).is_ok());
+}
+

@@ -85,8 +85,8 @@
 ## Version 0.2 Implementation Phase (Single-Process Agent Shell / REPL)
 - [x] AWU 10: In-Process REPL Loop & Stdin Monitoring
   - [x] Implement stdin reader loop in `src/main.rs` showing the `rad > ` prompt by default when no args are provided
-- [ ] AWU 11: Real-time Event-to-Stdout Streaming Router
-  - [ ] Route LLM tokens (`TokenReceived`) and spawned PTY process stdout/stderr directly to the terminal stdout/stderr in real-time
+- [x] AWU 11: Real-time Event-to-Stdout Streaming Router
+  - [x] Route LLM tokens (`TokenReceived`) and spawned PTY process stdout/stderr directly to the terminal stdout/stderr in real-time
 - [ ] AWU 12: In-Process Human-in-the-Loop Approval Prompt
   - [ ] Intercept privileged RPC commands (spawn process, write file) and prompt user `Approve? (y/n)` on terminal synchronously
 - [ ] AWU 13: Session State Persistence & DAG Recovery
