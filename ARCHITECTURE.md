@@ -228,10 +228,10 @@ For a simple and robust security policy, configuration is restricted to a single
       "name": "standard-orchestrator",
       "permissions": {
         "fs_read_allow": [
-          "/Users/akahmys/projects/rad"
+          "/path/to/rad"
         ],
         "fs_write_allow": [
-          "/Users/akahmys/projects/rad"
+          "/path/to/rad"
         ],
         "execution": {
           "allow_bash": true,

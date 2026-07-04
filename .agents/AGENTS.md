@@ -3,7 +3,8 @@
 *(Overrides Antigravity planning: Use PLANS.md / TASKS.md at root instead of standard artifacts).*
 
 ## 🌀 Rust Design Constraints
-- Strictly adhere to all rules in [CODING_RULES.md](file:///Users/akahmys/projects/rad/CODING_RULES.md) (Clippy, file/function size, test separation, safety).
+- Strictly adhere to all rules in [CODING_RULES.md](file:///Users/akahmys/projects/rad/CODING_RULES.md) (Clippy, file/function size, test separation, safety, security).
+- **Security Constraint**: Never write, modify, or commit any code, configs, documentations, or commit messages containing local absolute paths (e.g., `/Users/` or `/home/`) or API keys/secrets (e.g., `sk-` keys).
 
 ## 🌐 Language Policy
 - **Files & Code**: All files, code, documentation, schemas, and inline comments in the repository must be written exclusively in **English**.
@@ -30,9 +31,10 @@
 ### Step 3: Strict Audit & Auto-Commit
 Perform verification in this strict order:
 1. **Self-Size Check**: Verify compliance with [CODING_RULES.md](file:///Users/akahmys/projects/rad/CODING_RULES.md) size limits before compiling. Refactor immediately if violated.
-2. Run `cargo check` -> Must pass.
-3. Run `cargo clippy --all-targets` -> Must have **ZERO warnings**.
-4. Run `cargo test` -> All tests must pass.
+2. Run `scripts/check_secrets.sh` -> Must pass (no secrets or local absolute paths staged).
+3. Run `cargo check` -> Must pass.
+4. Run `cargo clippy --all-targets` -> Must have **ZERO warnings**.
+5. Run `cargo test` -> All tests must pass.
 
 **Upon Success**:
 1. Mark completed task in `TASKS.md` with `[x]`.

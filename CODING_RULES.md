@@ -28,3 +28,7 @@ This document defines strict guidelines for Rust development to ensure maximum c
   - Exception: `unwrap()` is permitted in test files to keep test assertions concise.
 - **No Unsafe**: Direct use of `unsafe` code is strictly prohibited.
 - **KISS Lifetimes**: Avoid complex explicit lifetime annotations (`'a`). Prefer transferring ownership, cheap cloning, or smart pointers (`Rc`/`Arc`) to maintain simplicity.
+
+## 6. Security & Leak Prevention
+- **No Absolute Paths**: Never hardcode local absolute paths (e.g., `/Users/` or `/home/`). Always use relative paths or retrieve paths dynamically from the environment or configuration.
+- **No Secrets**: Never commit API keys, tokens, or private credentials (e.g., OpenAI `sk-...`, Anthropic `sk-ant-...`). Use environment variables or configuration files that are excluded from version control (e.g., via `.gitignore`).

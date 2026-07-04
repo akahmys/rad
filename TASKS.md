@@ -15,6 +15,7 @@
 - [x] Audit all files for consistency and redundancy (specifically ARCHITECTURE.md vs CONFIG.md schemas)
 
 ## Version 0.1 Implementation Phase (Atomic Work Units)
+- [x] AWU 0: Security Rules & Secret Leak Prevention Harness
 - [ ] (Current) AWU 1: Project Setup & Configuration Parser
 - [ ] AWU 2: Process Subsystem with PGID Isolation & Group Cleanup
 - [ ] AWU 3: Filesystem Sandbox & Snapshot Backup/Restoration
