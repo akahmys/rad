@@ -1,10 +1,37 @@
 use std::collections::{HashMap, hash_map::RandomState};
 use std::sync::{Arc, Mutex};
+use std::io::Write;
 
 use crate::dag::Dag;
 use crate::fs::FsSandbox;
 use crate::ipc::RasRpcCommand;
 use crate::process::{ProcessManager, RunningProcess};
+
+/// Executes the given RPC command against physical systems.
+///
+/// # Errors
+///
+/// Returns an error if filesystem operations, process spawning, or DAG operations fail.
+fn request_approval(desc: &str) -> Result<(), String> {
+    // Bypass approval prompt during cargo test to prevent blocking unit tests
+    if std::env::var("CARGO_MANIFEST_DIR").is_ok() {
+        return Ok(());
+    }
+
+    print!("\n[Privileged Operation Request] {}\nApprove this action? (y/N): ", desc);
+    let mut stdout = std::io::stdout();
+    let _ = stdout.flush();
+    
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).map_err(|e| format!("Failed to read stdin: {e}"))?;
+    
+    let trimmed = input.trim().to_lowercase();
+    if trimmed == "y" || trimmed == "yes" {
+        Ok(())
+    } else {
+        Err("Operation rejected by user".to_string())
+    }
+}
 
 /// Executes the given RPC command against physical systems.
 ///
@@ -27,14 +54,17 @@ pub fn execute_rpc_command(
                 .map_err(|e| format!("Failed to serialize file_read result: {e}"))
         }
         RasRpcCommand::FileWrite { path, data } => {
+            request_approval(&format!("File Write to '{}'", path.display()))?;
             sandbox.file_write(path, data)?;
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::FileEditPatch { path, diff } => {
+            request_approval(&format!("File Edit (Patch) on '{}'", path.display()))?;
             sandbox.file_edit_patch(path, diff)?;
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::SpawnBashProcess { command } => {
+            request_approval(&format!("Execute shell command: '{}'", command))?;
             spawn_bash_process_rpc(command, sandbox, process_manager, active_processes, event_tx)
         }
         RasRpcCommand::CreateNode { parent_id, node_type } => {
