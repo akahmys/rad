@@ -26,8 +26,8 @@ pub struct WasmState {
 }
 
 pub struct WasmRuntime {
-    store: Store<WasmState>,
-    instance: Instance,
+    pub store: Store<WasmState>,
+    pub instance: Instance,
 }
 
 impl WasmRuntime {
@@ -55,7 +55,7 @@ impl WasmRuntime {
         Self::new_with_module(&module, permissions, sandbox, process_manager, dag, active_processes, event_tx)
     }
 
-    fn new_with_module(
+    pub fn new_with_module(
         module: &Module,
         permissions: PermissionConfig,
         sandbox: Arc<FsSandbox>,

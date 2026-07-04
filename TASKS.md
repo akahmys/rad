@@ -69,4 +69,9 @@
   - [x] Implement RPC handlers for `OpenHttpStream` and `SetStreamTimeoutPolicy` in `src/wasm/rpc.rs`
   - [x] Write tests verifying streaming response chunks, timeout detection, and policy dynamic updates
   - [x] Verify compliance with clippy, check_secrets.sh, and cargo test
-- [ ] AWU 8: Security Audit & E2E Integration Tests
+- [x] AWU 8: Security Audit & E2E Integration Tests
+  - [x] Audit `src/fs.rs` for path traversal prevention
+  - [x] Create E2E integration test module under `tests/`
+  - [x] Implement full flow in E2E test (Wasm -> PTY -> File Edit -> Snapshot -> Rollback)
+  - [x] Verify zero clippy warnings and ensure all tests pass
+
