@@ -16,3 +16,6 @@
 10. 最低限の `rad.json` スキーマの検討と `CONFIG.md` の改定、および `rad.json` ファイルの新規作成 (完了)
 11. 全設定項目を網羅しコメント（説明）を記載した `rad.json` の作成、および `CONFIG.md` への JSONC サポート仕様の追記 (完了)
 12. `rad.json` および `CONFIG.md` から `version` フィールドを完全に削除 (完了)
+13. `rad.json` の内容を `CONFIG.md` に統合し、`rad.json` を削除する (完了)
+
+

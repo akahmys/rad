@@ -11,3 +11,4 @@
 - [x] Refine `rad.json` schema to be minimal, update `CONFIG.md`, and create `rad.json` at root
 - [x] Create full `rad.json` with explanatory comments, and update `CONFIG.md` to support JSONC
 - [x] Delete `version` field from both `rad.json` and `CONFIG.md`
+- [x] Integrate `rad.json` into `CONFIG.md` and delete `rad.json`
