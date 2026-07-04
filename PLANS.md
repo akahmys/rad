@@ -39,8 +39,12 @@ graph TD
   - Manage session history in-memory using a Directed Acyclic Graph.
   - Implement a dual-channel JSON IPC bridge mapping Core events (`RasCoreEvent`) and Extension commands.
 * **AWU 5: WebAssembly Runtime Integration**
-  - Embed `wasmtime` to run policy Extensions compiled as WebAssembly modules.
-  - Map `RasExtensionFacingApi` primitives to host imports for the Wasm guest.
+  - Add `wasmtime` (version 29 or stable equivalent compatible with edition 2024) to `Cargo.toml`.
+  - Create a new module `src/wasm.rs` to manage the WebAssembly runtime execution.
+  - Implement memory allocation helper methods to transfer data between host and guest.
+  - Define guest functions to export (`rad_on_event`, `alloc`, `dealloc`).
+  - Implement host import function `rad_host_rpc` which takes an RPC JSON request from the guest, verifies capabilities against `PermissionConfig`, forwards the command to Core subsystems (FsSandbox, ProcessManager, Dag), and returns the serialized `RasRpcResponse` back to the guest.
+  - Write integration and unit tests in `src/wasm/tests.rs` (using a mock/test Wasm module or compiling a minimal Wasm guest dynamically if possible, or using a pre-compiled test Wasm bytes embedded in tests).
 * **AWU 6: PTY Allocation & Reactive Sensors**
   - Integrate PTY (pseudoterminal) allocation to run interactive shells and capture raw terminals.
   - Implement filesystem monitoring via `notify` crate.

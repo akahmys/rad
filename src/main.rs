@@ -5,6 +5,7 @@ pub mod fs;
 pub mod process;
 pub mod dag;
 pub mod ipc;
+pub mod wasm;
 
 use clap::Parser;
 
