@@ -93,9 +93,9 @@
   - [x] Implement JSON serialization for DAG state, saving sessions to `.rad/sessions/` and reloading via `rad --session <id>`
 - [x] AWU 14: Autonomous Execution Loop Integration
   - [x] Link LLM orchestrator inside the single-process REPL, allowing autonomous execution to progress until goal completion or approval request
-- [ ] AWU 15: Single-Process E2E Integration Tests & Zero-Warning Audit
-  - [ ] Implement E2E integration test for the full REPL pipeline (task input, stream output, approval, and exit)
-  - [ ] Conduct full path security audit, zero Clippy warnings, and ensure all tests pass
+- [x] AWU 15: Single-Process E2E Integration Tests & Zero-Warning Audit
+  - [x] Implement E2E integration test for the full REPL pipeline (task input, stream output, approval, and exit)
+  - [x] Conduct full path security audit, zero Clippy warnings, and ensure all tests pass
 
 
 
