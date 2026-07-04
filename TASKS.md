@@ -5,7 +5,7 @@
 - [x] Remove 'Honke' keyword from README.md
 - [x] Remove configuration section from README.md
 - [x] Create `ARCHITECTURE.md` based on the specified architecture
-- [ ] Configure remote origin, tag `v0.0.0`, and push to GitHub (保留)
+- [ ] Configure remote origin, tag `v0.0.0`, and push to GitHub (Deferred)
 - [x] Unify configuration file to `rad.json` and update `CONFIG.md` and `ARCHITECTURE.md`
 - [x] Add global path layout rules based on the recommended proposal to `CONFIG.md`
 - [x] Refine `rad.json` schema to be minimal, update `CONFIG.md`, and create `rad.json` at root
@@ -13,3 +13,11 @@
 - [x] Delete `version` field from both `rad.json` and `CONFIG.md`
 - [x] Integrate `rad.json` into `CONFIG.md` and delete `rad.json`
 - [x] Audit all files for consistency and redundancy (specifically ARCHITECTURE.md vs CONFIG.md schemas)
+
+## Version 0.1 Implementation Phase (Atomic Work Units)
+- [ ] (Current) AWU 1: Project Initialization & Configuration File (`rad.json`) Parser
+- [ ] AWU 2: PGID Management & Child Process SIGKILL Cleanup (Process Subsystem)
+- [ ] AWU 3: Filesystem Subsystem & Capability Mask Path Validation
+- [ ] AWU 4: In-Memory DAG Tracking & Physical Snapshots Backup/Restore
+- [ ] AWU 5: Dual-Channel JSON IPC Bridge & Builtin Verification Extension
+- [ ] AWU 6: Scenario-Based Integration Tests & Quality Audit
