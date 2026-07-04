@@ -60,10 +60,22 @@
         "fs_read_allow": ["*"],
         // 書き込みを許可するディレクトリパスのリスト（"*" はすべて許可）
         "fs_write_allow": ["*"],
-        // bash コマンドの実行（spawn_bash_process）を許可するかどうか
-        "allow_bash": true,
-        // 外部インターネットへのHTTPストリーム接続等を許可するかどうか
-        "allow_network": true
+        // bash コマンドの実行制限
+        "execution": {
+          // bash の実行（spawn_bash_process）を許可するかどうか
+          "allow_bash": true,
+          // 実行を許可するコマンド（またはプログラム名）のホワイトリスト（空時は全許可）
+          "allow_commands": ["cargo check", "cargo clippy", "cargo test", "git"],
+          // 実行を禁止するコマンドのブラックリスト
+          "block_commands": ["curl", "wget", "rm -rf /"]
+        },
+        // ネットワーク通信の制限
+        "network": {
+          // 外部通信を許可するかどうか
+          "allow_network": true,
+          // 通信を許可するドメインのホワイトリスト（空時は制限なし）
+          "allow_domains": ["api.openai.com", "api.anthropic.com", "github.com"]
+        }
       },
       // エクステンションに透過的（Passthrough）に渡される固有の設定パラメータ
       "config": {

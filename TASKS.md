@@ -12,3 +12,4 @@
 - [x] Create full `rad.json` with explanatory comments, and update `CONFIG.md` to support JSONC
 - [x] Delete `version` field from both `rad.json` and `CONFIG.md`
 - [x] Integrate `rad.json` into `CONFIG.md` and delete `rad.json`
+- [x] Audit all files for consistency and redundancy (specifically ARCHITECTURE.md vs CONFIG.md schemas)
