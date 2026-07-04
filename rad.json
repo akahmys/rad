@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "extensions": [
+    {
+      "name": "standard-orchestrator",
+      "source": "builtin://standard-orchestrator",
+      "enabled": true,
+      "config": {
+        "model": "claude-3-5-sonnet-20241022"
+      }
+    }
+  ]
+}
