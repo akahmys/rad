@@ -31,9 +31,20 @@ fn main() {
     println!("Log Dir: {}", cfg.core.log);
     println!("Extensions loaded: {}", cfg.extensions.len());
 
-    if let Some(ref session_id) = args.session {
-        println!("Resuming session: {session_id}");
-    }
+    let session_id = args.session.unwrap_or_else(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs())
+            .to_string()
+    });
+
+    let mut dag = if let Ok(loaded) = rad::session::load_session(&cfg.core.workspace, &session_id) {
+        println!("Resumed session: {session_id}");
+        loaded
+    } else {
+        println!("Started new session: {session_id}");
+        rad::dag::Dag::new()
+    };
 
     println!("Starting rad agent shell. Type 'exit' or 'quit' to end the session.");
 
@@ -61,7 +72,15 @@ fn main() {
                     continue;
                 }
                 println!("Task received: {trimmed}");
-                // TODO: Dispatch to Orchestrator in upcoming AWUs
+                
+                // For demonstration, create a task node and save DAG
+                if let Ok(node_id) = dag.create_node("", "task") {
+                    let _ = dag.set_node_text(&node_id, trimmed);
+                }
+                
+                if let Err(e) = rad::session::save_session(&cfg.core.workspace, &session_id, &dag) {
+                    eprintln!("Failed to auto-save session: {e}");
+                }
             }
             Err(e) => {
                 eprintln!("Error reading input: {e}");
