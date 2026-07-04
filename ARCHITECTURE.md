@@ -219,44 +219,49 @@ pub trait RasExtensionFacingApi {
 
 ### 4.2 単一設定ファイルによるケイパビリティアクセス制御 (Capability Mask)
 
-セキュリティポリシーを簡素かつ堅牢にするため、設定ファイルは `rad.json` の1つのみに限定します。
+セキュリティポリシーを簡素かつ堅牢にするため、設定ファイルは `rad.json` の1つのみに限定され、各エクステンションごとに詳細な権限制限が適用されます。
 
 ```json
 {
-  "permissions": {
-    "fs": {
-      "allow_read": [
-        "/Users/akahmys/projects/rad"
-      ],
-      "allow_write": [
-        "/Users/akahmys/projects/rad"
-      ]
-    },
-    "execution": {
-      "allow_commands": [
-        "cargo check",
-        "cargo clippy",
-        "cargo test",
-        "git"
-      ],
-      "block_commands": [
-        "curl",
-        "wget",
-        "rm -rf /"
-      ]
-    },
-    "network": {
-      "allow_domains": [
-        "api.openai.com",
-        "api.anthropic.com",
-        "github.com"
-      ]
+  "extensions": [
+    {
+      "name": "standard-orchestrator",
+      "permissions": {
+        "fs_read_allow": [
+          "/Users/akahmys/projects/rad"
+        ],
+        "fs_write_allow": [
+          "/Users/akahmys/projects/rad"
+        ],
+        "execution": {
+          "allow_bash": true,
+          "allow_commands": [
+            "cargo check",
+            "cargo clippy",
+            "cargo test",
+            "git"
+          ],
+          "block_commands": [
+            "curl",
+            "wget",
+            "rm -rf /"
+          ]
+        },
+        "network": {
+          "allow_network": true,
+          "allow_domains": [
+            "api.openai.com",
+            "api.anthropic.com",
+            "github.com"
+          ]
+        }
+      }
     }
-  }
+  ]
 }
 ```
 
-* **チェックの局所化**: コアはエクステンションから `file_read`, `file_write`, `spawn_bash_process` などのRPCコールを受け取る都度、上記の `permissions` マスクと機械的に照合します。
+* **チェックの局所化**: コアはエクステンションから `file_read`, `file_write`, `spawn_bash_process` などのRPCコールを受け取る都度、対象エクステンションの `permissions` マスクと機械的に照合します。
 * **例外遮断**:
   * ファイルシステムI/O時は、対象パスの正規化（`canonicalize`）を行い、シンボリックリンク等を用いたホワイトリスト外へのアクセス試行を検知し、`Permission Denied` を返します。
   * コマンド実行時は、シェルコマンドのパースを行い、許可リスト以外の実行可能ファイルを拒否します。
