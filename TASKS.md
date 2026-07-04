@@ -87,8 +87,8 @@
   - [x] Implement stdin reader loop in `src/main.rs` showing the `rad > ` prompt by default when no args are provided
 - [x] AWU 11: Real-time Event-to-Stdout Streaming Router
   - [x] Route LLM tokens (`TokenReceived`) and spawned PTY process stdout/stderr directly to the terminal stdout/stderr in real-time
-- [ ] AWU 12: In-Process Human-in-the-Loop Approval Prompt
-  - [ ] Intercept privileged RPC commands (spawn process, write file) and prompt user `Approve? (y/n)` on terminal synchronously
+- [x] AWU 12: In-Process Human-in-the-Loop Approval Prompt
+  - [x] Intercept privileged RPC commands (spawn process, write file) and prompt user `Approve? (y/n)` on terminal synchronously
 - [ ] AWU 13: Session State Persistence & DAG Recovery
   - [ ] Implement JSON serialization for DAG state, saving sessions to `.rad/sessions/` and reloading via `rad --session <id>`
 - [ ] AWU 14: Autonomous Execution Loop Integration
