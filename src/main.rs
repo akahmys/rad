@@ -1,6 +1,7 @@
 #![deny(clippy::pedantic)]
 
 mod config;
+pub mod process;
 
 use clap::Parser;
 

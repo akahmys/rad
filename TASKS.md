@@ -24,8 +24,14 @@
   - [x] Implement JSONC loading and merging for `rad.local.json`
   - [x] Write integration and unit tests in companion files (e.g., `src/config/tests.rs`)
   - [x] Ensure all code adheres to `#![deny(clippy::pedantic)]` and passes Clippy, check_secrets.sh, and cargo test
-- [ ] (Current) AWU 2: Process Subsystem with PGID Isolation & Group Cleanup
-- [ ] AWU 3: Filesystem Sandbox & Snapshot Backup/Restoration
+- [x] AWU 2: Process Subsystem with PGID Isolation & Group Cleanup
+  - [x] Add `nix` crate to `Cargo.toml` for safe OS/POSIX primitive calls
+  - [x] Implement `ProcessManager` structure with `Drop` implementation to manage active PGIDs
+  - [x] Implement isolated process spawning logic (`spawn_bash_process`) using `setpgid` from the parent process to avoid `unsafe`
+  - [x] Implement stdout/stderr tracking and dynamic timeout monitoring helper structures
+  - [x] Write companion tests in `src/process/tests.rs` to verify process group creation, signal killing on drop, and stdout/stderr capture
+  - [x] Verify compliance with `#![deny(clippy::pedantic)]`, check_secrets.sh, and cargo test
+- [ ] (Current) AWU 3: Filesystem Sandbox & Snapshot Backup/Restoration
 - [ ] AWU 4: DAG Tracking & Dual-Channel JSON IPC Bridge
 - [ ] AWU 5: WebAssembly Runtime Integration (wasmtime)
 - [ ] AWU 6: PTY Support & Filesystem Watcher Sensor
