@@ -1,0 +1,18 @@
+{
+  "core": {
+    "workspace_dir": ".",
+    "snapshot_dir": ".rad/snapshots",
+    "log_dir": ".rad/logs"
+  },
+  "extensions": [
+    {
+      "name": "openai-orchestrator",
+      "source": "target/wasm32-unknown-unknown/release/openai_orchestrator.wasm",
+      "enabled": true,
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"]
+      }
+    }
+  ]
+}
