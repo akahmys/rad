@@ -81,6 +81,7 @@ pub enum RasRpcCommand {
     WriteStdout {
         text: String,
     },
+    CompleteTask,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -131,6 +132,7 @@ pub enum RasCoreEvent {
         target: String,
         duration_ms: u64,
     },
+    TaskCompleted,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -290,6 +292,7 @@ fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
         if line.starts_with("data:") {
             let data_str = line["data:".len()..].trim();
             if data_str == "[DONE]" {
+                let _ = call_host(RasRpcCommand::CompleteTask)?;
                 break;
             }
             
