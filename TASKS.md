@@ -31,8 +31,14 @@
   - [x] Implement stdout/stderr tracking and dynamic timeout monitoring helper structures
   - [x] Write companion tests in `src/process/tests.rs` to verify process group creation, signal killing on drop, and stdout/stderr capture
   - [x] Verify compliance with `#![deny(clippy::pedantic)]`, check_secrets.sh, and cargo test
-- [ ] (Current) AWU 3: Filesystem Sandbox & Snapshot Backup/Restoration
-- [ ] AWU 4: DAG Tracking & Dual-Channel JSON IPC Bridge
+- [x] AWU 3: Filesystem Sandbox & Snapshot Backup/Restoration
+  - [x] Implement `FsSandbox` with normalized path verification and permission checks (`fs_read_allow`, `fs_write_allow`)
+  - [x] Implement safe file primitives: `file_read`, `file_write`, and `file_edit_patch` (using diff/patch)
+  - [x] Implement snapshot creation (`take_snapshot`) backing up specified files to `.rad/snapshots/<node_id>/`
+  - [x] Implement snapshot restoration (`checkout_snapshot`) restoring workspace files from `.rad/snapshots/<node_id>/`
+  - [x] Write unit tests for filesystem sandbox and snapshots in `src/fs/tests.rs`
+  - [x] Verify compliance with `#![deny(clippy::pedantic)]`, check_secrets.sh, and cargo test
+- [ ] (Current) AWU 4: DAG Tracking & Dual-Channel JSON IPC Bridge
 - [ ] AWU 5: WebAssembly Runtime Integration (wasmtime)
 - [ ] AWU 6: PTY Support & Filesystem Watcher Sensor
 - [ ] AWU 7: HTTP Streaming Client & Dynamic Timeout Policies
