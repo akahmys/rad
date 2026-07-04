@@ -104,6 +104,7 @@ graph TD
 graph TD
     AWU16[AWU 16: Setup Wasm Extension Cargo Project] --> AWU17[AWU 17: Implement OpenAI-Compatible Chat completions in Wasm]
     AWU17 --> AWU18[AWU 18: Build, Configure, and E2E Verify Connection]
+    AWU18 --> AWU19[AWU 19: Add WriteStdout RPC and Refactor to Decouple Stream Parsing]
 ```
 
 ### Atomic Work Units (AWUs)
@@ -119,5 +120,9 @@ graph TD
   - Compile the extension to Wasm (`wasm32-wasip1` or `wasm32-unknown-unknown`).
   - Copy or point the `rad.json` configuration `"source"` directly to the compiled `.wasm` file.
   - Verify `rad` successfully runs, connects to the local endpoint, prints the streaming output, prompts for approvals, and completes tasks.
+* **AWU 19: Add WriteStdout RPC and Refactor to Decouple Stream Parsing**
+  - Add `WriteStdout` command to `RasRpcCommand` to let Wasm write parsed text directly to the console.
+  - Refactor `http.rs` to send raw streaming data under a new event type `HttpChunkReceived` and stop `Orchestrator` from printing this raw data automatically.
+  - Update `openai-orchestrator` in Wasm to receive `HttpChunkReceived` instead of `TokenReceived`, parse the raw SSE format, extract the content delta, and call the new `WriteStdout` RPC to display text in the terminal.
 
 

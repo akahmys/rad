@@ -82,9 +82,9 @@ use std::path::PathBuf;
 #[serde(tag = "type", content = "payload")]
 pub enum RasCoreEvent {
     // === LLM Communication ===
-    /// Received a token (or substring) from the LLM
-    TokenReceived {
-        token: String,
+    /// Received a raw stream chunk from the HTTP connection
+    HttpChunkReceived {
+        chunk: String,
     },
     /// A tool execution request occurred from the LLM
     ToolCallRequested {
@@ -200,6 +200,9 @@ pub trait RasExtensionFacingApi {
     
     /// Dynamically updates the timeout monitoring policy for a target (LLM connection or process)
     fn set_stream_timeout_policy(&self, target: Target, policy: TimeoutPolicy) -> Result<(), String>;
+
+    /// Prints a string directly to the human terminal standard output
+    fn write_stdout(&self, text: &str) -> Result<(), String>;
 }
 ```
 
@@ -314,8 +317,10 @@ sequenceDiagram
     Note over Adapter: Create Anthropic JSON <br> {"model": "claude-...", "messages": [...]}
     Adapter->>Core: RPC: open_http_stream("https://api.anthropic.com/...", headers, body)
     Core->>LLM: HTTP Request (Stream)
-    LLM-->>Core: HTTP Stream Chunk (Anthropic-specific JSON)
-    Core->>Adapter: Event: TokenReceived { token: "..." } <br> (Core parses raw chunk to common format)
+    Core->>Adapter: Event: HttpChunkReceived { chunk: "..." } <br> (Core forwards raw chunk)
+    Note over Adapter: Parse raw chunk to extract content
+    Adapter->>Core: RPC: WriteStdout { text: "..." }
+    Core->>Terminal: Print token to screen
     Adapter->>Loop: Convert to unified format and dispatch event
 ```
 
