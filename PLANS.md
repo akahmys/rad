@@ -57,3 +57,8 @@ graph TD
   - Conduct path traversal prevention audit.
   - Run comprehensive integration tests verifying the full flow (Wasm Extension -> PTY command -> file edit -> snapshot -> rollback -> cleanup).
   - Verify zero Clippy warnings and test pass.
+* **AWU 9: GitHub Actions CI Setup**
+  - Create `.github/workflows/ci.yml` to build and test the project on main target platforms (Ubuntu, macOS, Windows).
+  - Enforce Rust toolchain (stable, compatible with edition 2024).
+  - Run `cargo check`, `cargo clippy`, and `cargo test` on all target platforms in CI.
+  - Integrate secret and absolute path check script into the workflow to ensure commit safety.

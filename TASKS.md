@@ -75,3 +75,13 @@
   - [x] Implement full flow in E2E test (Wasm -> PTY -> File Edit -> Snapshot -> Rollback)
   - [x] Verify zero clippy warnings and ensure all tests pass
 
+- [x] AWU 9: GitHub Actions CI Setup
+  - [x] Create `.github/workflows/ci.yml` supporting Ubuntu, macOS, and Windows
+  - [x] Configure Rust toolchain for edition 2024 compatibility (stable)
+  - [x] Add jobs for `cargo check`, `cargo clippy` (denying warnings), and `cargo test`
+  - [x] Integrate secret and path leak scanner validation check in CI
+  - [x] Verify compliance with clippy, check_secrets.sh, and cargo test locally
+
+
+
+
