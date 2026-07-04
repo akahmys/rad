@@ -35,7 +35,7 @@ pub fn execute_rpc_command(
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::SpawnBashProcess { command } => {
-            spawn_bash_process_rpc(command, process_manager, active_processes, event_tx)
+            spawn_bash_process_rpc(command, sandbox, process_manager, active_processes, event_tx)
         }
         RasRpcCommand::CreateNode { parent_id, node_type } => {
             let mut dag = dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
@@ -98,11 +98,12 @@ pub fn execute_rpc_command(
 
 fn spawn_bash_process_rpc(
     command: &str,
+    sandbox: &FsSandbox,
     process_manager: &ProcessManager,
     active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
 ) -> Result<serde_json::Value, String> {
-    let running = process_manager.spawn_bash_process(command)?;
+    let running = process_manager.spawn_bash_process(command, Some(sandbox.workspace_dir()))?;
     let pgid = running.pgid().as_raw();
 
     let mut processes = active_processes.lock().map_err(|e| format!("Process lock error: {e}"))?;
@@ -114,63 +115,8 @@ fn spawn_bash_process_rpc(
     std::thread::spawn(move || {
         let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::ProcessSpawned { pgid, pid: pgid });
         loop {
-            let mut proc_done = false;
-            {
-                let Ok(mut procs) = active_processes_clone.lock() else { break };
-                if let Some(proc) = procs.get_mut(&pgid) {
-                    let (stdout, stderr) = proc.read_available();
-                    if !stdout.is_empty() {
-                        let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::ProcessStdout { pgid, data: stdout });
-                    }
-                    if !stderr.is_empty() {
-                        let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::ProcessStderr { pgid, data: stderr });
-                    }
-
-                    match proc.child.try_wait() {
-                        Ok(Some(status)) => {
-                            let code = i32::try_from(status.exit_code()).ok();
-                            let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::ProcessExited { pgid, exit_code: code });
-                            proc.unregister_pgid();
-                            proc_done = true;
-                        }
-                        Ok(None) => {
-                            let policy = {
-                                if let Ok(guard) = proc.timeout_policy.lock() {
-                                    guard.clone()
-                                } else {
-                                    crate::ipc::TimeoutPolicy::Infinite
-                                }
-                            };
-                            let is_timeout = match policy {
-                                crate::ipc::TimeoutPolicy::Dynamic { heartbeat_timeout_ms, .. } => {
-                                    proc.last_activity.elapsed() > std::time::Duration::from_millis(heartbeat_timeout_ms)
-                                }
-                                crate::ipc::TimeoutPolicy::Infinite => false,
-                            };
-                            if is_timeout {
-                                proc.kill_group();
-                                let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::StreamTimeout {
-                                    target: format!("process_{pgid}"),
-                                    duration_ms: match policy {
-                                        crate::ipc::TimeoutPolicy::Dynamic { heartbeat_timeout_ms, .. } => heartbeat_timeout_ms,
-                                        crate::ipc::TimeoutPolicy::Infinite => 0,
-                                    },
-                                });
-                                let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::ProcessExited { pgid, exit_code: None });
-                                proc_done = true;
-                            }
-                        }
-                        Err(_) => {
-                            proc.kill_group();
-                            let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::ProcessExited { pgid, exit_code: None });
-                            proc_done = true;
-                        }
-                    }
-                } else {
-                    break;
-                }
-            }
-            if proc_done {
+            let done = monitor_single_process_tick(pgid, &active_processes_clone, &event_tx_clone);
+            if done {
                 if let Ok(mut procs) = active_processes_clone.lock() {
                     procs.remove(&pgid);
                 }
@@ -181,4 +127,58 @@ fn spawn_bash_process_rpc(
     });
 
     serde_json::to_value(pgid).map_err(|e| format!("Serialization error: {e}"))
+}
+
+fn monitor_single_process_tick(
+    pgid: i32,
+    active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
+    event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
+) -> bool {
+    let Ok(mut procs) = active_processes.lock() else { return true };
+    let Some(proc) = procs.get_mut(&pgid) else { return true };
+
+    let (stdout, stderr) = proc.read_available();
+    if !stdout.is_empty() {
+        let _ = event_tx.send(crate::ipc::RasCoreEvent::ProcessStdout { pgid, data: stdout });
+    }
+    if !stderr.is_empty() {
+        let _ = event_tx.send(crate::ipc::RasCoreEvent::ProcessStderr { pgid, data: stderr });
+    }
+
+    match proc.child.try_wait() {
+        Ok(Some(status)) => {
+            let code = i32::try_from(status.exit_code()).ok();
+            let _ = event_tx.send(crate::ipc::RasCoreEvent::ProcessExited { pgid, exit_code: code });
+            proc.unregister_pgid();
+            true
+        }
+        Ok(None) => {
+            let policy = proc.timeout_policy.lock().map(|g| g.clone()).unwrap_or(crate::ipc::TimeoutPolicy::Infinite);
+            let is_timeout = match policy {
+                crate::ipc::TimeoutPolicy::Dynamic { heartbeat_timeout_ms, .. } => {
+                    proc.last_activity.elapsed() > std::time::Duration::from_millis(heartbeat_timeout_ms)
+                }
+                crate::ipc::TimeoutPolicy::Infinite => false,
+            };
+            if is_timeout {
+                proc.kill_group();
+                let _ = event_tx.send(crate::ipc::RasCoreEvent::StreamTimeout {
+                    target: format!("process_{pgid}"),
+                    duration_ms: match policy {
+                        crate::ipc::TimeoutPolicy::Dynamic { heartbeat_timeout_ms, .. } => heartbeat_timeout_ms,
+                        crate::ipc::TimeoutPolicy::Infinite => 0,
+                    },
+                });
+                let _ = event_tx.send(crate::ipc::RasCoreEvent::ProcessExited { pgid, exit_code: None });
+                true
+            } else {
+                false
+            }
+        }
+        Err(_) => {
+            proc.kill_group();
+            let _ = event_tx.send(crate::ipc::RasCoreEvent::ProcessExited { pgid, exit_code: None });
+            true
+        }
+    }
 }

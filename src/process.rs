@@ -1,5 +1,6 @@
 use nix::sys::signal::{killpg, Signal};
 use nix::unistd::Pid;
+use std::path::Path;
 use std::io::Read;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
@@ -33,7 +34,7 @@ impl ProcessManager {
     /// # Errors
     ///
     /// Returns an error if the process fails to spawn or if lock is poisoned.
-    pub fn spawn_bash_process(&self, command: &str) -> Result<RunningProcess, String> {
+    pub fn spawn_bash_process(&self, command: &str, cwd: Option<&Path>) -> Result<RunningProcess, String> {
         let pty_system = native_pty_system();
         let pty_pair = pty_system
             .openpty(PtySize {
@@ -47,6 +48,9 @@ impl ProcessManager {
         let mut cmd = CommandBuilder::new("bash");
         cmd.arg("-c");
         cmd.arg(command);
+        if let Some(p) = cwd {
+            cmd.cwd(p);
+        }
 
         let child = pty_pair
             .slave

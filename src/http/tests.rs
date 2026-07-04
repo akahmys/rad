@@ -75,11 +75,9 @@ fn test_http_streaming_timeout() {
     while start.elapsed() < Duration::from_secs(1) {
         if let Ok(event) = rx.recv_timeout(Duration::from_millis(100)) {
             received_events.push(format!("{event:?}"));
-            if let RasCoreEvent::StreamTimeout { target, .. } = event {
-                if target == "llm" {
-                    timeout_occurred = true;
-                    break;
-                }
+            if matches!(event, RasCoreEvent::StreamTimeout { ref target, .. } if target == "llm") {
+                timeout_occurred = true;
+                break;
             }
         }
     }
@@ -123,13 +121,11 @@ fn test_http_streaming_dynamic_policy_update() {
     let mut hello_received = false;
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(1) {
-        if let Ok(event) = rx.recv_timeout(Duration::from_millis(100)) {
-            if let RasCoreEvent::TokenReceived { token } = event {
-                if token.contains("hello") {
-                    hello_received = true;
-                    break;
-                }
-            }
+        if let Ok(RasCoreEvent::TokenReceived { token }) = rx.recv_timeout(Duration::from_millis(100))
+            && token.contains("hello")
+        {
+            hello_received = true;
+            break;
         }
     }
     assert!(hello_received, "Failed to receive first chunk 'hello'");
@@ -148,11 +144,9 @@ fn test_http_streaming_dynamic_policy_update() {
     while start.elapsed() < Duration::from_secs(1) {
         if let Ok(event) = rx.recv_timeout(Duration::from_millis(100)) {
             received_events.push(format!("{event:?}"));
-            if let RasCoreEvent::StreamTimeout { target, .. } = event {
-                if target == "llm" {
-                    timeout_occurred = true;
-                    break;
-                }
+            if matches!(event, RasCoreEvent::StreamTimeout { ref target, .. } if target == "llm") {
+                timeout_occurred = true;
+                break;
             }
         }
     }

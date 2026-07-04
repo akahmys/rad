@@ -29,6 +29,11 @@ impl FsSandbox {
         }
     }
 
+    #[must_use]
+    pub fn workspace_dir(&self) -> &Path {
+        &self.workspace_dir
+    }
+
     fn canonicalize_path(&self, path: &Path) -> Result<PathBuf, String> {
         let absolute_path = if path.is_absolute() {
             path.to_path_buf()
@@ -57,18 +62,27 @@ impl FsSandbox {
         for component in path.components() {
             match component {
                 std::path::Component::ParentDir => {
-                    components.pop();
+                    if let Some(last) = components.last() {
+                        match last {
+                            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                                // Do not pop root or prefix
+                            }
+                            _ => {
+                                components.pop();
+                            }
+                        }
+                    }
                 }
                 std::path::Component::Normal(c) => {
-                    components.push(c);
+                    components.push(std::path::Component::Normal(c));
                 }
                 std::path::Component::CurDir => {}
                 std::path::Component::Prefix(p) => {
-                    components.push(p.as_os_str());
+                    components.push(std::path::Component::Prefix(p));
                 }
                 std::path::Component::RootDir => {
                     components.clear();
-                    components.push(std::ffi::OsStr::new("/"));
+                    components.push(std::path::Component::RootDir);
                 }
             }
         }
