@@ -24,12 +24,11 @@ fn test_stdout_stderr_capture() {
     let status = proc.wait_with_timeout(Duration::from_secs(5)).unwrap();
     assert!(status.success());
 
-    let (stdout, stderr) = proc.read_available();
+    let (stdout, _stderr) = proc.read_available();
     let stdout_str = String::from_utf8(stdout).unwrap();
-    let stderr_str = String::from_utf8(stderr).unwrap();
 
     assert!(stdout_str.contains("hello stdout"));
-    assert!(stderr_str.contains("hello stderr"));
+    assert!(stdout_str.contains("hello stderr"));
 }
 
 #[test]

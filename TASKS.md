@@ -54,6 +54,12 @@
   - [x] Create a test Wasm fixture (e.g. `tests/fixtures/test_extension.wat` or raw wat compilation)
   - [x] Add tests in `src/wasm/tests.rs` verifying event dispatch, RPC command invocation, memory management, and permission checking
   - [x] Verify compliance with `#![deny(clippy::pedantic)]`, check_secrets.sh, and cargo test
-- [ ] (Current) AWU 6: PTY Support & Filesystem Watcher Sensor
-- [ ] AWU 7: HTTP Streaming Client & Dynamic Timeout Policies
+- [x] AWU 6: PTY Support & Filesystem Watcher Sensor
+  - [x] Add `term` and `pty` features to `nix` dependency, and add `notify` crate to `Cargo.toml`
+  - [x] Refactor `ProcessManager` in `src/process.rs` to support PTY allocation for raw shell interactive control
+  - [x] Implement filesystem watcher module (`src/fs/watcher.rs`) utilizing `notify` to report workspace changes
+  - [x] Integrate watcher and PTY into the runner core/test scenarios
+  - [x] Add unit tests in `src/process/tests.rs` and `src/fs/tests.rs` for verification
+  - [x] Adhere to `#![deny(clippy::pedantic)]` and ensure zero warnings or leaks
+- [ ] (Current) AWU 7: HTTP Streaming Client & Dynamic Timeout Policies
 - [ ] AWU 8: Security Audit & E2E Integration Tests

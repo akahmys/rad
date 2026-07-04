@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub mod watcher;
+
 #[cfg(test)]
 mod tests;
 
