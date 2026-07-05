@@ -9,11 +9,11 @@ Last Updated: 2026-07-05
 - [x] Wasm Extension: OpenAI Compatibility & Enhanced REPL UX (v0.2.1)
 
 ## Version 0.2.2 DAG-Based Context Management & Core Refactoring (Current)
-- [/] AWU 19: Refactor Core Subsystems with Trait Abstractions (Current)
-  - [ ] Define Traits for `FsSubsystem`, `ProcessSubsystem`, `DagSubsystem`, and `NetworkSubsystem`
-  - [ ] Implement API Gateway for Wasm RPC requests with centralized `rad.json` permission checks
-  - [ ] Split Core code into modular source files complying with the 300-line limit
-- [ ] AWU 20: Add GetDag RPC to Core and Wasm API
+- [x] AWU 19: Refactor Core Subsystems with Trait Abstractions
+  - [x] Define Traits for `FsSubsystem`, `ProcessSubsystem`, `DagSubsystem`, and `NetworkSubsystem`
+  - [x] Implement API Gateway for Wasm RPC requests with centralized `rad.json` permission checks
+  - [x] Split Core code into modular source files complying with the 300-line limit
+- [/] AWU 20: Add GetDag RPC to Core and Wasm API (Current)
   - [ ] Add `GetDag` to `RasRpcCommand` in both `src/ipc.rs` and `ext/openai-orchestrator/src/lib.rs`
   - [ ] Implement `GetDag` handling in the Core Wasm host RPC handler returning serialization of `Dag`
 - [ ] AWU 21: Refactor Wasm Extension to Load and Persist History using DAG
