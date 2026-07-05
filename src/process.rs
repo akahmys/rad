@@ -191,3 +191,9 @@ impl RunningProcess {
         }
     }
 }
+
+impl crate::subsystems::ProcessSubsystem for ProcessManager {
+    fn spawn_bash_process(&self, command: &str, cwd: Option<&Path>) -> Result<crate::process::RunningProcess, String> {
+        self.spawn_bash_process(command, cwd)
+    }
+}

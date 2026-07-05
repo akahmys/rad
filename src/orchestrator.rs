@@ -84,12 +84,15 @@ impl Orchestrator {
         let permissions = ext.permissions.clone().unwrap_or_default();
         let wasm_path = Path::new(&ext.source);
         if wasm_path.exists() {
+            let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: self.dag.clone() });
+            let network_subsystem = Arc::new(crate::http::HttpManager);
             let runtime = WasmRuntime::new(
                 wasm_path,
                 permissions,
-                self.sandbox.clone(),
-                self.process_manager.clone(),
-                self.dag.clone(),
+                self.sandbox.clone() as Arc<dyn crate::subsystems::FsSubsystem>,
+                self.process_manager.clone() as Arc<dyn crate::subsystems::ProcessSubsystem>,
+                dag_subsystem,
+                network_subsystem,
                 self.active_processes.clone(),
                 event_tx,
             )?;

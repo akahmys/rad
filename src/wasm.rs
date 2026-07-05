@@ -4,10 +4,10 @@ use std::sync::{Arc, Mutex};
 use wasmtime::{Caller, Engine, Instance, Linker, Module, Store};
 
 use crate::config::PermissionConfig;
-use crate::dag::Dag;
-use crate::fs::FsSandbox;
 use crate::ipc::{RasCoreEvent, RasRpcRequest, RasRpcResponse};
-use crate::process::{ProcessManager, RunningProcess};
+use crate::process::RunningProcess;
+
+use crate::subsystems::{FsSubsystem, ProcessSubsystem, DagSubsystem, NetworkSubsystem};
 
 pub mod permissions;
 pub mod rpc;
@@ -16,9 +16,10 @@ pub mod rpc;
 mod tests;
 
 pub struct WasmState {
-    pub sandbox: Arc<FsSandbox>,
-    pub process_manager: Arc<ProcessManager>,
-    pub dag: Arc<Mutex<Dag>>,
+    pub sandbox: Arc<dyn FsSubsystem>,
+    pub process_manager: Arc<dyn ProcessSubsystem>,
+    pub dag: Arc<dyn DagSubsystem>,
+    pub network: Arc<dyn NetworkSubsystem>,
     pub permissions: PermissionConfig,
     pub active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
     pub event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
@@ -37,12 +38,14 @@ impl WasmRuntime {
     /// # Errors
     ///
     /// Returns an error if engine creation, compilation, linking, or instantiation fails.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         wasm_path: &Path,
         permissions: PermissionConfig,
-        sandbox: Arc<FsSandbox>,
-        process_manager: Arc<ProcessManager>,
-        dag: Arc<Mutex<Dag>>,
+        sandbox: Arc<dyn FsSubsystem>,
+        process_manager: Arc<dyn ProcessSubsystem>,
+        dag: Arc<dyn DagSubsystem>,
+        network: Arc<dyn NetworkSubsystem>,
         active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
     ) -> Result<Self, String> {
@@ -52,15 +55,17 @@ impl WasmRuntime {
         let module = Module::from_file(&engine, wasm_path)
             .map_err(|e| format!("Failed to load Wasm module from file: {e}"))?;
 
-        Self::new_with_module(&module, permissions, sandbox, process_manager, dag, active_processes, event_tx)
+        Self::new_with_module(&module, permissions, sandbox, process_manager, dag, network, active_processes, event_tx)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_with_module(
         module: &Module,
         permissions: PermissionConfig,
-        sandbox: Arc<FsSandbox>,
-        process_manager: Arc<ProcessManager>,
-        dag: Arc<Mutex<Dag>>,
+        sandbox: Arc<dyn FsSubsystem>,
+        process_manager: Arc<dyn ProcessSubsystem>,
+        dag: Arc<dyn DagSubsystem>,
+        network: Arc<dyn NetworkSubsystem>,
         active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
     ) -> Result<Self, String> {
@@ -78,6 +83,7 @@ impl WasmRuntime {
             sandbox,
             process_manager,
             dag,
+            network,
             permissions,
             active_processes,
             event_tx,
@@ -197,9 +203,10 @@ fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i3
 
     let result = rpc::execute_rpc_command(
         &request.command,
-        &state.sandbox,
-        &state.process_manager,
-        &state.dag,
+        &*state.sandbox,
+        &*state.process_manager,
+        &*state.dag,
+        &*state.network,
         &state.active_processes,
         &state.event_tx,
         &state.llm_timeout_policy,

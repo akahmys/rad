@@ -8,5 +8,6 @@ pub mod http;
 pub mod session;
 pub mod command;
 pub mod orchestrator;
+pub mod subsystems;
 
 

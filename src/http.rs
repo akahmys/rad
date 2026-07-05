@@ -168,3 +168,18 @@ fn get_timeout_values(policy: &Arc<Mutex<TimeoutPolicy>>) -> (Option<Duration>, 
         (None, None)
     }
 }
+
+pub struct HttpManager;
+
+impl crate::subsystems::NetworkSubsystem for HttpManager {
+    fn open_http_stream(
+        &self,
+        url: &str,
+        headers: HashMap<String, String>,
+        body: &str,
+        event_tx: Sender<crate::ipc::RasCoreEvent>,
+        llm_timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
+    ) -> Result<String, String> {
+        open_http_stream(url, headers, body, event_tx, llm_timeout_policy)
+    }
+}
