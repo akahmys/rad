@@ -1,6 +1,8 @@
 # `rad` (Rust Agent Dispatcher) Architecture Design Specification
 
-This document defines the architecture design specification of the autonomous agent infrastructure `rad`, which consists of a low-level runtime "Core" (written in Rust) and "Extensions" running as WebAssembly (Wasm) modules or independent threads.
+This document defines the architecture design specification of the autonomous agent infrastructure `rad`, which consists of a low-level runtime "Core" (written in Rust) and "Extensions" running as WebAssembly (Wasm) modules.
+
+The design principles prioritize **lightweightness, simplicity, and strict separation of control**.
 
 ---
 
@@ -13,28 +15,30 @@ graph TD
     User[Human Input / Terminal / Editor] -->|Input / Operations| Core[rad Core <br> Rust Runtime]
     
     subgraph CoreSystem [rad Core Crate]
-        Core -->|Spawn| PTY[Passive Sensor: FS / PTY]
-        Core -->|Execute| IO[Physical I/O: FS, Process, DAG]
-        PTY -->|Event Stream: JSON Bytes| Extension
+        Core -->|1. TTY Input / Command| Gateway[API Gateway <br> (Capability Check)]
+        Gateway -->|2. Dispatch| Subsystems[Subsystems <br> Trait-based: FS, Process, DAG, Network]
     end
     
     subgraph ExtensionSystem [Policy Layer]
-        Extension[Extensions <br> Wasm / Thread] -->|RPC Orders: Core API| IO
-        Extension -->|Prompt / Context / Compaction| LLM[External LLM API / Router]
+        WasmRuntime[Wasm Runtime] -->|RPC Orders| Gateway
+        Extension[Extensions <br> Stateless Wasm] -->|Prompt / Context / Compaction| LLM[External LLM API / Router]
+        Subsystems -->|Event Stream: JSON Bytes| WasmRuntime
     end
 ```
 
 ### 1.1 Core (rad) Responsibility: Mechanism Layer
 The Core focuses on executing low-level physical operations (primitives) on the OS, filesystem, and network streams, as well as detecting and dispatching physical events from each subsystem.
-* **Statelessness**: The Core does not maintain or interpret any logical state related to semantics, such as prompts, conversation history, or LLM intent/thoughts.
-* **Event-Driven**: When sensors within the Core (filesystem monitoring, PTY status, etc.) detect changes, it immediately dispatches them as raw JSON events to the Extension.
+* **Statelessness**: The Core does not maintain or interpret any logical state related to semantics, such as prompts or conversation history. However, it manages the physical `DAG` representing history nodes to allow context preservation.
+* **Trait-based Subsystem Isolation**: To keep the implementation clean and modular, all physical operations are encapsulated under internal Rust Traits (e.g., `FsSubsystem`, `ProcessSubsystem`).
+* **API Gateway & Capability Check**: Wasm RPC requests pass through a single gateway that enforces the whitelists/blocklists configured in `rad.json` before delegating to the subsystems.
 
 ### 1.2 Extension Responsibility: Policy Layer
 The Extension subscribes to the event stream from the Core and makes all logical control decisions.
+* **Statelessness (v0.2.2+)**: Instead of holding chat history in memory-based state arrays, the Extension fetches history dynamically from Core's DAG (`GetDag`) to ensure robustness across restarts.
 * **Conversation/Thought Context Construction**: Manages the history (context) sent to the LLM.
 * **Guardrails**: Applies safety checks before executing commands or editing files.
 * **Compaction**: Summarizes or truncates history to stay within token limits.
-* **Snapshot Policy**: Decides at which checkpoints to save or restore the filesystem state.
+
 
 ---
 

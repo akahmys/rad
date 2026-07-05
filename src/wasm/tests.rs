@@ -129,13 +129,16 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let engine = Engine::new(&config).unwrap();
     let module = Module::new(&engine, TEST_WAT).unwrap();
 
+    let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: dag.clone() });
+    let network_subsystem = Arc::new(crate::http::HttpManager);
     let (event_tx, _event_rx) = std::sync::mpsc::channel();
     let runtime = WasmRuntime::new_with_module(
         &module,
         perms,
-        sandbox.clone(),
-        process_manager.clone(),
-        dag.clone(),
+        sandbox.clone() as Arc<dyn FsSubsystem>,
+        process_manager.clone() as Arc<dyn ProcessSubsystem>,
+        dag_subsystem,
+        network_subsystem,
         active_processes.clone(),
         event_tx,
     ).unwrap();

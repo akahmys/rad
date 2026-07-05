@@ -2,10 +2,9 @@ use std::collections::{HashMap, hash_map::RandomState};
 use std::sync::{Arc, Mutex};
 use std::io::Write;
 
-use crate::dag::Dag;
-use crate::fs::FsSandbox;
 use crate::ipc::RasRpcCommand;
-use crate::process::{ProcessManager, RunningProcess};
+use crate::process::RunningProcess;
+use crate::subsystems::{FsSubsystem, ProcessSubsystem, DagSubsystem, NetworkSubsystem};
 
 /// Executes the given RPC command against physical systems.
 ///
@@ -38,11 +37,13 @@ fn request_approval(desc: &str) -> Result<(), String> {
 /// # Errors
 ///
 /// Returns an error if filesystem operations, process spawning, or DAG operations fail.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_rpc_command(
     cmd: &RasRpcCommand,
-    sandbox: &FsSandbox,
-    process_manager: &ProcessManager,
-    dag: &Arc<Mutex<Dag>>,
+    sandbox: &dyn FsSubsystem,
+    process_manager: &dyn ProcessSubsystem,
+    dag: &dyn DagSubsystem,
+    network: &dyn NetworkSubsystem,
     active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
     llm_timeout_policy: &Arc<Mutex<crate::ipc::TimeoutPolicy>>,
@@ -68,22 +69,18 @@ pub fn execute_rpc_command(
             spawn_bash_process_rpc(command, sandbox, process_manager, active_processes, event_tx)
         }
         RasRpcCommand::CreateNode { parent_id, node_type } => {
-            let mut dag = dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
             let node_id = dag.create_node(parent_id, node_type)?;
             serde_json::to_value(node_id).map_err(|e| format!("Serialization error: {e}"))
         }
         RasRpcCommand::SetNodeText { node_id, text } => {
-            let mut dag = dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
             dag.set_node_text(node_id, text)?;
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::MergeNodes { node_ids, summary_text } => {
-            let mut dag = dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
             let node_id = dag.merge_nodes(node_ids, summary_text)?;
             serde_json::to_value(node_id).map_err(|e| format!("Serialization error: {e}"))
         }
         RasRpcCommand::DeleteNode { node_id } => {
-            let mut dag = dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
             dag.delete_node(node_id)?;
             Ok(serde_json::Value::Null)
         }
@@ -96,7 +93,7 @@ pub fn execute_rpc_command(
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::OpenHttpStream { url, headers, body } => {
-            let stream_id = crate::http::open_http_stream(
+            let stream_id = network.open_http_stream(
                 url,
                 headers.clone(),
                 body,
@@ -133,16 +130,16 @@ pub fn execute_rpc_command(
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::GetDag => {
-            let dag = dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
-            serde_json::to_value(&*dag).map_err(|e| format!("Serialization error: {e}"))
+            let value = dag.get_dag()?;
+            Ok(value)
         }
     }
 }
 
 fn spawn_bash_process_rpc(
     command: &str,
-    sandbox: &FsSandbox,
-    process_manager: &ProcessManager,
+    sandbox: &dyn FsSubsystem,
+    process_manager: &dyn ProcessSubsystem,
     active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
 ) -> Result<serde_json::Value, String> {
