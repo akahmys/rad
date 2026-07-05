@@ -50,7 +50,7 @@ impl Orchestrator {
         let (event_tx, event_rx) = channel::<RasCoreEvent>();
         
         let mut wasm_guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
-        let wasm_runtime = self.get_or_init_runtime(&mut *wasm_guard, event_tx.clone())?;
+        let wasm_runtime = self.get_or_init_runtime(&mut wasm_guard, event_tx.clone())?;
 
         let init_event = RasCoreEvent::HumanInputReceived { text: instruction };
         if let Some(ref mut runtime) = *wasm_runtime {

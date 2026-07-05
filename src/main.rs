@@ -1,8 +1,11 @@
 #![deny(clippy::pedantic)]
 
 use rad::config;
-use std::io::{self, Write};
+use rad::command::{CommandHelper, CommandManager, CommandParser, CommandResult};
 use clap::Parser;
+use rustyline::{error::ReadlineError, Editor};
+use rustyline::Config;
+use rustyline::history::{History, MemHistory};
 
 #[derive(Parser, Debug)]
 #[command(name = "rad", version = "0.2.0", about = "Rust Agent Dispatcher")]
@@ -51,29 +54,48 @@ fn main() {
 
     println!("Starting rad agent shell. Type 'exit' or 'quit' to end the session.");
 
-    loop {
-        print!("rad > ");
-        if io::stdout().flush().is_err() {
-            eprintln!("Failed to flush stdout");
-            break;
-        }
+    // Initialize rustyline editor
+    let mut rl = Editor::<CommandHelper, MemHistory>::with_history(
+        Config::default(),
+        MemHistory::new(),
+    ).unwrap();
 
-        let mut input = String::new();
-        match io::stdin().read_line(&mut input) {
-            Ok(0) => {
-                // EOF (Ctrl+D)
-                println!();
-                break;
-            }
-            Ok(_) => {
-                let trimmed = input.trim();
+    // Load history from .rad/history
+    let history_path = std::path::PathBuf::from(&cfg.core.workspace).join(".rad/history");
+    if history_path.exists() {
+        let _ = rl.history_mut().load(&history_path);
+    }
+
+    loop {
+        let readline = rl.readline("rad > ");
+        match readline {
+            Ok(line) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                
+                let _ = rl.add_history_entry(trimmed);
+
+                if let Some(command) = CommandParser::parse(trimmed) {
+                    match CommandManager::execute(command, &session_id) {
+                        CommandResult::Continue => {}
+                        CommandResult::Exit => {
+                            println!("Goodbye!");
+                            break;
+                        }
+                        CommandResult::StatusInfo(info) => {
+                            println!("{info}");
+                        }
+                    }
+                    continue;
+                }
+
                 if trimmed == "exit" || trimmed == "quit" {
                     println!("Goodbye!");
                     break;
                 }
-                if trimmed.is_empty() {
-                    continue;
-                }
+
                 println!("Task received: {trimmed}");
                 
                 if let Err(e) = orchestrator.run_task(trimmed.to_string()) {
@@ -87,10 +109,24 @@ fn main() {
                     }
                 }
             }
-            Err(e) => {
-                eprintln!("Error reading input: {e}");
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                break;
+            }
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                break;
+            }
+            Err(err) => {
+                println!("Error: {err:?}");
                 break;
             }
         }
     }
+
+    // Save history
+    if let Some(parent) = history_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = rl.history_mut().save(&history_path);
 }

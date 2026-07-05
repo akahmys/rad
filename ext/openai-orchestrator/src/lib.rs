@@ -1,4 +1,13 @@
 #![deny(clippy::pedantic)]
+#![allow(
+    clippy::manual_let_else,
+    clippy::same_length_and_capacity,
+    clippy::not_unsafe_ptr_arg_deref,
+    clippy::unnecessary_wraps,
+    clippy::missing_safety_doc,
+    clippy::manual_strip,
+    clippy::collapsible_if
+)]
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -82,6 +91,7 @@ pub enum RasRpcCommand {
         text: String,
     },
     CompleteTask,
+    GetDag,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -133,6 +143,21 @@ pub enum RasCoreEvent {
         duration_ms: u64,
     },
     TaskCompleted,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct DagNode {
+    pub id: String,
+    pub parent_ids: Vec<String>,
+    pub node_type: String,
+    pub text: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Dag {
+    pub nodes: HashMap<String, DagNode>,
+    pub current_node_id: Option<String>,
+    pub next_node_index: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

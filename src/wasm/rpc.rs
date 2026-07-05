@@ -132,6 +132,10 @@ pub fn execute_rpc_command(
             let _ = event_tx.send(crate::ipc::RasCoreEvent::TaskCompleted);
             Ok(serde_json::Value::Null)
         }
+        RasRpcCommand::GetDag => {
+            let dag = dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
+            serde_json::to_value(&*dag).map_err(|e| format!("Serialization error: {e}"))
+        }
     }
 }
 
