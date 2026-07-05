@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn test_sse_parsing() {
     let mut state = OrchestratorState {
-        messages: Vec::new(),
+        assistant_buffer: String::new(),
         stream_buffer: "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\ndata: [DONE]\n".to_string(),
     };
     
@@ -27,6 +27,5 @@ fn test_handle_event_human_input() {
     
     let state_guard = STATE.lock().unwrap();
     let state = state_guard.as_ref().unwrap();
-    assert_eq!(state.messages.len(), 1);
-    assert_eq!(state.messages[0].content, "test task");
+    assert!(state.stream_buffer.is_empty());
 }

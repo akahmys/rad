@@ -174,7 +174,7 @@ struct ChatCompletionsRequest {
 }
 
 struct OrchestratorState {
-    messages: Vec<Message>,
+    assistant_buffer: String,
     stream_buffer: String,
 }
 
@@ -206,8 +206,28 @@ pub unsafe extern "C" fn dealloc(ptr: *mut u8, size: i32) {
 }
 
 #[cfg(test)]
-fn call_host(_command: RasRpcCommand) -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!("http_stream_mock_id"))
+fn call_host(command: RasRpcCommand) -> Result<serde_json::Value, String> {
+    let cmd = command;
+    match cmd {
+        RasRpcCommand::GetDag => {
+            let dag = Dag {
+                nodes: HashMap::new(),
+                current_node_id: None,
+                next_node_index: 0,
+            };
+            serde_json::to_value(&dag).map_err(|e| e.to_string())
+        }
+        RasRpcCommand::CreateNode { .. } => {
+            Ok(serde_json::json!("node_0"))
+        }
+        RasRpcCommand::SetNodeText { .. } => {
+            Ok(serde_json::Value::Null)
+        }
+        RasRpcCommand::OpenHttpStream { .. } => {
+            Ok(serde_json::json!("http_stream_mock_id"))
+        }
+        _ => Ok(serde_json::Value::Null),
+    }
 }
 
 #[cfg(not(test))]
@@ -255,21 +275,56 @@ pub extern "C" fn rad_on_event(ptr: *const u8, len: i32) -> u64 {
     0
 }
 
+fn load_messages_from_dag() -> Result<Vec<Message>, String> {
+    let dag_val = call_host(RasRpcCommand::GetDag)?;
+    let dag: Dag = serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
+
+    let mut messages = Vec::new();
+    let mut current_id = dag.current_node_id;
+
+    while let Some(ref id) = current_id {
+        if let Some(node) = dag.nodes.get(id) {
+            messages.push(Message {
+                role: node.node_type.clone(),
+                content: node.text.clone(),
+            });
+            current_id = node.parent_ids.first().cloned();
+        } else {
+            break;
+        }
+    }
+
+    messages.reverse();
+    Ok(messages)
+}
+
 fn handle_event(event: RasCoreEvent) -> Result<(), String> {
     match event {
         RasCoreEvent::HumanInputReceived { text } => {
             let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
             let state = state_guard.get_or_insert_with(|| OrchestratorState {
-                messages: Vec::new(),
+                assistant_buffer: String::new(),
                 stream_buffer: String::new(),
             });
             
-            state.messages.push(Message {
-                role: "user".to_string(),
-                content: text,
-            });
+            let dag_val = call_host(RasRpcCommand::GetDag)?;
+            let dag: Dag = serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
+            let parent_id = dag.current_node_id.unwrap_or_default();
+
+            let user_node_id_val = call_host(RasRpcCommand::CreateNode {
+                parent_id,
+                node_type: "user".to_string(),
+            })?;
+            let user_node_id = user_node_id_val.as_str().ok_or("Failed to get node id as string")?;
             
-            trigger_llm_stream(state)?;
+            call_host(RasRpcCommand::SetNodeText {
+                node_id: user_node_id.to_string(),
+                text,
+            })?;
+
+            let messages = load_messages_from_dag()?;
+            
+            trigger_llm_stream(state, messages)?;
         }
         RasCoreEvent::HttpChunkReceived { chunk } => {
             let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
@@ -283,10 +338,10 @@ fn handle_event(event: RasCoreEvent) -> Result<(), String> {
     Ok(())
 }
 
-fn trigger_llm_stream(state: &OrchestratorState) -> Result<(), String> {
+fn trigger_llm_stream(_state: &OrchestratorState, messages: Vec<Message>) -> Result<(), String> {
     let req = ChatCompletionsRequest {
         model: "qwen".to_string(),
-        messages: state.messages.clone(),
+        messages,
         stream: true,
     };
     let body = serde_json::to_string(&req).map_err(|e| format!("JSON serialize error: {e}"))?;
@@ -320,6 +375,23 @@ fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
                 let _ = call_host(RasRpcCommand::WriteStdout {
                     text: "\n".to_string(),
                 })?;
+                
+                let dag_val = call_host(RasRpcCommand::GetDag)?;
+                let dag: Dag = serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
+                let parent_id = dag.current_node_id.unwrap_or_default();
+
+                let assistant_node_id_val = call_host(RasRpcCommand::CreateNode {
+                    parent_id,
+                    node_type: "assistant".to_string(),
+                })?;
+                let assistant_node_id = assistant_node_id_val.as_str().ok_or("Failed to get node id as string")?;
+                
+                call_host(RasRpcCommand::SetNodeText {
+                    node_id: assistant_node_id.to_string(),
+                    text: state.assistant_buffer.clone(),
+                })?;
+
+                state.assistant_buffer.clear();
                 let _ = call_host(RasRpcCommand::CompleteTask)?;
                 break;
             }
@@ -329,6 +401,7 @@ fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
                     let _ = call_host(RasRpcCommand::WriteStdout {
                         text: content.to_string(),
                     })?;
+                    state.assistant_buffer.push_str(content);
                 }
             }
         }

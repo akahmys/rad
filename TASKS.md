@@ -13,10 +13,10 @@ Last Updated: 2026-07-05
   - [x] Define Traits for `FsSubsystem`, `ProcessSubsystem`, `DagSubsystem`, and `NetworkSubsystem`
   - [x] Implement API Gateway for Wasm RPC requests with centralized `rad.json` permission checks
   - [x] Split Core code into modular source files complying with the 300-line limit
-- [/] AWU 20: Add GetDag RPC to Core and Wasm API (Current)
-  - [ ] Add `GetDag` to `RasRpcCommand` in both `src/ipc.rs` and `ext/openai-orchestrator/src/lib.rs`
-  - [ ] Implement `GetDag` handling in the Core Wasm host RPC handler returning serialization of `Dag`
-- [ ] AWU 21: Refactor Wasm Extension to Load and Persist History using DAG
+- [x] AWU 20: Add GetDag RPC to Core and Wasm API
+  - [x] Add `GetDag` to `RasRpcCommand` in both `src/ipc.rs` and `ext/openai-orchestrator/src/lib.rs`
+  - [x] Implement `GetDag` handling in the Core Wasm host RPC handler returning serialization of `Dag`
+- [/] AWU 21: Refactor Wasm Extension to Load and Persist History using DAG (Current)
   - [ ] Update `ext/openai-orchestrator/src/lib.rs` to query `GetDag` on input events
   - [ ] Reconstruct `messages: Vec<Message>` by traversing history nodes in DAG topological order
   - [ ] Save new user inputs (`CreateNode`, `SetNodeText`) and assistant responses into the DAG
