@@ -109,6 +109,36 @@
   - [x] Refactor `http.rs` and `Orchestrator` to dispatch `HttpChunkReceived` raw events
   - [x] Update Wasm `openai-orchestrator` to receive `HttpChunkReceived` and print via `WriteStdout`
 
+## Version 0.2.1.5 Enhanced REPL UX (via `rustyline`)
+- [x] AWU 19.5: Refactor REPL with `rustyline` for enhanced UX
+  - [x] Add `rustyline` dependency to `Cargo.toml`
+  - [x] Implement `rustyline` loop in `src/main.rs` with command history
+  - [x] Coordinate prompt rendering with real-time streaming to prevent artifacts
+  - [x] Verify compliance with clippy, check_secrets.sh, and cargo test
+
+## Version 0.2.1.6 Slash Commands & Tab Completion (via `rustyline`)
+- [x] AWU 19.6: Implement Slash Commands & Tab Completion via `CommandManager`
+  - [x] Create `src/command.rs` to host the `Command` enum, `CommandParser`, `CommandManager`, and `CommandResult`.
+  - [x] Implement `CommandParser` to identify slash commands (e.g., `/help`, `/exit`, `/status`) and provide fallback for non-command inputs.
+  - [x] Implement `CommandHelper` to wrap `DefaultHelper` for slash command tab-completion.
+  - [x] Refactor `src/main.rs` to delegate slash commands to `CommandManager` and regular tasks to `Orchestrator`.
+  - [x] Ensure integration with `rustyline`'s `Editor` using `CommandHelper` for seamless completion and command execution.
+  - [x] Verify compliance with clippy, check_secrets.sh, and cargo test
+
+## Version 0.2.2 DAG-Based Context Management in Wasm Extension
+- [ ] AWU 20: Add GetDag RPC to Core and Wasm API
+  - [ ] Add `GetDag` to `RasRpcCommand` in both `src/ipc.rs` and `ext/openai-orchestrator/src/lib.rs`
+  - [ ] Implement `GetDag` handling in the Core Wasm host RPC handler returning serialization of `Dag`
+- [ ] AWU 21: Refactor Wasm Extension to Load and Persist History using DAG
+  - [ ] Update `ext/openai-orchestrator/src/lib.rs` to query `GetDag` on input events
+  - [ ] Reconstruct `messages: Vec<Message>` by traversing history nodes in DAG topological order
+  - [ ] Save new user inputs (`CreateNode`, `SetNodeText`) and assistant responses into the DAG
+  - [ ] Remove `STATE` memory-based message array persistence
+- [ ] AWU 22: Verify Context Restoration & Zero-Warning Audit
+  - [ ] Write integration test validating context restoration across session restarts/Extension reloads
+  - [ ] Achieve zero Clippy warnings, check secrets, and ensure tests pass
+
+
 
 
 

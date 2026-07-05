@@ -119,6 +119,7 @@ pub enum RasRpcCommand {
         text: String,
     },
     CompleteTask,
+    GetDag,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

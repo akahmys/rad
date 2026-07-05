@@ -125,4 +125,38 @@ graph TD
   - Refactor `http.rs` to send raw streaming data under a new event type `HttpChunkReceived` and stop `Orchestrator` from printing this raw data automatically.
   - Update `openai-orchestrator` in Wasm to receive `HttpChunkReceived` instead of `TokenReceived`, parse the raw SSE format, extract the content delta, and call the new `WriteStdout` RPC to display text in the terminal.
 
+---
+
+## Version 0.2.1.5 Enhanced REPL UX (via `rustyline`)
+
+```mermaid
+graph TD
+    AWU19_5[AWU 19.5: Refactor REPL with `rustyline` for enhanced UX]
+```
+
+### Atomic Work Units (AWUs)
+
+* **AWU 19.5: Refactor REPL with `rustyline` for enhanced UX**
+  - Add `rustyline` to `Cargo.toml` to support command history and advanced line editing.
+  - Refactor the interactive loop in `src/main.rs` to use `rustyline` instead of simple `stdin` reading.
+  - Implement prompt management logic to ensure the `rustyline` prompt and real-time streaming output (from AWU 19) coexist without visual artifacts (e.g., by clearing/re-printing the prompt).
+
+## Version 0.2.1.6 Slash Commands & Tab Completion (via `rustyline`)
+
+```mermaid
+graph TD
+    AWU19_6[AWU 19.6: Implement Slash Commands & Tab Completion via `CommandManager`]
+```
+
+### Atomic Work Units (AWUs)
+
+* **AWU 19.6: Implement Slash Commands & Tab Completion via `CommandManager`**
+  - Create `src/command.rs` to host the `Command` enum, `CommandParser`, `CommandExecutor`, and `CommandResponse`.
+  - Implement `CommandParser` to identify slash commands (e.g., `/help`, `/exit`, `/status`) and provide fallback for non-command inputs.
+  - Implement `CommandCompleter` using the `rustyline::completion::Completer` trait to provide tab-completion for slash commands.
+  - Refactor `src/main.rs` to delegate slash commands to `CommandManager` and regular tasks to `Orchestrator`.
+  - Ensure integration with `rustyline`'s `DefaultEditor` for seamless completion and command execution.
+  - Verify compliance with clippy, check_secrets.sh, and cargo test.
+
+
 
