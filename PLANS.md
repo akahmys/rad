@@ -3,7 +3,7 @@
 Last Updated: 2026-07-05
 
 ## Objective
-Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a production-ready agent runner, incorporating process isolation, filesystem safety, WebAssembly plugins, PTY support, and streaming LLM API connection.
+Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a production-ready agent runner, incorporating WebAssembly plugins, PTY support, streaming LLM API connection, and extensible hooks (allowing users to delegate security and sandboxing to extensions).
 
 ## Roadmap Overview
 - [x] **Version 0.1: Core Infrastructure** (Process, FS, DAG, Wasm, PTY, HTTP, CI)
@@ -14,7 +14,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [ ] **Version 0.2.x Stabilization: Comprehensive Audit & Refactoring**
 - [ ] **Version 0.3.0: Interactive UX & Human-in-the-Loop (YOLO & Slash Commands)**
 - [ ] **Version 0.3.x Stabilization: Comprehensive Audit & Refactoring**
-- [ ] **Version 0.4.0: Hardening, Security & Resiliency (Jail Checks & Recovery)**
+- [ ] **Version 0.4.0: Resiliency & Extension-based Security Hooks (Recovery & Custom Hooks)**
 - [ ] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
 - [ ] **Version 1.0.0: Production Release & Stabilization (API Freeze, Packaging)**
 
@@ -84,17 +84,17 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Audit and test edge cases combining async shell escapes (`!`), slash commands, and the main Wasm loop.
   - Refactor REPL command manager logic to decouple built-in commands from Wasm-level interceptors.
 
-## Detailed Plan: Version 0.4.0 (Hardening, Security & Resiliency)
+## Detailed Plan: Version 0.4.0 (Resiliency & Extension-based Security Hooks)
 
-* **AWU 31: Path Canonicalization & Jail Checks**
-  - Implement strict verification in Core's `FsSubsystem` to prevent directory traversal via symlinks or relative paths outside the allowed workspace.
+* **AWU 31: Extension-based Security Verification Hooks**
+  - Implement custom request/response interception hooks in the API Gateway to allow WebAssembly Extensions to dynamically inspect, approve, or reject filesystem and process operations (offloading sandbox/security to extensions).
 * **AWU 32: Extension Self-Healing**
   - Implement automatic Wasm instance recovery in Core. If the Extension crashes, Core will reload it and re-hydrate its state from the active DAG node.
 
 ## Detailed Plan: Version 0.4.x Stabilization (Comprehensive Audit & Refactoring)
 
 * **AWU 32.5: Security & Chaos E2E Testing**
-  - Run security audits (injection vectors, directory traversal exploits) against the API Gateway.
+  - Run integration tests verifying that WebAssembly Extensions can successfully intercept and restrict filesystem/process requests.
   - Conduct chaos testing (abruptly crashing the Wasm runtime during file writes/process runs) to verify self-healing resilience.
 
 ## Detailed Plan: Version 1.0.0 (Production Release & Stabilization)

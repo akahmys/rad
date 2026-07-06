@@ -16,12 +16,12 @@ Last Updated: 2026-07-05
 - [x] AWU 20: Add GetDag RPC to Core and Wasm API
   - [x] Add `GetDag` to `RasRpcCommand` in both `src/ipc.rs` and `ext/openai-orchestrator/src/lib.rs`
   - [x] Implement `GetDag` handling in the Core Wasm host RPC handler returning serialization of `Dag`
-- [/] AWU 21: Refactor Wasm Extension to Load and Persist History using DAG (Current)
-  - [ ] Update `ext/openai-orchestrator/src/lib.rs` to query `GetDag` on input events
-  - [ ] Reconstruct `messages: Vec<Message>` by traversing history nodes in DAG topological order
-  - [ ] Save new user inputs (`CreateNode`, `SetNodeText`) and assistant responses into the DAG
-  - [ ] Remove `STATE` memory-based message array persistence
-- [ ] AWU 22: Verify Context Restoration & Zero-Warning Audit
+- [x] AWU 21: Refactor Wasm Extension to Load and Persist History using DAG
+  - [x] Update `ext/openai-orchestrator/src/lib.rs` to query `GetDag` on input events
+  - [x] Reconstruct `messages: Vec<Message>` by traversing history nodes in DAG topological order
+  - [x] Save new user inputs (`CreateNode`, `SetNodeText`) and assistant responses into the DAG
+  - [x] Remove `STATE` memory-based message array persistence
+- [/] AWU 22: Verify Context Restoration & Zero-Warning Audit (Current)
   - [ ] Write integration test validating context restoration across session restarts/Extension reloads
   - [ ] Achieve zero Clippy warnings, check secrets, and ensure all tests pass
 - [x] AWU 23: Translate README.md to English & Document pi-coding-agent Inspiration
@@ -62,15 +62,15 @@ Last Updated: 2026-07-05
   - [ ] Test async shell escapes combined with main loop edge cases
   - [ ] Refactor REPL command management to cleanly decouple core/wasm commands
 
-## Version 0.4.0 Hardening, Security & Resiliency
-- [ ] AWU 31: Path Canonicalization & Jail Checks
-  - [ ] Enforce strict jail check in `FsSubsystem`
+## Version 0.4.0 Resiliency & Extension-based Security Hooks
+- [ ] AWU 31: Extension-based Security Verification Hooks
+  - [ ] Implement interception hooks in API Gateway for dynamic operation inspection by Wasm Extensions
 - [ ] AWU 32: Extension Self-Healing
   - [ ] Reload Wasm Extension and restore DAG context on Wasm panic/crash
 
 ## Version 0.4.x Stabilization (Comprehensive Audit & Refactoring)
 - [ ] AWU 32.5: Security & Chaos E2E Testing
-  - [ ] Conduct security audit on API Gateway path validation
+  - [ ] Verify Wasm Extension interception logic under malicious/heavy load operations
   - [ ] Execute chaos tests simulating sudden Wasm crash/timeouts during runtime operations
 
 ## Version 1.0.0 Production Release & Stabilization
