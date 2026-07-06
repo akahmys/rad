@@ -73,7 +73,7 @@ fn main() {
         }
     };
 
-    let orchestrator = rad::orchestrator::Orchestrator::new(cfg.clone(), session_id.clone(), dag_arc.clone());
+    let orchestrator = std::sync::Arc::new(rad::orchestrator::Orchestrator::new(cfg.clone(), session_id.clone(), dag_arc.clone()));
 
     println!("Starting rad agent shell. Type 'exit' or 'quit' to end the session.");
 

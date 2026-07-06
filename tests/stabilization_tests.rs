@@ -1,0 +1,70 @@
+use rad::config::{ExecutionConfig, PermissionConfig};
+use rad::dag::Dag;
+use rad::orchestrator::Orchestrator;
+
+use std::fs;
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+
+#[test]
+fn test_async_task_cancellation_on_rollback() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let workspace = temp_dir.path().join("workspace");
+    let snapshots = temp_dir.path().join("snapshots");
+    fs::create_dir_all(&workspace).unwrap();
+    fs::create_dir_all(&snapshots).unwrap();
+
+    let perms = PermissionConfig {
+        fs_read_allow: vec!["*".to_string()],
+        fs_write_allow: vec!["*".to_string()],
+        execution: Some(ExecutionConfig {
+            allow_bash: true,
+            allow_commands: vec![],
+            block_commands: vec![],
+        }),
+        network: Some(rad::config::NetworkConfig {
+            allow_network: true,
+            allow_domains: vec!["127.0.0.1".to_string()],
+        }),
+    };
+
+    let mut config = rad::config::Config::default();
+    config.core = rad::config::CoreConfig {
+        workspace: workspace.to_string_lossy().to_string(),
+        snapshot: snapshots.to_string_lossy().to_string(),
+        log: temp_dir.path().join("logs").to_string_lossy().to_string(),
+    };
+    let wasm_path = "target/wasm32-unknown-unknown/debug/openai_orchestrator.wasm";
+    config.extensions = vec![rad::config::ExtensionConfig {
+        name: "openai-orchestrator".to_string(),
+        enabled: true,
+        source: wasm_path.to_string(),
+        permissions: Some(perms),
+        config: HashMap::new(),
+    }];
+
+    let dag = Arc::new(Mutex::new(Dag::new()));
+    let initial_node = {
+        let mut dag_guard = dag.lock().unwrap();
+        let n0 = dag_guard.create_node("", "user").unwrap();
+        dag_guard.set_node_text(&n0, "Initial").unwrap();
+        
+        // Setup a dummy snapshot directory for the node to satisfy rollback
+        let snapshot_dir = snapshots.join(&n0);
+        fs::create_dir_all(snapshot_dir).unwrap();
+        
+        n0
+    };
+
+    let orchestrator = Arc::new(Orchestrator::new(config, "test_session".to_string(), dag.clone()));
+
+    // Trigger run_task (it will run asynchronously in background thread)
+    let _ = orchestrator.run_task("hello".to_string());
+    
+    // Trigger rollback to cancel and abort the background thread
+    let rollback_res = orchestrator.rollback(&initial_node);
+    assert!(rollback_res.is_ok(), "Rollback should succeed");
+    
+    // Ensure task is no longer running after rollback completes
+    assert!(!orchestrator.is_running(), "Task should be stopped and joined after rollback");
+}

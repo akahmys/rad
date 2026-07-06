@@ -58,17 +58,17 @@ Last Updated: 2026-07-05
   - [x] Parse and execute commands starting with `!` in Core's REPL
 - [x] AWU 29: Dynamic Slash Commands
   - [x] Support `/rollback`, `/status`, and custom slash commands
-- [/] AWU 30: Autonomous Execution Loop (YOLO by Default) (Current)
-  - [ ] Implement full auto-execution loop in Core and Extension
-  - [ ] Verify that Wasm Extensions can optionally intercept and block for user confirmation
+- [x] AWU 30: Autonomous Execution Loop (YOLO by Default)
+  - [x] Implement full auto-execution loop in Core and Extension
+  - [x] Verify that Wasm Extensions can optionally intercept and block for user confirmation
 
 ## Version 0.3.x Stabilization (Comprehensive Audit & Refactoring)
-- [ ] AWU 30.5: UX & REPL Control Stabilization
-  - [ ] Test async shell escapes combined with main loop edge cases
-  - [ ] Refactor REPL command management to cleanly decouple core/wasm commands
+- [x] AWU 30.5: UX & REPL Control Stabilization
+  - [x] Test async shell escapes combined with main loop edge cases
+  - [x] Refactor REPL command management to cleanly decouple core/wasm commands
 
 ## Version 0.4.0 Resiliency & Extension-based Security Hooks
-- [ ] AWU 31: Extension-based Security Verification Hooks
+- [/] AWU 31: Extension-based Security Verification Hooks (Current)
   - [ ] Implement interception hooks in API Gateway for dynamic operation inspection by Wasm Extensions
 - [ ] AWU 32: Extension Self-Healing
   - [ ] Reload Wasm Extension and restore DAG context on Wasm panic/crash
