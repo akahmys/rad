@@ -65,6 +65,13 @@ Last Updated: 2026-07-06
   - [x] Catch WASM engine errors and log descriptive panics or stack traces.
   - [x] Add error contexts for RPC serialization/deserialization failures.
 
+## Local Installation
+
+* [x] **AWU 59: Install RAD executable on Mac**
+  - [x] Execute `cargo install --path .` to compile and install RAD to ~/.cargo/bin.
+  - [x] Verify the installation by calling `rad --version`.
+
+
 
 
 

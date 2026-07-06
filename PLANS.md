@@ -86,5 +86,11 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 * **AWU 58: Enhance Extension Runtime Error Logs**
   - Improve error reporting in WASM runtime by printing detailed panics, stack traces, and RPC serialization error contexts to guide developers.
 
+## Local Installation
+
+* **AWU 59: Install RAD executable on Mac**
+  - Install the compiled RAD binary to the local user cargo bin directory (~/.cargo/bin) so that 'rad' can be executed globally.
+
+
 
 
