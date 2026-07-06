@@ -94,8 +94,13 @@ pub fn execute_rpc_command(
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::OpenHttpStream { url, headers, body } => {
+            let final_url = if let Ok(test_port) = std::env::var("RAD_TEST_PORT") {
+                url.replace("127.0.0.1:8080", &format!("127.0.0.1:{test_port}"))
+            } else {
+                url.clone()
+            };
             let stream_id = network.open_http_stream(
-                url,
+                &final_url,
                 headers.clone(),
                 body,
                 event_tx.clone(),

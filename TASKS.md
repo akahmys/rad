@@ -74,12 +74,12 @@ Last Updated: 2026-07-05
   - [x] Reload Wasm Extension and restore DAG context on Wasm panic/crash
 
 ## Version 0.4.x Stabilization (Comprehensive Audit & Refactoring)
-- [/] AWU 32.5: Security & Chaos E2E Testing (Current)
-  - [ ] Verify Wasm Extension interception logic under malicious/heavy load operations
-  - [ ] Execute chaos tests simulating sudden Wasm crash/timeouts during runtime operations
+- [x] AWU 32.5: Security & Chaos E2E Testing
+  - [x] Verify Wasm Extension interception logic under malicious/heavy load operations
+  - [x] Execute chaos tests simulating sudden Wasm crash/timeouts during runtime operations
 
 ## Version 1.0.0 Production Release & Stabilization
-- [ ] AWU 33: API Freeze & Serialization Optimization
+- [/] AWU 33: API Freeze & Serialization Optimization (Current)
   - [ ] Finalize RPC models and improve communication efficiency
 - [ ] AWU 34: Packaging & Distribution
   - [ ] Automate CI release builds for macOS, Linux, and Windows

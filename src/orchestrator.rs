@@ -208,6 +208,16 @@ impl Orchestrator {
                         runtime.on_event(&RasCoreEvent::ProcessExited { pgid, exit_code })?;
                     }
                 }
+                RasCoreEvent::ProcessStdout { pgid, data } => {
+                    if let Some(runtime) = wasm_runtime {
+                        runtime.on_event(&RasCoreEvent::ProcessStdout { pgid, data: data.clone() })?;
+                    }
+                }
+                RasCoreEvent::ProcessStderr { pgid, data } => {
+                    if let Some(runtime) = wasm_runtime {
+                        runtime.on_event(&RasCoreEvent::ProcessStderr { pgid, data: data.clone() })?;
+                    }
+                }
                 RasCoreEvent::FileChanged { path, change_type } => {
                     if let Some(runtime) = wasm_runtime {
                         runtime.on_event(&RasCoreEvent::FileChanged { path, change_type })?;
