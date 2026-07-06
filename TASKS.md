@@ -81,8 +81,8 @@ Last Updated: 2026-07-05
 ## Version 0.5.0 API Freeze & Distribution
 - [x] AWU 33: API Freeze & Serialization Optimization
   - [x] Finalize RPC models and improve communication efficiency
-- [/] AWU 34: Packaging & Distribution (Current)
-  - [ ] Automate CI release builds for macOS, Linux, and Windows
+- [x] AWU 34: Packaging & Distribution
+  - [x] Automate CI release builds for macOS, Linux, and Windows
 
 
 
