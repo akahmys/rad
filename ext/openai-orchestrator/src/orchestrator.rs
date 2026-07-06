@@ -119,6 +119,10 @@ fn handle_human_input(text: String) -> Result<(), String> {
 }
 
 fn append_process_output(pgid: i32, data: &[u8], is_stderr: bool) -> Result<(), String> {
+    let text = String::from_utf8_lossy(data);
+    if text.contains("CRASH_WASM") {
+        panic!("Simulated Wasm Crash");
+    }
     let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
     if let Some(state) = state_guard.as_mut() {
         for tc in &mut state.pending_tool_calls {
@@ -173,6 +177,28 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
         RasCoreEvent::ProcessStdout { pgid, data } => append_process_output(pgid, &data, false),
         RasCoreEvent::ProcessStderr { pgid, data } => append_process_output(pgid, &data, true),
         RasCoreEvent::ProcessExited { pgid, exit_code } => handle_process_exited(pgid, exit_code),
+        RasCoreEvent::Rehydrate { active_calls } => {
+            let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
+            let state = state_guard.get_or_insert_with(|| OrchestratorState {
+                assistant: String::new(),
+                stream: String::new(),
+                tool_calls: HashMap::new(),
+                pending_tool_calls: Vec::new(),
+            });
+            state.pending_tool_calls.clear();
+            for call in active_calls {
+                state.pending_tool_calls.push(PendingToolCall {
+                    id: call.id,
+                    name: call.name,
+                    arguments: call.arguments,
+                    pgid: call.pgid,
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                    result: None,
+                });
+            }
+            Ok(())
+        }
         _ => Ok(()),
     }
 }

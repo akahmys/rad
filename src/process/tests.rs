@@ -5,7 +5,7 @@ use std::time::Duration;
 #[test]
 fn test_spawn_and_pgid_isolation() {
     let manager = ProcessManager::new();
-    let mut proc = manager.spawn_bash_process("sleep 10", None).unwrap();
+    let mut proc = manager.spawn_bash_process("sleep 10", None, "call_test".to_string(), "bash".to_string(), "args".to_string()).unwrap();
 
     let expected_pgid = proc.pgid();
     let actual_pgid = getpgid(Some(expected_pgid)).unwrap();
@@ -18,7 +18,7 @@ fn test_spawn_and_pgid_isolation() {
 fn test_stdout_stderr_capture() {
     let manager = ProcessManager::new();
     let mut proc = manager
-        .spawn_bash_process("echo 'hello stdout'; echo 'hello stderr' >&2", None)
+        .spawn_bash_process("echo 'hello stdout'; echo 'hello stderr' >&2", None, "call_test".to_string(), "bash".to_string(), "args".to_string())
         .unwrap();
 
     let status = proc.wait_with_timeout(Duration::from_secs(5)).unwrap();
@@ -34,7 +34,7 @@ fn test_stdout_stderr_capture() {
 #[test]
 fn test_dynamic_timeout() {
     let manager = ProcessManager::new();
-    let mut proc = manager.spawn_bash_process("sleep 5", None).unwrap();
+    let mut proc = manager.spawn_bash_process("sleep 5", None, "call_test".to_string(), "bash".to_string(), "args".to_string()).unwrap();
 
     let res = proc.wait_with_timeout(Duration::from_millis(200));
     assert!(res.is_err());
@@ -48,7 +48,7 @@ fn test_manager_drop_kills_descendants() {
 
     {
         let manager = ProcessManager::new();
-        let proc = manager.spawn_bash_process("sleep 100", None).unwrap();
+        let proc = manager.spawn_bash_process("sleep 100", None, "call_test".to_string(), "bash".to_string(), "args".to_string()).unwrap();
         proc_pid = proc.pgid();
 
         let pgid = getpgid(Some(proc_pid));

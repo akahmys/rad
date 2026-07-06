@@ -47,6 +47,7 @@ pub fn execute_rpc_command(
     active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
     llm_timeout_policy: &Arc<Mutex<crate::ipc::TimeoutPolicy>>,
+    call_id: String,
 ) -> Result<serde_json::Value, String> {
     match cmd {
         RasRpcCommand::FileRead { path } => {
@@ -66,7 +67,7 @@ pub fn execute_rpc_command(
         }
         RasRpcCommand::SpawnBashProcess { command } => {
             request_approval(&format!("Execute shell command: '{}'", command))?;
-            spawn_bash_process_rpc(command, sandbox, process_manager, active_processes, event_tx)
+            spawn_bash_process_rpc(command, sandbox, process_manager, active_processes, event_tx, call_id)
         }
         RasRpcCommand::CreateNode { parent_id, node_type } => {
             let node_id = dag.create_node(parent_id, node_type)?;
@@ -161,6 +162,7 @@ fn spawn_bash_process_rpc(
     process_manager: &dyn ProcessSubsystem,
     active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
+    call_id: String,
 ) -> Result<serde_json::Value, String> {
     let yolo = std::env::var("RAD_YOLO")
         .map(|v| v != "0" && v.to_lowercase() != "false")
@@ -173,7 +175,13 @@ fn spawn_bash_process_rpc(
         }
     }
 
-    let running = process_manager.spawn_bash_process(command, Some(sandbox.workspace_dir()))?;
+    let running = process_manager.spawn_bash_process(
+        command,
+        Some(sandbox.workspace_dir()),
+        call_id,
+        "spawn_bash_process".to_string(),
+        format!("{{\"command\":\"{command}\"}}"),
+    )?;
     let pgid = running.pgid().as_raw();
 
     let mut processes = active_processes.lock().map_err(|e| format!("Process lock error: {e}"))?;

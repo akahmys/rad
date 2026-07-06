@@ -60,6 +60,17 @@ pub enum RasCoreEvent {
         text: String,
     },
     TaskCompleted,
+    Rehydrate {
+        active_calls: Vec<PendingToolCallInfo>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PendingToolCallInfo {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+    pub pgid: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

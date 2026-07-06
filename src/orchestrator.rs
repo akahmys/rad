@@ -76,7 +76,7 @@ impl Orchestrator {
         self.abort_flag.store(false, Ordering::SeqCst);
         let self_clone = self.clone();
         let handle = std::thread::spawn(move || {
-            self_clone.run_task_internal(instruction)
+            self_clone.run_task_internal(&instruction)
         });
 
         if let Ok(mut guard) = self.running_task.lock() {
@@ -86,22 +86,71 @@ impl Orchestrator {
         Ok(())
     }
 
-    fn run_task_internal(&self, instruction: String) -> Result<(), String> {
-        let (event_tx, event_rx) = channel::<RasCoreEvent>();
-        
-        let mut wasm_guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
-        let wasm_runtime = self.get_or_init_runtime(&mut wasm_guard, event_tx.clone())?;
+    fn run_task_internal(&self, instruction: &str) -> Result<(), String> {
+        let mut attempts = 0;
+        let max_attempts = 2;
 
-        let init_event = RasCoreEvent::HumanInputReceived { text: instruction };
-        if let Some(ref mut runtime) = *wasm_runtime {
-            runtime.on_event(&init_event)?;
-        } else {
-            let _ = event_tx.send(init_event);
+        while attempts < max_attempts {
+            let (event_tx, event_rx) = channel::<RasCoreEvent>();
+            
+            let mut wasm_guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
+            let wasm_runtime = self.get_or_init_runtime(&mut wasm_guard, event_tx.clone())?;
+
+            if attempts > 0 {
+                let active_calls = {
+                    let active_procs = self.active_processes.lock().map_err(|e| format!("Process lock error: {e}"))?;
+                    active_procs.values().map(|proc| {
+                        rad_models::PendingToolCallInfo {
+                            id: proc.call_id.clone(),
+                            name: proc.name.clone(),
+                            arguments: proc.arguments.clone(),
+                            pgid: Some(proc.pgid().as_raw()),
+                        }
+                    }).collect::<Vec<_>>()
+                };
+
+                let rehydrate_event = RasCoreEvent::Rehydrate { active_calls };
+                if let Some(ref mut runtime) = *wasm_runtime {
+                    match runtime.on_event(&rehydrate_event) {
+                        Ok(()) => {}
+                        Err(e) => {
+                            eprintln!("Failed to rehydrate runtime: {e}");
+                            attempts += 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            let init_event = RasCoreEvent::HumanInputReceived { text: instruction.to_string() };
+            if let Some(ref mut runtime) = *wasm_runtime {
+                if let Err(e) = runtime.on_event(&init_event) {
+                    eprintln!("Wasm execution error: {e}. Recovering...");
+                    *wasm_runtime = None;
+                    attempts += 1;
+                    continue;
+                }
+            } else {
+                let _ = event_tx.send(init_event);
+            }
+
+            drop(event_tx);
+
+            match self.process_event_loop(&event_rx, wasm_runtime) {
+                Ok(()) => {
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Wasm runtime crashed: {e}. Recovering...");
+                    *wasm_runtime = None;
+                    attempts += 1;
+                }
+            }
         }
 
-        drop(event_tx);
-
-        self.process_event_loop(&event_rx, wasm_runtime)?;
+        if attempts >= max_attempts {
+            return Err("Wasm execution failed after maximum recovery attempts".to_string());
+        }
 
         Ok(())
     }

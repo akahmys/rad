@@ -34,7 +34,14 @@ impl ProcessManager {
     /// # Errors
     ///
     /// Returns an error if the process fails to spawn or if lock is poisoned.
-    pub fn spawn_bash_process(&self, command: &str, cwd: Option<&Path>) -> Result<RunningProcess, String> {
+    pub fn spawn_bash_process(
+        &self,
+        command: &str,
+        cwd: Option<&Path>,
+        call_id: String,
+        name: String,
+        arguments: String,
+    ) -> Result<RunningProcess, String> {
         let pty_system = native_pty_system();
         let pty_pair = pty_system
             .openpty(PtySize {
@@ -87,6 +94,9 @@ impl ProcessManager {
             last_activity: Instant::now(),
             active_pgids: self.active_pgids.clone(),
             timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Infinite)),
+            call_id,
+            name,
+            arguments,
         })
     }
 }
@@ -123,6 +133,9 @@ pub struct RunningProcess {
     pub last_activity: Instant,
     active_pgids: Arc<Mutex<Vec<Pid>>>,
     pub timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
+    pub call_id: String,
+    pub name: String,
+    pub arguments: String,
 }
 
 impl RunningProcess {
@@ -193,7 +206,14 @@ impl RunningProcess {
 }
 
 impl crate::subsystems::ProcessSubsystem for ProcessManager {
-    fn spawn_bash_process(&self, command: &str, cwd: Option<&Path>) -> Result<crate::process::RunningProcess, String> {
-        self.spawn_bash_process(command, cwd)
+    fn spawn_bash_process(
+        &self,
+        command: &str,
+        cwd: Option<&Path>,
+        call_id: String,
+        name: String,
+        arguments: String,
+    ) -> Result<crate::process::RunningProcess, String> {
+        self.spawn_bash_process(command, cwd, call_id, name, arguments)
     }
 }
