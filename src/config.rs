@@ -94,6 +94,8 @@ pub struct PermissionConfig {
     pub execution: Option<ExecutionConfig>,
     #[serde(default)]
     pub network: Option<NetworkConfig>,
+    #[serde(default)]
+    pub allowed_mcp_servers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

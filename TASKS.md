@@ -14,6 +14,22 @@ Last Updated: 2026-07-06
 - [x] API Freeze & Distribution (v0.5.0)
 - [x] Multi-extension Support (v0.6.0)
 
+## Version 0.7.0 Core Extensibility & Integration Layer (Current)
+- [x] AWU 46: WIT-based Wasm Interface IDL Definition & WASI Integration
+  - [x] Define WIT files for RPC commands and event schemas
+  - [x] Adapt Core Wasm runtime loader to support `wit-bindgen` style structures
+- [x] AWU 47: Human-in-the-Loop (HITL) with Default YOLO Mode
+  - [x] Add `hitl_enabled` boolean field to `CoreConfig` in `src/config.rs`
+  - [x] Implement `RasRpcCommand::AskHumanApproval` in Core
+  - [x] Implement integration tests verifying HITL prompting and YOLO mode runs
+- [x] AWU 48: Secure MCP (Model Context Protocol) Gateway Orchestration
+  - [x] Add `spawn_mcp_server` RPC in Core to manage external MCP server processes
+  - [x] Implement `allowed_mcp_servers` checklist verification in Core API Gateway
+  - [x] Integrate MCP JSON-RPC protocol implementation inside Extension
+- [/] AWU 49: Integration Testing & Verification Audit (Current)
+  - [ ] Write tests validating WIT bindings, HITL prompting, and supervised MCP processes
+  - [ ] Verify zero Clippy warnings, check secrets, and ensure all tests pass
+
 ## Bug Fixes
 
 * [x] **AWU 50: Fix Orchestrator Hang & Test Compatibility**

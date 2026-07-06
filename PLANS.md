@@ -18,7 +18,30 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
 - [x] **Version 0.5.0: API Freeze & Distribution (API Freeze, Packaging)**
 - [x] **Version 0.6.0: Multi-extension Support**
-- [x] **Version 0.7.0: Core Extensibility & Integration Layer (WASM Bindings, HITL-YOLO, MCP Gateway)**
+- [>] **Version 0.7.0: Core Extensibility & Integration Layer (WASM Bindings, HITL-YOLO, MCP Gateway) (Current)**
+
+## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer) (Current)
+
+* **AWU 46: WIT-based Wasm Interface IDL Definition & WASI Integration**
+  - Define Wasm Interface Types (WIT) for all RPC commands and events between Core and Extension.
+  - Transition the Wasm host in Core to use `wit-bindgen` compatible WASI bindings, enabling multi-language plugin development (Go, TypeScript, etc.).
+
+* **AWU 47: Human-in-the-Loop (HITL) with Default YOLO Mode**
+  - Add `hitl_enabled` boolean field to `CoreConfig` in `src/config.rs` (defaults to `false` which is YOLO mode).
+  - Implement the handler for `RasRpcCommand::AskHumanApproval` in Core (`src/ipc.rs` and `src/wasm.rs`).
+    - If `hitl_enabled` is `false`, immediately return `"true"` (auto-approved).
+    - If `hitl_enabled` is `true`, prompt the user in the terminal (stdout/stdin) for `y/n` confirmation, and return `"true"` or `"false"` based on user response.
+  - Implement extension-side triggers (e.g. within `openai-orchestrator`'s host call handler) to use this interface when necessary, or ensure existing HITL workflows delegate cleanly to it.
+  - Add integration tests verifying both HITL-enabled (prompt waiting) and YOLO mode (auto-approving) runs.
+
+* **AWU 48: Secure MCP (Model Context Protocol) Gateway Orchestration (Current)**
+  - Implement `spawn_mcp_server` RPC command in Core to spawn and supervise external MCP server processes.
+  - Add `allowed_mcp_servers` verification under `rad.json` inside the API Gateway to restrict which external MCP servers can be loaded.
+  - Integrate a JSON-RPC based MCP client component in the Extension workspace.
+
+* **AWU 49: Integration Testing & Verification Audit**
+  - Implement integration tests validating HITL prompting behavior, multi-language bindings compile checks, and supervised MCP process execution.
+  - Complete full codebase audit (Clippy zero warnings, Cargo test, check secrets).
 
 ## Bug Fixes
 

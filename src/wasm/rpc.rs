@@ -45,6 +45,7 @@ pub fn execute_rpc_command(
     dag: &dyn DagSubsystem,
     network: &dyn NetworkSubsystem,
     active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
+    active_mcp_servers: &Arc<Mutex<HashMap<String, crate::mcp::McpProcess>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
     llm_timeout_policy: &Arc<Mutex<crate::ipc::TimeoutPolicy>>,
     orchestrator: Option<&Arc<crate::orchestrator::Orchestrator>>,
@@ -165,6 +166,20 @@ pub fn execute_rpc_command(
                 }
             }
             Ok(serde_json::Value::Null)
+        }
+        RasRpcCommand::SpawnMcpServer { name, command, args } => {
+            let proc = crate::mcp::McpProcess::spawn(name, command, args, event_tx.clone())?;
+            active_mcp_servers.lock().unwrap().insert(name.clone(), proc);
+            Ok(serde_json::Value::Null)
+        }
+        RasRpcCommand::SendMcpRequest { name, message } => {
+            let mut guard = active_mcp_servers.lock().unwrap();
+            if let Some(proc) = guard.get_mut(name) {
+                proc.send_message(message)?;
+                Ok(serde_json::Value::Null)
+            } else {
+                Err(format!("MCP server '{name}' is not running"))
+            }
         }
     }
 }

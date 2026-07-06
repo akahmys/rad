@@ -57,6 +57,7 @@ fn test_tool_loop_autonomy() {
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
+        ..Default::default()
     };
 
     let sandbox = Arc::new(FsSandbox::new(
@@ -146,6 +147,7 @@ fn test_context_recovery_with_tool_execution() {
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
+        ..Default::default()
     };
 
     let sandbox = Arc::new(FsSandbox::new(
