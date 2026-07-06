@@ -16,7 +16,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.3.x Stabilization: Comprehensive Audit & Refactoring**
 - [x] **Version 0.4.0: Resiliency & Extension-based Security Hooks (Recovery & Custom Hooks)**
 - [x] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
-- [>] **Version 1.0.0: Production Release & Stabilization (API Freeze, Packaging) (Current)**
+- [>] **Version 0.5.0: API Freeze & Distribution (API Freeze, Packaging) (Current)**
 
 
 ## Detailed Plan: Version 0.2.2 (DAG-Based Context Management & Core Refactoring)
@@ -100,7 +100,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Run integration tests verifying that WebAssembly Extensions can successfully intercept and restrict filesystem/process requests.
   - Conduct chaos testing (abruptly crashing the Wasm runtime during file writes/process runs) to verify self-healing resilience.
 
-## Detailed Plan: Version 1.0.0 (Production Release & Stabilization) (Current)
+## Detailed Plan: Version 0.5.0 (API Freeze & Distribution) (Current)
 
 * **AWU 33: API Freeze & Serialization Optimization (Current)**
   - Freeze the RPC command/event schemas. Optimize communication overhead.
