@@ -16,7 +16,7 @@ Last Updated: 2026-07-05
 
 ## Bug Fixes
 
-* **AWU 50: Fix Orchestrator Hang & Test Compatibility (Current)**
+* [x] **AWU 50: Fix Orchestrator Hang & Test Compatibility**
   - [x] Fix `event_tx` lifecycle in `src/orchestrator.rs`
   - [x] Update test files with `hitl_enabled` in `CoreConfig`
   - [x] Run `cargo test` and verify
