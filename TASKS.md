@@ -36,4 +36,12 @@ Last Updated: 2026-07-06
   - [x] Update `load_messages_from_dag` to correctly handle valid LLM roles and empty message content
   - [x] Run audit and commit
 
+## Refactoring & Code Quality
+
+* [x] **AWU 54: Refactor Orchestrator & WASM RPC to adhere to File Size Limit** (Current)
+  - [x] Refactor `src/orchestrator.rs` to move helper logic/runner into `src/orchestrator/runner.rs` or similar, reducing file size below 300 lines.
+  - [x] Refactor `src/wasm/rpc.rs` by extracting RPC command handlers to reduce file size below 300 lines.
+  - [x] Run verification tests and lint checks (Clippy zero warnings, Cargo test, check secrets).
+
+
 

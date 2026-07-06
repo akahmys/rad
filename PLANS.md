@@ -64,3 +64,11 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Release `STATE` mutex lock in `ext/openai-orchestrator/src/orchestrator.rs` before invoking any synchronous `call_host` RPCs (e.g., in `handle_done` and `execute_and_collect_tools`).
   - Fix DAG traversal in `load_messages_from_dag` to skip non-LLM nodes (like `"merge"`) and filter out empty content or invalid messages to prevent LLM API errors.
 
+## Refactoring & Code Quality
+
+* **AWU 54: Refactor Orchestrator & WASM RPC to adhere to File Size Limit**
+  - Refactor `src/orchestrator.rs` (503 lines) to be under 300 lines by splitting concerns (e.g., separating runner/execution loop into `src/orchestrator/runner.rs` or similar helper modules).
+  - Refactor `src/wasm/rpc.rs` (307 lines) to be under 300 lines by extracting handlers for `RasRpcCommand` variants into dedicated helper functions or a sub-module.
+  - Ensure all refactored code passes `cargo check`, `cargo clippy --all-targets` with zero warnings, and `cargo test`.
+
+
