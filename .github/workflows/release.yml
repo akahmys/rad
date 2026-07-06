@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-wasm:
+    name: Build Wasm Extension
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Build Wasm
+        run: cargo build --target wasm32-unknown-unknown --release -p openai-orchestrator
+
+      - name: Upload Wasm Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openai_orchestrator.wasm
+          path: target/wasm32-unknown-unknown/release/openai_orchestrator.wasm
+
+  build-core:
+    name: Build Core Binary
+    needs: build-wasm
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            suffix: ""
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            suffix: ""
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            suffix: ""
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            suffix: ".exe"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build Core
+        run: cargo build --target ${{ matrix.target }} --release --bin rad
+
+      - name: Package Release Asset
+        shell: bash
+        run: |
+          mkdir dist
+          cp target/${{ matrix.target }}/release/rad${{ matrix.suffix }} dist/
+          tar -czf rad-${{ matrix.target }}.tar.gz -C dist .
+
+      - name: Upload Core Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rad-${{ matrix.target }}
+          path: rad-${{ matrix.target }}.tar.gz
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-wasm, build-core]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Wasm Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: openai_orchestrator.wasm
+          path: ./wasm-dist
+
+      - name: Download Linux x86_64 Core Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rad-x86_64-unknown-linux-gnu
+          path: ./core-dist
+
+      - name: Download macOS x86_64 Core Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rad-x86_64-apple-darwin
+          path: ./core-dist
+
+      - name: Download macOS aarch64 Core Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rad-aarch64-apple-darwin
+          path: ./core-dist
+
+      - name: Download Windows Core Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rad-x86_64-pc-windows-msvc
+          path: ./core-dist
+
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            wasm-dist/openai_orchestrator.wasm
+            core-dist/rad-x86_64-unknown-linux-gnu.tar.gz
+            core-dist/rad-x86_64-apple-darwin.tar.gz
+            core-dist/rad-aarch64-apple-darwin.tar.gz
+            core-dist/rad-x86_64-pc-windows-msvc.tar.gz
+          draft: true
+          generate_release_notes: true
