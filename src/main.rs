@@ -127,6 +127,10 @@ fn main() {
                 
                 if let Err(e) = orchestrator.run_task(trimmed.to_string()) {
                     eprintln!("Execution error: {e}");
+                } else {
+                    while orchestrator.is_running() {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
                 }
                 
                 if let Ok(dag_guard) = dag_arc.lock() {
