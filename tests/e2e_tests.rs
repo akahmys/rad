@@ -70,6 +70,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let network_subsystem = Arc::new(rad::http::HttpManager);
     let (event_tx, _event_rx) = std::sync::mpsc::channel();
     let runtime = WasmRuntime::new_with_module(
+        "test-extension".to_string(),
         &module,
         perms,
         sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
@@ -78,6 +79,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
         network_subsystem,
         active_processes.clone(),
         event_tx,
+        None,
     )
     .unwrap();
 

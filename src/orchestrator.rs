@@ -20,7 +20,7 @@ pub struct Orchestrator {
     pub dag: Arc<Mutex<Dag>>,
     active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
     pub session_id: Mutex<String>,
-    wasm_runtime: Mutex<HashMap<String, WasmRuntime>>,
+    wasm_runtime: Mutex<HashMap<String, Arc<Mutex<WasmRuntime>>>>,
     running_task: Mutex<Option<std::thread::JoinHandle<Result<(), String>>>>,
     abort_flag: Arc<AtomicBool>,
 }
@@ -170,15 +170,14 @@ impl Orchestrator {
         Ok(())
     }
 
-    fn run_task_internal(&self, instruction: &str) -> Result<(), String> {
+    fn run_task_internal(self: &Arc<Self>, instruction: &str) -> Result<(), String> {
         let mut attempts = 0;
         let max_attempts = 2;
 
         while attempts < max_attempts {
             let (event_tx, event_rx) = channel::<RasCoreEvent>();
             
-            let mut wasm_guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
-            let wasm_runtimes = self.get_or_init_runtimes(&mut wasm_guard, &event_tx)?;
+            let wasm_runtimes = self.get_or_init_runtimes(&event_tx)?;
 
             let mut success = true;
 
@@ -196,7 +195,8 @@ impl Orchestrator {
                 };
 
                 let rehydrate_event = RasCoreEvent::Rehydrate { active_calls };
-                for (name, runtime) in wasm_runtimes.iter_mut() {
+                for (name, runtime_arc) in &wasm_runtimes {
+                    let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
                     if let Err(e) = runtime.on_event(&rehydrate_event) {
                         eprintln!("Failed to rehydrate runtime {name}: {e}");
                         success = false;
@@ -204,7 +204,7 @@ impl Orchestrator {
                     }
                 }
                 if !success {
-                    wasm_runtimes.clear();
+                    self.clear_runtimes()?;
                     attempts += 1;
                     continue;
                 }
@@ -214,7 +214,8 @@ impl Orchestrator {
             if wasm_runtimes.is_empty() {
                 let _ = event_tx.send(init_event);
             } else {
-                for (name, runtime) in wasm_runtimes.iter_mut() {
+                for (name, runtime_arc) in &wasm_runtimes {
+                    let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
                     if let Err(e) = runtime.on_event(&init_event) {
                         eprintln!("Wasm execution error on {name}: {e}. Recovering...");
                         success = false;
@@ -222,7 +223,7 @@ impl Orchestrator {
                     }
                 }
                 if !success {
-                    wasm_runtimes.clear();
+                    self.clear_runtimes()?;
                     attempts += 1;
                     continue;
                 }
@@ -230,13 +231,13 @@ impl Orchestrator {
 
             drop(event_tx);
 
-            match self.process_event_loop(&event_rx, wasm_runtimes) {
+            match self.process_event_loop(&event_rx, &wasm_runtimes) {
                 Ok(()) => {
                     break;
                 }
                 Err(e) => {
                     eprintln!("Wasm runtime crashed: {e}. Recovering...");
-                    wasm_runtimes.clear();
+                    self.clear_runtimes()?;
                     attempts += 1;
                 }
             }
@@ -249,11 +250,11 @@ impl Orchestrator {
         Ok(())
     }
 
-    fn get_or_init_runtimes<'a>(
-        &self,
-        guard: &'a mut HashMap<String, WasmRuntime>,
+    fn get_or_init_runtimes(
+        self: &Arc<Self>,
         event_tx: &Sender<RasCoreEvent>,
-    ) -> Result<&'a mut HashMap<String, WasmRuntime>, String> {
+    ) -> Result<HashMap<String, Arc<Mutex<WasmRuntime>>>, String> {
+        let mut guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
         let config_guard = self.config.lock().unwrap();
         for ext in &config_guard.extensions {
             if !ext.enabled {
@@ -268,6 +269,7 @@ impl Orchestrator {
                 let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: self.dag.clone() });
                 let network_subsystem = Arc::new(crate::http::HttpManager);
                 let runtime = WasmRuntime::new(
+                    ext.name.clone(),
                     wasm_path,
                     permissions,
                     self.sandbox.clone() as Arc<dyn crate::subsystems::FsSubsystem>,
@@ -276,18 +278,47 @@ impl Orchestrator {
                     network_subsystem,
                     self.active_processes.clone(),
                     event_tx.clone(),
+                    Some(Arc::downgrade(self)),
                 )?;
-                guard.insert(ext.name.clone(), runtime);
+                guard.insert(ext.name.clone(), Arc::new(Mutex::new(runtime)));
             }
         }
-        Ok(guard)
+        Ok(guard.clone())
     }
 
+    fn clear_runtimes(&self) -> Result<(), String> {
+        let mut guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
+        guard.clear();
+        Ok(())
+    }
+
+    /// Verifies an RPC request across all active extensions EXCEPT the calling one.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if any extension rejects the operation.
+    pub fn verify_rpc_exclude(&self, exclude_name: &str, _request: &crate::ipc::RasRpcRequest, req_bytes: &[u8]) -> Result<(), String> {
+        let runtimes = {
+            let guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
+            guard.clone()
+        };
+
+        for (name, runtime_arc) in runtimes {
+            if name == exclude_name {
+                continue;
+            }
+            let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
+            if let Err(e) = runtime.verify_rpc(req_bytes) {
+                return Err(format!("Operation rejected by extension '{name}': {e}"));
+            }
+        }
+        Ok(())
+    }
 
     fn process_event_loop(
         &self,
         event_rx: &Receiver<RasCoreEvent>,
-        wasm_runtimes: &mut HashMap<String, WasmRuntime>,
+        wasm_runtimes: &HashMap<String, Arc<Mutex<WasmRuntime>>>,
     ) -> Result<(), String> {
         while let Ok(event) = event_rx.recv() {
             if self.abort_flag.load(Ordering::SeqCst) {
@@ -298,37 +329,44 @@ impl Orchestrator {
 
             match event {
                 RasCoreEvent::HttpChunkReceived { chunk } => {
-                    for runtime in wasm_runtimes.values_mut() {
+                    for (name, runtime_arc) in wasm_runtimes {
+                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
                         runtime.on_event(&RasCoreEvent::HttpChunkReceived { chunk: chunk.clone() })?;
                     }
                 }
                 RasCoreEvent::HttpErrorReceived { message } => {
-                    for runtime in wasm_runtimes.values_mut() {
+                    for (name, runtime_arc) in wasm_runtimes {
+                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
                         runtime.on_event(&RasCoreEvent::HttpErrorReceived { message: message.clone() })?;
                     }
                 }
                 RasCoreEvent::ProcessExited { pgid, exit_code } => {
-                    for runtime in wasm_runtimes.values_mut() {
+                    for (name, runtime_arc) in wasm_runtimes {
+                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
                         runtime.on_event(&RasCoreEvent::ProcessExited { pgid, exit_code })?;
                     }
                 }
                 RasCoreEvent::ProcessStdout { pgid, data } => {
-                    for runtime in wasm_runtimes.values_mut() {
+                    for (name, runtime_arc) in wasm_runtimes {
+                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
                         runtime.on_event(&RasCoreEvent::ProcessStdout { pgid, data: data.clone() })?;
                     }
                 }
                 RasCoreEvent::ProcessStderr { pgid, data } => {
-                    for runtime in wasm_runtimes.values_mut() {
+                    for (name, runtime_arc) in wasm_runtimes {
+                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
                         runtime.on_event(&RasCoreEvent::ProcessStderr { pgid, data: data.clone() })?;
                     }
                 }
                 RasCoreEvent::FileChanged { path, change_type } => {
-                    for runtime in wasm_runtimes.values_mut() {
+                    for (name, runtime_arc) in wasm_runtimes {
+                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
                         runtime.on_event(&RasCoreEvent::FileChanged { path: path.clone(), change_type: change_type.clone() })?;
                     }
                 }
                 RasCoreEvent::StreamTimeout { target, duration_ms } => {
-                    for runtime in wasm_runtimes.values_mut() {
+                    for (name, runtime_arc) in wasm_runtimes {
+                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
                         runtime.on_event(&RasCoreEvent::StreamTimeout { target: target.clone(), duration_ms })?;
                     }
                 }

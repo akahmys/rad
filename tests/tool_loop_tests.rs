@@ -94,6 +94,7 @@ fn test_tool_loop_autonomy() {
     let (event_tx, event_rx) = std::sync::mpsc::channel();
     
     let mut runtime = WasmRuntime::new_with_module(
+        "test-extension".to_string(),
         &module,
         perms,
         sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
@@ -102,6 +103,7 @@ fn test_tool_loop_autonomy() {
         network,
         active_processes.clone(),
         event_tx,
+        None,
     )
     .unwrap();
 
@@ -183,6 +185,7 @@ fn test_context_recovery_with_tool_execution() {
         let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
         let (event_tx, event_rx) = std::sync::mpsc::channel();
         let mut runtime = WasmRuntime::new_with_module(
+            "test-extension".to_string(),
             &module,
             perms.clone(),
             sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
@@ -191,6 +194,7 @@ fn test_context_recovery_with_tool_execution() {
             network1,
             active_processes.clone(),
             event_tx,
+            None,
         )
         .unwrap();
 
@@ -223,6 +227,7 @@ fn test_context_recovery_with_tool_execution() {
         let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
         let (event_tx, event_rx) = std::sync::mpsc::channel();
         let mut runtime = WasmRuntime::new_with_module(
+            "test-extension".to_string(),
             &module,
             perms,
             sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
@@ -231,6 +236,7 @@ fn test_context_recovery_with_tool_execution() {
             network2,
             active_processes,
             event_tx,
+            None,
         )
         .unwrap();
 
