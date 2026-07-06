@@ -1650,7 +1650,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openai-orchestrator"
-version = "0.6.0"
+version = "0.8.0"
 dependencies = [
  "rad-models",
  "serde",
@@ -1858,7 +1858,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rad"
-version = "0.6.0"
+version = "0.8.0"
 dependencies = [
  "bytes",
  "clap",
@@ -1885,7 +1885,7 @@ dependencies = [
 
 [[package]]
 name = "rad-models"
-version = "0.6.0"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_bytes",
