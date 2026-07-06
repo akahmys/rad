@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use wasmtime::{Engine, Module};
 
 struct MockNetwork {
     responses: Arc<Mutex<Vec<Vec<String>>>>,
@@ -72,17 +71,12 @@ fn setup_runtime(
         responses: Arc::new(Mutex::new(responses)),
     });
 
-    let mut config = wasmtime::Config::new();
-    config.wasm_multi_memory(true);
-    let engine = Engine::new(&config).unwrap();
-    let wasm_path = "target/wasm32-unknown-unknown/debug/openai_orchestrator.wasm";
-    let module = Module::from_file(&engine, wasm_path).unwrap();
-
+    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
-
-    let runtime = WasmRuntime::new_with_module(
+    
+    let runtime = WasmRuntime::new(
         "test-extension".to_string(),
-        &module,
+        std::path::Path::new(wasm_path),
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
         process_manager as Arc<dyn rad::subsystems::ProcessSubsystem>,
@@ -123,7 +117,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
         snapshot: snapshots.to_string_lossy().to_string(),
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
     };
-    let wasm_path = "target/wasm32-unknown-unknown/debug/openai_orchestrator.wasm";
+    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
@@ -282,7 +276,7 @@ fn test_core_auto_self_healing_integration() {
         snapshot: snapshots.to_string_lossy().to_string(),
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
     };
-    let wasm_path = "target/wasm32-unknown-unknown/debug/openai_orchestrator.wasm";
+    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],

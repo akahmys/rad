@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use wasmtime::{Engine, Module};
 
 struct MockNetwork {
     responses: Arc<Mutex<Vec<Vec<String>>>>,
@@ -83,19 +82,13 @@ fn test_tool_loop_autonomy() {
     let responses = Arc::new(Mutex::new(vec![turn2, turn1]));
     let network = Arc::new(MockNetwork { responses });
 
-    let mut config = wasmtime::Config::new();
-    config.wasm_multi_memory(true);
-    let engine = Engine::new(&config).unwrap();
-    
-    let wasm_path = "target/wasm32-unknown-unknown/debug/openai_orchestrator.wasm";
-    let module = Module::from_file(&engine, wasm_path).unwrap();
-
+    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
     let (event_tx, event_rx) = std::sync::mpsc::channel();
     
-    let mut runtime = WasmRuntime::new_with_module(
+    let mut runtime = WasmRuntime::new(
         "test-extension".to_string(),
-        &module,
+        std::path::Path::new(wasm_path),
         perms,
         sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
         process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
@@ -173,20 +166,14 @@ fn test_context_recovery_with_tool_execution() {
     ];
     let responses1 = Arc::new(Mutex::new(vec![turn1]));
     let network1 = Arc::new(MockNetwork { responses: responses1 });
-
-    let mut config = wasmtime::Config::new();
-    config.wasm_multi_memory(true);
-    let engine = Engine::new(&config).unwrap();
-    let wasm_path = "target/wasm32-unknown-unknown/debug/openai_orchestrator.wasm";
-    let module = Module::from_file(&engine, wasm_path).unwrap();
-
     // 1. First execution session
     {
+        let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
         let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
         let (event_tx, event_rx) = std::sync::mpsc::channel();
-        let mut runtime = WasmRuntime::new_with_module(
+        let mut runtime = WasmRuntime::new(
             "test-extension".to_string(),
-            &module,
+            std::path::Path::new(wasm_path),
             perms.clone(),
             sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
             process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
@@ -226,9 +213,10 @@ fn test_context_recovery_with_tool_execution() {
     {
         let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
         let (event_tx, event_rx) = std::sync::mpsc::channel();
-        let mut runtime = WasmRuntime::new_with_module(
+        let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
+        let mut runtime = WasmRuntime::new(
             "test-extension".to_string(),
-            &module,
+            std::path::Path::new(wasm_path),
             perms,
             sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
             process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,

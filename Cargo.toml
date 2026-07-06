@@ -12,7 +12,8 @@ dirs = "5.0"
 clap = { version = "4.4", features = ["derive"] }
 nix = { version = "0.29", features = ["process", "signal"] }
 diffy = "0.3"
-wasmtime = { version = "29.0.0", features = ["wat"] }
+wasmtime = { version = "29.0.0", features = ["wat", "component-model"] }
+wasmtime-wasi = "29.0.0"
 notify = "6.1.1"
 portable-pty = "0.8"
 reqwest = { version = "0.11", features = ["stream", "json", "rustls-tls"] }

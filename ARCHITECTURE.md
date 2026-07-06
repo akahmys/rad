@@ -34,6 +34,7 @@ The Core focuses on executing low-level physical operations (primitives) on the 
 
 ### 1.2 Extension Responsibility: Policy Layer
 The Extension subscribes to the event stream from the Core and makes all logical control decisions.
+* **WIT (Wasm Interface Type) & WASI (v0.7.0+)**: To enable multi-language extension development (Rust, Go, TypeScript, etc.), RPC contracts and events are defined in WIT IDL files. Low-level bindings are automatically compiled via `wit-bindgen`.
 * **Statelessness (v0.2.2+)**: Instead of holding chat history in memory-based state arrays, the Extension fetches history dynamically from Core's DAG (`GetDag`) to ensure robustness across restarts.
 * **Conversation/Thought Context Construction**: Manages the history (context) sent to the LLM.
 * **Guardrails**: Applies safety checks before executing commands or editing files.
@@ -214,15 +215,14 @@ pub trait RasExtensionFacingApi {
 
 ## 4. Robustness & Security Specifications
 
-### 4.1 Process Group (PGID) Management for Child Processes
+### 4.1 Process Group (PGID) Management for Child & MCP Processes
 
-To prevent orphaned processes spawned by background shells (e.g., compilers spawned by `make`, background processes in scripts) from running loose, the Core performs the following management when executing `spawn_bash_process`:
+To prevent orphaned processes spawned by background shells or external MCP servers from running loose, the Core performs the following management:
 
 1. **Isolated Process Group Creation**:
-   Inside the child process after `fork`, the Core calls `setpgid(0, 0)` (e.g., via `nix::unistd::setpgid`) to allocate a new, independent PGID separate from the caller.
+   Inside the child process (spawned via `spawn_bash_process` or `spawn_mcp_server`) after `fork`, the Core calls `setpgid(0, 0)` to allocate a new, independent PGID.
 2. **Automatic Cleanup with Drop Trait**:
-   The internal manager tracks active PGIDs. When the main loop of the Core exits normally, receives `Ctrl+C`, or panics, the `Drop` implementation sends `kill(-pgid, SIGKILL)` to all registered PGIDs.
-   * **Negative PGID Specification**: Specifying a negative value for the PID argument (`-pgid`) forces the OS kernel to apply the signal to all processes in that group simultaneously, 100% preventing zombie/orphaned processes.
+   The internal manager tracks active PGIDs. When the Core exits normally, receives `Ctrl+C`, or panics, the `Drop` implementation sends `kill(-pgid, SIGKILL)` to all registered PGIDs, including both spawned bash commands and external MCP servers.
 
 ### 4.2 Capability Access Control via a Single Config File (Capability Mask)
 
@@ -230,6 +230,7 @@ For a simple and robust security policy, configuration is restricted to a single
 
 ```json
 {
+  "hitl_enabled": false,
   "extensions": [
     {
       "name": "standard-orchestrator",
@@ -261,17 +262,22 @@ For a simple and robust security policy, configuration is restricted to a single
             "api.anthropic.com",
             "github.com"
           ]
-        }
+        },
+        "allowed_mcp_servers": [
+          "mcp-server-postgres",
+          "mcp-server-git"
+        ]
       }
     }
   ]
 }
 ```
 
-* **Local Verification**: The Core matches every RPC call (`file_read`, `file_write`, `spawn_bash_process`) against the Extension's `permissions` mask.
+* **Local Verification**: The Core matches every RPC call (`file_read`, `file_write`, `spawn_bash_process`, `spawn_mcp_server`) against the Extension's `permissions` mask.
+* **HITL Toggle**: The global `"hitl_enabled"` key dictates whether `request_human_approval` pauses execution for terminal authorization. If false (default), the Core operates in YOLO mode and instantly accepts the action.
 * **Isolation Checks**:
   * For filesystem I/O, target paths are canonicalized (`canonicalize`) to detect and reject attempts to access files outside the whitelist via symlinks.
-  * For command executions, the shell command is parsed, and non-whitelisted executables are blocked.
+  * For command executions and MCP server requests, target executables are evaluated against whitelists.
 
 ---
 
@@ -376,3 +382,44 @@ Because `rad` provides filesystem snapshot backups under `.rad/snapshots/`, ther
   * Tools originating from external MCP servers or certain Skills (e.g., Slack notifications, GitHub PR creations, cloud database updates) produce external side-effects. These cannot be reversed by `rad`'s local snapshots.
 * **Architecture Guideline**:
   * Because the LLM sees all tools as a flat list, the Extension (or the system prompt/rules) must enforce safety boundaries. For non-rollback-capable (non-reversible) tools, the Extension is encouraged to intercept the invocation and block for explicit human confirmation (Human-in-the-Loop) before routing the request.
+
+### 5.5 Human-in-the-Loop (HITL) & YOLO Mode Workflows
+
+When the Extension intercepts a critical action (e.g., executing shell scripts or writing files) and decides to request human authorization, it invokes the Core RPC `request_human_approval`. The response is dictated by the `"hitl_enabled"` configuration in `rad.json`.
+
+#### 5.5.1 YOLO Mode (Default: `hitl_enabled: false`)
+When HITL is disabled, the Core operates in YOLO mode and instantly returns approval to the Wasm extension without prompt interruption.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Ext as Extension
+    participant Core as rad Core (API Gateway)
+    participant User as Terminal / User
+
+    Note over Ext: Critial tool call detected
+    Ext->>Core: RPC: request_human_approval("Write to file X?")
+    Note over Core: "hitl_enabled" is false
+    Core-->>Ext: Result: Ok(true) (Immediate bypass)
+    Note over Ext: Proceed to execute tool call
+```
+
+#### 5.5.2 Interactive HITL Mode (`hitl_enabled: true`)
+When HITL is enabled, the Core suspends Wasm execution, outputs the prompt to the terminal, and waits for interactive user response.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Ext as Extension
+    participant Core as rad Core (API Gateway)
+    participant User as Terminal / User
+
+    Note over Ext: Critial tool call detected
+    Ext->>Core: RPC: request_human_approval("Write to file X?")
+    Note over Core: "hitl_enabled" is true
+    Core->>User: Print prompt & block for input
+    User-->>Core: Type "yes" or "no"
+    Core-->>Ext: Result: Ok(true) or Ok(false)
+    Note over Ext: Proceed or abort depending on approval
+```
+

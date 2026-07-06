@@ -7,131 +7,29 @@ Last Updated: 2026-07-05
 - [x] Core Subsystems: Process, FS, DAG, Wasm, PTY, HTTP, CI (v0.1)
 - [x] Single-Process Agent Shell: REPL, Event Streaming, Human-in-the-loop, Session (v0.2)
 - [x] Wasm Extension: OpenAI Compatibility & Enhanced REPL UX (v0.2.1)
+- [x] DAG-Based Context Management & Core Refactoring (v0.2.2)
+- [x] Tool Execution Loop & Autonomy (v0.2.3)
+- [x] Interactive UX & Human-in-the-Loop (v0.3.0)
+- [x] Resiliency & Extension-based Security Hooks (v0.4.0)
+- [x] API Freeze & Distribution (v0.5.0)
+- [x] Multi-extension Support (v0.6.0)
 
-## Version 0.2.2 DAG-Based Context Management & Core Refactoring
-- [x] AWU 19: Refactor Core Subsystems with Trait Abstractions
-  - [x] Define Traits for `FsSubsystem`, `ProcessSubsystem`, `DagSubsystem`, and `NetworkSubsystem`
-  - [x] Implement API Gateway for Wasm RPC requests with centralized `rad.json` permission checks
-  - [x] Split Core code into modular source files complying with the 300-line limit
-- [x] AWU 20: Add GetDag RPC to Core and Wasm API
-  - [x] Add `GetDag` to `RasRpcCommand` in both `src/ipc.rs` and `ext/openai-orchestrator/src/lib.rs`
-  - [x] Implement `GetDag` handling in the Core Wasm host RPC handler returning serialization of `Dag`
-- [x] AWU 21: Refactor Wasm Extension to Load and Persist History using DAG
-  - [x] Update `ext/openai-orchestrator/src/lib.rs` to query `GetDag` on input events
-  - [x] Reconstruct `messages: Vec<Message>` by traversing history nodes in DAG topological order
-  - [x] Save new user inputs (`CreateNode`, `SetNodeText`) and assistant responses into the DAG
-  - [x] Remove `STATE` memory-based message array persistence
-- [x] AWU 22: Verify Context Restoration & Zero-Warning Audit
-  - [x] Write integration test validating context restoration across session restarts/Extension reloads
-  - [x] Achieve zero Clippy warnings, check secrets, and ensure all tests pass
-- [x] AWU 23: Translate README.md to English & Document pi-coding-agent Inspiration
-  - [x] Translate Japanese contents of `README.md` to English
-  - [x] Explicitly describe that `rad` is inspired by `pi-coding-agent`
+## Version 0.7.0 Core Extensibility & Integration Layer
+- [x] AWU 46: WIT-based Wasm Interface IDL Definition & WASI Integration
+  - [x] Define WIT files for RPC commands and event schemas
+  - [x] Adapt Core Wasm runtime loader to support `wit-bindgen` style structures
+- [ ] AWU 47: Human-in-the-Loop (HITL) with Default YOLO Mode (Current)
+  - [ ] Implement `request_human_approval` RPC in Core
+  - [ ] Add `hitl_enabled` to `rad.json` and enforce default YOLO behavior in Core API Gateway
+  - [ ] Implement Extension-side verification triggers
+- [ ] AWU 48: Secure MCP (Model Context Protocol) Gateway Orchestration
+  - [ ] Add `spawn_mcp_server` RPC in Core to manage external MCP server processes
+  - [ ] Implement `allowed_mcp_servers` checklist verification in Core API Gateway
+  - [ ] Integrate MCP JSON-RPC protocol implementation inside Extension
+- [ ] AWU 49: Integration Testing & Verification Audit
+  - [ ] Write tests validating WIT bindings, HITL prompting, and supervised MCP processes
+  - [ ] Verify zero Clippy warnings, check secrets, and ensure all tests pass
 
-## Version 0.2.3 Tool Execution Loop & Autonomy (Current)
-- [x] AWU 24: Add Tool Call Schemas to Wasm Extension Request
-  - [x] Define `tools` parameter structure in Wasm Extension OpenAI request
-  - [x] Map `file_read`, `file_write`, `file_edit_patch`, `spawn_bash_process` to JSON Schemas
-- [x] AWU 25: Implement Tool Call Stream Parsing and Core RPC Dispatching
-  - [x] Buffer and parse streaming `tool_calls` from chunk chunks
-  - [x] Map and invoke Core RPC methods on complete tool call extraction
-- [x] AWU 26: Implement Autonomy Loop with System Prompt and Multi-turn Execution
-  - [x] Send execution results back to the chat context as tool messages
-  - [x] Add system prompt explaining rad architecture, constraints, and tool usage
-- [x] AWU 26.5: Document Extension-Based Unified Tooling & Safety Architecture
-  - [x] Update README.md to describe the unified tool and extension-based policy architecture
-  - [x] Update ARCHITECTURE.md to clarify that Core is decoupled from MCP/Skills and offloads policies to Extensions
-  - [x] Update PLANS.md to align version plans with the extension-offloaded design
-- [x] AWU 27: Verify Tool Execution Integration Test & Zero-Warning Audit
-  - [x] Write integration test validating complete LLM-driven tool loop execution
-  - [x] Pass check secrets, clippy, and unit/integration tests with zero warnings
 
-## Version 0.2.x Stabilization (Comprehensive Audit & Refactoring)
-- [x] AWU 27.5: Unify Data Models & Codebase-wide Refactoring
-  - [x] Create shared workspace crate `models` and migrate IPC, DAG, Timeout types
-  - [x] Refactor Core Subsystems (Process, FS, DAG, Wasm) to standardise error handling and clean up debt
-  - [x] Write end-to-end integration tests for context recovery + tool execution
-  - [x] Ensure zero clippy warnings and no secrets in git stage
-
-## Version 0.3.0 Interactive UX & Human-in-the-Loop
-- [x] AWU 28: Support Shell Escape (`!`) in REPL
-  - [x] Parse and execute commands starting with `!` in Core's REPL
-- [x] AWU 29: Dynamic Slash Commands
-  - [x] Support `/rollback`, `/status`, and custom slash commands
-- [x] AWU 30: Autonomous Execution Loop (YOLO by Default)
-  - [x] Implement full auto-execution loop in Core and Extension
-  - [x] Verify that Wasm Extensions can optionally intercept and block for user confirmation
-
-## Version 0.3.x Stabilization (Comprehensive Audit & Refactoring)
-- [x] AWU 30.5: UX & REPL Control Stabilization
-  - [x] Test async shell escapes combined with main loop edge cases
-  - [x] Refactor REPL command management to cleanly decouple core/wasm commands
-
-## Version 0.4.0 Resiliency & Extension-based Security Hooks
-- [x] AWU 31: Extension-based Security Verification Hooks
-  - [x] Implement interception hooks in API Gateway for dynamic operation inspection by Wasm Extensions
-- [x] AWU 32: Extension Self-Healing
-  - [x] Reload Wasm Extension and restore DAG context on Wasm panic/crash
-
-## Version 0.4.x Stabilization (Comprehensive Audit & Refactoring)
-- [x] AWU 32.5: Security & Chaos E2E Testing
-  - [x] Verify Wasm Extension interception logic under malicious/heavy load operations
-  - [x] Execute chaos tests simulating sudden Wasm crash/timeouts during runtime operations
-
-## Version 0.5.0 API Freeze & Distribution
-- [x] AWU 33: API Freeze & Serialization Optimization
-  - [x] Finalize RPC models and improve communication efficiency
-- [x] AWU 34: Packaging & Distribution
-  - [x] Automate CI release builds for macOS, Linux, and Windows
-- [x] AWU 35: Unified Terminal Controller
-  - [x] Implement TerminalController and refactor stdout/REPL print paths
-- [x] AWU 36: Dynamic Configuration Reload
-  - [x] Implement /reload slash command and dynamic config updates in core
-- [x] AWU 37: Wasm-level HTTP Error Handling & Terminal Recovery (Current)
-  - [x] Add `HttpErrorReceived` variant to `RasCoreEvent` in `models/src/lib.rs`
-  - [x] Propagate HTTP connection/status errors from host via `HttpErrorReceived` in `src/http.rs`
-  - [x] Implement error handling for `HttpErrorReceived` in Wasm Extension (`ext/openai-orchestrator/src/orchestrator.rs`) to write the error to CLI and call `CompleteTask`
-
-## Version 0.6.0 Multi-extension Support
-- [x] AWU 38: Support Multiple Active Wasm Runtimes in Orchestrator
-  - [x] Refactor `Orchestrator` to store a `HashMap<String, WasmRuntime>` instead of a single `Option<WasmRuntime>`
-  - [x] Load and initialize all enabled extensions from `rad.json`
-- [x] AWU 39: Implement Event Broadcasting and Combined Security Verification
-  - [x] Update event routing in `process_event_loop` to broadcast events to all loaded runtimes
-  - [x] Implement sequential verification chain for `rad_verify_rpc` in API Gateway
-- [x] AWU 40: Multi-extension Integration Testing
-  - [x] Write integration test verifying multi-extension setup (orchestrator + security hook)
-  - [x] Ensure all tests pass, check secrets, clippy zero warnings
-
-## Version 0.6.x UX Stabilization
-- [x] AWU 41: Display Thinking State on Subsequent LLM Stream Open (Current)
-  - [x] Set terminal state to `TerminalState::Thinking` during `OpenHttpStream` handling in `src/wasm/rpc.rs`
-  - [x] Run secret checks, tests, clippy, and ensure everything passes with zero warnings
-
-- [x] AWU 42: Track and Display Token Usage (Current)
-  - [x] Add `ReportTokenUsage` RPC command to `models/src/lib.rs`
-  - [x] Track accumulated prompt and completion tokens inside `Orchestrator`
-  - [x] Implement handling for `ReportTokenUsage` in `rpc.rs`
-  - [x] Display token usage statistics in `/status` CLI command
-  - [x] Report usage from `openai-orchestrator` Wasm extension
-  - [x] Run secret checks, tests, clippy, and ensure everything passes with zero warnings
-
-- [x] AWU 43: Align Crate Versions with Roadmap (Current)
-  - [x] Update root `Cargo.toml` version to `0.6.0`
-  - [x] Update `models/Cargo.toml` version to `0.6.0`
-  - [x] Update `ext/openai-orchestrator/Cargo.toml` version to `0.6.0`
-  - [x] Perform audit: secret check, cargo check, clippy, and tests
-
-## README.md Documentation
-- [x] AWU 44: Update README.md with User and Developer Guides
-  - [x] Add User Guide section in README.md (installation, rad.json configuration, CLI slash commands, shell escape)
-  - [x] Add Developer Guide section in README.md (architecture overview, building Wasm extensions, running tests)
-  - [x] Perform audit: secret check, cargo check, clippy, and tests
-
-## Version 0.6.x UX Stabilization (Continued)
-- [x] AWU 45: Fix REPL Slash Command Tab Completion
-  - [x] Correct start index calculation in `CommandHelper::complete` to `pos - word.len()`
-  - [x] Add unit tests for `CommandHelper` tab completion in `tests/command_tests.rs`
-  - [x] Perform audit: secret check, cargo check, clippy, and tests
 
 
