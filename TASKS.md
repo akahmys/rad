@@ -8,7 +8,7 @@ Last Updated: 2026-07-05
 - [x] Single-Process Agent Shell: REPL, Event Streaming, Human-in-the-loop, Session (v0.2)
 - [x] Wasm Extension: OpenAI Compatibility & Enhanced REPL UX (v0.2.1)
 
-## Version 0.2.2 DAG-Based Context Management & Core Refactoring (Current)
+## Version 0.2.2 DAG-Based Context Management & Core Refactoring
 - [x] AWU 19: Refactor Core Subsystems with Trait Abstractions
   - [x] Define Traits for `FsSubsystem`, `ProcessSubsystem`, `DagSubsystem`, and `NetworkSubsystem`
   - [x] Implement API Gateway for Wasm RPC requests with centralized `rad.json` permission checks
@@ -28,10 +28,10 @@ Last Updated: 2026-07-05
   - [x] Translate Japanese contents of `README.md` to English
   - [x] Explicitly describe that `rad` is inspired by `pi-coding-agent`
 
-## Version 0.2.3 Tool Execution Loop & Autonomy
-- [ ] AWU 24: Add Tool Call Schemas to Wasm Extension Request
-  - [ ] Define `tools` parameter structure in Wasm Extension OpenAI request
-  - [ ] Map `file_read`, `file_write`, `file_edit_patch`, `spawn_bash_process` to JSON Schemas
+## Version 0.2.3 Tool Execution Loop & Autonomy (Current)
+- [x] AWU 24: Add Tool Call Schemas to Wasm Extension Request
+  - [x] Define `tools` parameter structure in Wasm Extension OpenAI request
+  - [x] Map `file_read`, `file_write`, `file_edit_patch`, `spawn_bash_process` to JSON Schemas
 - [ ] AWU 25: Implement Tool Call Stream Parsing and Core RPC Dispatching
   - [ ] Buffer and parse streaming `tool_calls` from chunk chunks
   - [ ] Map and invoke Core RPC methods on complete tool call extraction
