@@ -125,23 +125,16 @@ fn main() {
 
                 println!("Task received: {trimmed}");
                 
-                rad::THINKING_ACTIVE.store(true, std::sync::atomic::Ordering::SeqCst);
-                print!("Thinking... ");
-                let _ = std::io::Write::flush(&mut std::io::stdout());
+                rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Thinking);
 
                 if let Err(e) = orchestrator.run_task(trimmed.to_string()) {
-                    rad::THINKING_ACTIVE.store(false, std::sync::atomic::Ordering::SeqCst);
-                    print!("\r            \r");
-                    let _ = std::io::Write::flush(&mut std::io::stdout());
+                    rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Idle);
                     eprintln!("Execution error: {e}");
                 } else {
                     while orchestrator.is_running() {
                         std::thread::sleep(std::time::Duration::from_millis(50));
                     }
-                    if rad::THINKING_ACTIVE.swap(false, std::sync::atomic::Ordering::SeqCst) {
-                        print!("\r            \r");
-                        let _ = std::io::Write::flush(&mut std::io::stdout());
-                    }
+                    rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Idle);
                 }
                 
                 if let Ok(dag_guard) = dag_arc.lock() {

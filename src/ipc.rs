@@ -65,12 +65,10 @@ impl<R: BufRead, W: Write> IpcBridge<R, W> {
 pub fn route_event_to_terminal(event: &RasCoreEvent) -> Result<(), String> {
     match event {
         RasCoreEvent::ProcessStdout { data, .. } => {
-            std::io::stdout().write_all(data).map_err(|e| format!("Stdout write error: {e}"))?;
-            std::io::stdout().flush().map_err(|e| format!("Stdout flush error: {e}"))?;
+            crate::terminal::get_terminal().write_raw(data, false);
         }
         RasCoreEvent::ProcessStderr { data, .. } => {
-            std::io::stderr().write_all(data).map_err(|e| format!("Stderr write error: {e}"))?;
-            std::io::stderr().flush().map_err(|e| format!("Stderr flush error: {e}"))?;
+            crate::terminal::get_terminal().write_raw(data, true);
         }
         _ => {}
     }
