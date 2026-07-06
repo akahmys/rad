@@ -231,6 +231,7 @@ fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i3
         &state.active_processes,
         &state.event_tx,
         &state.llm_timeout_policy,
+        request.id.clone().unwrap_or_else(|| "unknown".to_string()),
     );
 
     let resp = RasRpcResponse {

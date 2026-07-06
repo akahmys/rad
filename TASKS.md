@@ -70,11 +70,11 @@ Last Updated: 2026-07-05
 ## Version 0.4.0 Resiliency & Extension-based Security Hooks
 - [x] AWU 31: Extension-based Security Verification Hooks
   - [x] Implement interception hooks in API Gateway for dynamic operation inspection by Wasm Extensions
-- [/] AWU 32: Extension Self-Healing (Current)
-  - [ ] Reload Wasm Extension and restore DAG context on Wasm panic/crash
+- [x] AWU 32: Extension Self-Healing
+  - [x] Reload Wasm Extension and restore DAG context on Wasm panic/crash
 
 ## Version 0.4.x Stabilization (Comprehensive Audit & Refactoring)
-- [ ] AWU 32.5: Security & Chaos E2E Testing
+- [/] AWU 32.5: Security & Chaos E2E Testing (Current)
   - [ ] Verify Wasm Extension interception logic under malicious/heavy load operations
   - [ ] Execute chaos tests simulating sudden Wasm crash/timeouts during runtime operations
 

@@ -49,7 +49,14 @@ pub trait ProcessSubsystem: Send + Sync {
     /// # Errors
     ///
     /// Returns an error if spawning fails.
-    fn spawn_bash_process(&self, command: &str, cwd: Option<&Path>) -> Result<crate::process::RunningProcess, String>;
+    fn spawn_bash_process(
+        &self,
+        command: &str,
+        cwd: Option<&Path>,
+        call_id: String,
+        name: String,
+        arguments: String,
+    ) -> Result<crate::process::RunningProcess, String>;
 }
 
 pub trait DagSubsystem: Send + Sync {
