@@ -95,6 +95,7 @@ interface types {
         report-token-usage(report-token-usage-payload),
         spawn-mcp-server(spawn-mcp-server-payload),
         send-mcp-request(send-mcp-request-payload),
+        get-repo-map,
     }
 
     record spawn-mcp-server-payload {

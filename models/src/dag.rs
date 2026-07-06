@@ -7,6 +7,8 @@ pub struct DagNode {
     pub parent_ids: Vec<String>,
     pub node_type: String,
     pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_references: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +41,7 @@ impl Dag {
             parent_ids,
             node_type: node_type.to_string(),
             text: String::new(),
+            semantic_references: None,
         };
 
         self.nodes.insert(new_id.clone(), node);
@@ -78,6 +81,7 @@ impl Dag {
             parent_ids: collected_parents.into_iter().collect(),
             node_type: "merge".to_string(),
             text: summary_text.to_string(),
+            semantic_references: None,
         };
 
         self.redirect_children(node_ids, &new_id);
@@ -123,6 +127,12 @@ impl Dag {
             self.current_node_id = None;
         }
 
+        Ok(())
+    }
+
+    pub fn set_node_semantic_references(&mut self, node_id: &str, refs: Option<String>) -> Result<(), String> {
+        let node = self.nodes.get_mut(node_id).ok_or_else(|| format!("Node '{node_id}' not found"))?;
+        node.semantic_references = refs;
         Ok(())
     }
 }

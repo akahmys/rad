@@ -181,6 +181,11 @@ pub fn execute_rpc_command(
                 Err(format!("MCP server '{name}' is not running"))
             }
         }
+        RasRpcCommand::GetRepoMap => {
+            let workspace_path = sandbox.workspace_dir();
+            let repo_summary = crate::repo_map::extract_repo_map(workspace_path)?;
+            Ok(serde_json::Value::String(repo_summary))
+        }
     }
 }
 
