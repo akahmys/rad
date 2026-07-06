@@ -26,6 +26,8 @@ pub enum Command {
     Rollback(String),
     /// Reload configuration file dynamically.
     Reload,
+    /// Reset the current session (rotates session ID and clears DAG).
+    Reset,
 }
 
 impl fmt::Display for Command {
@@ -38,6 +40,7 @@ impl fmt::Display for Command {
             Command::Session(id) => write!(f, "/session {id}"),
             Command::Rollback(id) => write!(f, "/rollback {id}"),
             Command::Reload => write!(f, "/reload"),
+            Command::Reset => write!(f, "/reset"),
         }
     }
 }
@@ -80,6 +83,7 @@ impl CommandParser {
                 }
             }
             "/reload" => Some(Command::Reload),
+            "/reset" => Some(Command::Reset),
             _ => None,
         }
     }
@@ -112,19 +116,21 @@ impl CommandManager {
                 println!("  /session <id>   - Show the current session ID");
                 println!("  /rollback <id>  - Roll back session to a specific DAG node");
                 println!("  /reload         - Reload configuration file dynamically");
+                println!("  /reset          - Save current session and start a new clean session");
                 CommandResult::Continue
             }
             Command::Exit => CommandResult::Exit,
             Command::Status => {
+                let session_id = orchestrator.session_id.lock()
+                    .map_or_else(|_| "unknown".to_string(), |guard| guard.clone());
                 if let Ok(dag_guard) = orchestrator.dag.lock() {
                     let total_nodes = dag_guard.nodes.len();
                     let current_node = dag_guard.current_node_id.as_deref().unwrap_or("None");
                     CommandResult::StatusInfo(format!(
-                        "Session ID: {}\nTotal DAG Nodes: {}\nCurrent DAG Node: {}",
-                        orchestrator.session_id, total_nodes, current_node
+                        "Session ID: {session_id}\nTotal DAG Nodes: {total_nodes}\nCurrent DAG Node: {current_node}"
                     ))
                 } else {
-                    CommandResult::StatusInfo(format!("Session ID: {}", orchestrator.session_id))
+                    CommandResult::StatusInfo(format!("Session ID: {session_id}"))
                 }
             }
             Command::Clear => {
@@ -148,6 +154,14 @@ impl CommandManager {
                 match orchestrator.reload() {
                     Ok(()) => CommandResult::StatusInfo("\x1b[32mConfiguration reloaded successfully!\x1b[0m".to_string()),
                     Err(e) => CommandResult::StatusInfo(format!("\x1b[1;31mFailed to reload configuration: {e}\x1b[0m")),
+                }
+            }
+            Command::Reset => {
+                match orchestrator.reset_session() {
+                    Ok(new_id) => CommandResult::StatusInfo(format!(
+                        "\x1b[32mSession reset successfully. Started new session: \x1b[1;36m{new_id}\x1b[0m"
+                    )),
+                    Err(e) => CommandResult::StatusInfo(format!("\x1b[1;31mFailed to reset session: {e}\x1b[0m")),
                 }
             }
         }
@@ -180,7 +194,7 @@ impl Completer for CommandHelper {
     ) -> Result<(usize, Vec<String>), ReadlineError> {
         if word.starts_with('/') {
             let mut candidates = Vec::new();
-            let commands = ["/help", "/exit", "/status", "/clear", "/session", "/rollback", "/reload"];
+            let commands = ["/help", "/exit", "/status", "/clear", "/session", "/rollback", "/reload", "/reset"];
             for cmd in commands {
                 if cmd.starts_with(word) {
                     candidates.push(cmd.to_string());
