@@ -127,12 +127,7 @@ pub fn execute_rpc_command(
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::WriteStdout { text } => {
-            if crate::THINKING_ACTIVE.swap(false, std::sync::atomic::Ordering::SeqCst) {
-                print!("\r            \r");
-                let _ = std::io::Write::flush(&mut std::io::stdout());
-            }
-            print!("{text}");
-            std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {e}"))?;
+            crate::terminal::get_terminal().write_llm_token(text);
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::CompleteTask => {

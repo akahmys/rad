@@ -83,6 +83,8 @@ Last Updated: 2026-07-05
   - [x] Finalize RPC models and improve communication efficiency
 - [x] AWU 34: Packaging & Distribution
   - [x] Automate CI release builds for macOS, Linux, and Windows
+- [x] AWU 35: Unified Terminal Controller
+  - [x] Implement TerminalController and refactor stdout/REPL print paths
 
 
 
