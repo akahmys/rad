@@ -23,7 +23,7 @@ fn load_config_and_session(
     let cfg = config::load_config(args.config.as_deref())
         .map_err(|e| format!("Error loading configuration: {e}"))?;
 
-    println!("Configuration loaded successfully!");
+    println!("\x1b[32mConfiguration loaded successfully!\x1b[0m");
     println!("Workspace Dir: {}", cfg.core.workspace);
     println!("Snapshot Dir: {}", cfg.core.snapshot);
     println!("Log Dir: {}", cfg.core.log);
@@ -37,10 +37,10 @@ fn load_config_and_session(
     });
 
     let dag = if let Ok(loaded) = rad::session::load_session(&cfg.core.workspace, &session_id) {
-        println!("Resumed session: {session_id}");
+        println!("\x1b[36mResumed session: {session_id}\x1b[0m");
         loaded
     } else {
-        println!("Started new session: {session_id}");
+        println!("\x1b[36mStarted new session: {session_id}\x1b[0m");
         rad::dag::Dag::new()
     };
 
@@ -53,6 +53,8 @@ fn init_editor(workspace: &str) -> Result<(Editor<CommandHelper, MemHistory>, st
         MemHistory::new(),
     )
     .map_err(|e| format!("Failed to initialize shell editor: {e}"))?;
+
+    rl.set_helper(Some(rad::command::CommandHelper::new()));
 
     let history_path = std::path::PathBuf::from(workspace).join(".rad/history");
     if history_path.exists() {
@@ -75,18 +77,18 @@ fn main() {
 
     let orchestrator = std::sync::Arc::new(rad::orchestrator::Orchestrator::new(cfg.clone(), session_id.clone(), dag_arc.clone()));
 
-    println!("Starting rad agent shell. Type 'exit' or 'quit' to end the session.");
+    println!("\x1b[1;36mStarting rad agent shell. Type 'exit' or 'quit' to end the session.\x1b[0m");
 
     let (mut rl, history_path) = match init_editor(&cfg.core.workspace) {
         Ok(val) => val,
         Err(e) => {
-            eprintln!("{e}");
+            eprintln!("\x1b[1;31m{e}\x1b[0m");
             std::process::exit(1);
         }
     };
 
     loop {
-        let readline = rl.readline("rad > ");
+        let readline = rl.readline("\x1b[1;32mrad > \x1b[0m");
         match readline {
             Ok(line) => {
                 let trimmed = line.trim();
@@ -108,7 +110,7 @@ fn main() {
                     match CommandManager::execute(command, &orchestrator) {
                         CommandResult::Continue => {}
                         CommandResult::Exit => {
-                            println!("Goodbye!");
+                            println!("\x1b[32mGoodbye!\x1b[0m");
                             break;
                         }
                         CommandResult::StatusInfo(info) => {
@@ -119,17 +121,17 @@ fn main() {
                 }
 
                 if trimmed == "exit" || trimmed == "quit" {
-                    println!("Goodbye!");
+                    println!("\x1b[32mGoodbye!\x1b[0m");
                     break;
                 }
 
-                println!("Task received: {trimmed}");
+                println!("\x1b[36mTask received: \x1b[1m{trimmed}\x1b[0m");
                 
                 rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Thinking);
 
                 if let Err(e) = orchestrator.run_task(trimmed.to_string()) {
                     rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Idle);
-                    eprintln!("Execution error: {e}");
+                    eprintln!("\x1b[1;31mExecution error: {e}\x1b[0m");
                 } else {
                     while orchestrator.is_running() {
                         std::thread::sleep(std::time::Duration::from_millis(50));
