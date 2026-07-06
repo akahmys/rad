@@ -103,4 +103,19 @@ fn test_command_execution() {
         }
         _ => panic!("Expected CommandResult::StatusInfo"),
     }
+
+    // 6. Test Reset Command
+    let res = CommandManager::execute(Command::Reset, &orchestrator);
+    match res {
+        CommandResult::StatusInfo(info) => {
+            assert!(info.contains("Session reset successfully"));
+            // Verify session ID has changed from "test_session"
+            let final_id = orchestrator.session_id.lock().unwrap().clone();
+            assert_ne!(final_id, "test_session");
+            // Verify DAG was cleared
+            let dag_guard = orchestrator.dag.lock().unwrap();
+            assert_eq!(dag_guard.nodes.len(), 0);
+        }
+        _ => panic!("Expected CommandResult::StatusInfo"),
+    }
 }

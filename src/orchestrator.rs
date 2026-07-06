@@ -19,7 +19,7 @@ pub struct Orchestrator {
     process_manager: Arc<ProcessManager>,
     pub dag: Arc<Mutex<Dag>>,
     active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
-    pub session_id: String,
+    pub session_id: Mutex<String>,
     wasm_runtime: Mutex<Option<WasmRuntime>>,
     running_task: Mutex<Option<std::thread::JoinHandle<Result<(), String>>>>,
     abort_flag: Arc<AtomicBool>,
@@ -44,11 +44,65 @@ impl Orchestrator {
             process_manager,
             dag,
             active_processes,
-            session_id,
+            session_id: Mutex::new(session_id),
             wasm_runtime: Mutex::new(None),
             running_task: Mutex::new(None),
             abort_flag: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Resets the current session by saving it and creating a new empty session ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if saving session fails or mutex locking fails.
+    pub fn reset_session(&self) -> Result<String, String> {
+        let old_id = self.session_id.lock()
+            .map_err(|e| format!("Failed to lock session_id Mutex: {e}"))?
+            .clone();
+
+        let config_guard = self.config.lock()
+            .map_err(|e| format!("Failed to lock config Mutex: {e}"))?;
+
+        // 1. Save the current DAG
+        {
+            let dag_guard = self.dag.lock()
+                .map_err(|e| format!("Failed to lock dag Mutex: {e}"))?;
+            crate::session::save_session(&config_guard.core.workspace, &old_id, &dag_guard)?;
+        }
+
+        // 2. Generate a new session ID
+        let new_id = std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs())
+            .to_string();
+
+        // 3. Update session_id and DAG
+        {
+            let mut session_guard = self.session_id.lock()
+                .map_err(|e| format!("Failed to lock session_id Mutex: {e}"))?;
+            (*session_guard).clone_from(&new_id);
+        }
+
+        {
+            let mut dag_guard = self.dag.lock()
+                .map_err(|e| format!("Failed to lock dag Mutex: {e}"))?;
+            *dag_guard = crate::dag::Dag::new();
+        }
+
+        // 4. Save the new empty DAG
+        {
+            let dag_guard = self.dag.lock()
+                .map_err(|e| format!("Failed to lock dag Mutex: {e}"))?;
+            crate::session::save_session(&config_guard.core.workspace, &new_id, &dag_guard)?;
+        }
+
+        // 5. Reset Wasm runtime state
+        let mut wasm_guard = self.wasm_runtime.lock()
+            .map_err(|e| format!("Failed to lock wasm_runtime Mutex: {e}"))?;
+        *wasm_guard = None;
+
+        Ok(new_id)
     }
 
     /// Dynamically reloads configuration from `config_path`.
