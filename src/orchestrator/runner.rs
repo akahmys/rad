@@ -23,7 +23,12 @@ impl Orchestrator {
         self.abort_flag.store(false, Ordering::SeqCst);
         let self_clone = self.clone();
         let handle = std::thread::spawn(move || {
-            self_clone.run_task_internal(&instruction)
+            if let Err(e) = self_clone.run_task_internal(&instruction) {
+                eprintln!("\x1b[1;31mOrchestrator task failed: {e}\x1b[0m");
+                Err(e)
+            } else {
+                Ok(())
+            }
         });
 
         if let Ok(mut guard) = self.running_task.lock() {
