@@ -61,9 +61,9 @@ Last Updated: 2026-07-06
   - [x] Add `go.mod`, skeleton code with `wit-bindgen-go`, and compilation script.
   - [x] Validate compilation of the Go template using tinygo.
 
-* [ ] **AWU 58: Enhance Extension Runtime Error Logs** (Current)
-  - [ ] Catch WASM engine errors and log descriptive panics or stack traces.
-  - [ ] Add error contexts for RPC serialization/deserialization failures.
+* [x] **AWU 58: Enhance Extension Runtime Error Logs**
+  - [x] Catch WASM engine errors and log descriptive panics or stack traces.
+  - [x] Add error contexts for RPC serialization/deserialization failures.
 
 
 
