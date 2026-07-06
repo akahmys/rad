@@ -14,6 +14,8 @@ pub struct CoreConfig {
     pub snapshot: String,
     #[serde(rename = "log_dir", default = "default_log_dir")]
     pub log: String,
+    #[serde(default)]
+    pub hitl_enabled: bool,
 }
 
 impl Default for CoreConfig {
@@ -22,6 +24,7 @@ impl Default for CoreConfig {
             workspace: default_workspace_dir(),
             snapshot: default_snapshot_dir(),
             log: default_log_dir(),
+            hitl_enabled: false,
         }
     }
 }

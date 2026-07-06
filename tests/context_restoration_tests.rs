@@ -48,6 +48,7 @@ fn setup_test_context(perms: PermissionConfig, dag: Arc<Mutex<Dag>>) -> TestCont
         active_processes.clone(),
         event_tx,
         None,
+        false,
     )
     .unwrap();
 

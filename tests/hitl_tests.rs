@@ -41,6 +41,7 @@ fn setup_runtime(
     responses: Vec<Vec<String>>,
     workspace: &std::path::Path,
     snapshots: &std::path::Path,
+    hitl_enabled: bool,
 ) -> (WasmRuntime, std::sync::mpsc::Receiver<RasCoreEvent>, Arc<Mutex<Dag>>) {
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
@@ -85,6 +86,7 @@ fn setup_runtime(
         active_processes,
         event_tx,
         None,
+        hitl_enabled,
     )
     .unwrap();
 
@@ -114,7 +116,12 @@ fn test_hitl_approval_flow() {
         "data: [DONE]\n".to_string(),
     ];
 
-    let (mut runtime_granted, event_rx_granted, _dag) = setup_runtime(vec![turn2_granted, turn1_granted], &workspace_granted, &snapshots_granted);
+    let (mut runtime_granted, event_rx_granted, _dag) = setup_runtime(
+        vec![turn2_granted, turn1_granted],
+        &workspace_granted,
+        &snapshots_granted,
+        true,
+    );
 
     runtime_granted.on_event(&RasCoreEvent::HumanInputReceived {
         text: "start".to_string(),
@@ -160,7 +167,12 @@ fn test_hitl_approval_flow() {
         "data: [DONE]\n".to_string(),
     ];
 
-    let (mut runtime_rejected, event_rx_rejected, dag_rejected) = setup_runtime(vec![turn2_rejected, turn1_rejected], &workspace_rejected, &snapshots_rejected);
+    let (mut runtime_rejected, event_rx_rejected, dag_rejected) = setup_runtime(
+        vec![turn2_rejected, turn1_rejected],
+        &workspace_rejected,
+        &snapshots_rejected,
+        true,
+    );
 
     runtime_rejected.on_event(&RasCoreEvent::HumanInputReceived {
         text: "start".to_string(),
@@ -198,4 +210,53 @@ fn test_hitl_approval_flow() {
         std::env::remove_var("RAD_YOLO");
         std::env::remove_var("RAD_TEST_APPROVE");
     }
+}
+
+#[test]
+fn test_yolo_mode_auto_approval() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let workspace = temp_dir.path().join("workspace");
+    let snapshots = temp_dir.path().join("snapshots");
+    fs::create_dir_all(&workspace).unwrap();
+    fs::create_dir_all(&snapshots).unwrap();
+
+    let turn2 = vec![
+        "data: {\"choices\":[{\"delta\":{\"content\":\"Task finished.\"}}]}\n".to_string(),
+        "data: [DONE]\n".to_string(),
+    ];
+    let turn1 = vec![
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_yolo\",\"type\":\"function\",\"function\":{\"name\":\"spawn_bash_process\",\"arguments\":\"{\\\"command\\\":\\\"echo \\\\\\\"yolo\\\\\\\" > test_yolo.txt\\\"}\"}}]}}]}\n".to_string(),
+        "data: [DONE]\n".to_string(),
+    ];
+
+    // hitl_enabled = false (YOLO mode)
+    let (mut runtime, event_rx, _dag) = setup_runtime(
+        vec![turn2, turn1],
+        &workspace,
+        &snapshots,
+        false,
+    );
+
+    runtime.on_event(&RasCoreEvent::HumanInputReceived {
+        text: "start".to_string(),
+    }).unwrap();
+
+    let start_time = Instant::now();
+    let mut completed = false;
+    while start_time.elapsed() < Duration::from_secs(5) {
+        if let Ok(event) = event_rx.recv_timeout(Duration::from_millis(50)) {
+            runtime.on_event(&event).unwrap();
+            if matches!(event, RasCoreEvent::TaskCompleted) {
+                completed = true;
+                break;
+            }
+        }
+    }
+
+    assert!(completed, "Task did not complete in YOLO mode");
+
+    let path = workspace.join("test_yolo.txt");
+    assert!(path.exists(), "File should exist because tool execution was auto-approved in YOLO mode");
+    let content = fs::read_to_string(path).unwrap();
+    assert_eq!(content.trim(), "yolo");
 }

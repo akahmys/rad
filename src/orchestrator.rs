@@ -242,8 +242,6 @@ impl Orchestrator {
                 }
             }
 
-            drop(event_tx);
-
             match self.process_event_loop(&event_rx, &wasm_runtimes) {
                 Ok(()) => {
                     break;
@@ -254,6 +252,7 @@ impl Orchestrator {
                     attempts += 1;
                 }
             }
+            drop(event_tx);
         }
 
         if attempts >= max_attempts {
@@ -292,6 +291,7 @@ impl Orchestrator {
                     self.active_processes.clone(),
                     event_tx.clone(),
                     Some(Arc::downgrade(self)),
+                    config_guard.core.hitl_enabled,
                 )?;
                 guard.insert(ext.name.clone(), Arc::new(Mutex::new(runtime)));
             }

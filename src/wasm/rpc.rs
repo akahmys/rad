@@ -49,6 +49,7 @@ pub fn execute_rpc_command(
     llm_timeout_policy: &Arc<Mutex<crate::ipc::TimeoutPolicy>>,
     orchestrator: Option<&Arc<crate::orchestrator::Orchestrator>>,
     call_id: String,
+    hitl_enabled: bool,
 ) -> Result<serde_json::Value, String> {
     match cmd {
         RasRpcCommand::FileRead { path } => {
@@ -57,18 +58,24 @@ pub fn execute_rpc_command(
                 .map_err(|e| format!("Failed to serialize file_read result: {e}"))
         }
         RasRpcCommand::FileWrite { path, data } => {
-            request_approval(&format!("File Write to '{}'", path.display()))?;
+            if hitl_enabled {
+                request_approval(&format!("File Write to '{}'", path.display()))?;
+            }
             sandbox.file_write(path, data)?;
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::FileEditPatch { path, diff } => {
-            request_approval(&format!("File Edit (Patch) on '{}'", path.display()))?;
+            if hitl_enabled {
+                request_approval(&format!("File Edit (Patch) on '{}'", path.display()))?;
+            }
             sandbox.file_edit_patch(path, diff)?;
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::SpawnBashProcess { command } => {
-            request_approval(&format!("Execute shell command: '{}'", command))?;
-            spawn_bash_process_rpc(command, sandbox, process_manager, active_processes, event_tx, call_id)
+            if hitl_enabled {
+                request_approval(&format!("Execute shell command: '{}'", command))?;
+            }
+            spawn_bash_process_rpc(command, sandbox, process_manager, active_processes, event_tx, call_id, hitl_enabled)
         }
         RasRpcCommand::CreateNode { parent_id, node_type } => {
             let node_id = dag.create_node(parent_id, node_type)?;
@@ -142,8 +149,12 @@ pub fn execute_rpc_command(
             Ok(value)
         }
         RasRpcCommand::AskHumanApproval { prompt } => {
-            let approved = ask_human_approval_internal(prompt)?;
-            Ok(serde_json::Value::Bool(approved))
+            if !hitl_enabled {
+                Ok(serde_json::Value::Bool(true))
+            } else {
+                let approved = ask_human_approval_internal(prompt)?;
+                Ok(serde_json::Value::Bool(approved))
+            }
         }
         RasRpcCommand::ReportTokenUsage { prompt_tokens, completion_tokens } => {
             if let Some(orch) = orchestrator {
@@ -180,12 +191,9 @@ fn spawn_bash_process_rpc(
     active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
     call_id: String,
+    hitl_enabled: bool,
 ) -> Result<serde_json::Value, String> {
-    let yolo = std::env::var("RAD_YOLO")
-        .map(|v| v != "0" && v.to_lowercase() != "false")
-        .unwrap_or(true);
-
-    if !yolo {
+    if hitl_enabled {
         let approved = ask_human_approval_internal(&format!("Spawn bash process: {command}"))?;
         if !approved {
             return Err("User rejected execution of tool spawn_bash_process".to_string());

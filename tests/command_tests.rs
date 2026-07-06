@@ -37,6 +37,7 @@ fn test_command_execution() {
             workspace: workspace.to_string_lossy().to_string(),
             snapshot: snapshot.to_string_lossy().to_string(),
             log: log.to_string_lossy().to_string(),
+            hitl_enabled: false,
         },
         ..Default::default()
     };

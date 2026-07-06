@@ -61,6 +61,7 @@ fn test_multi_extension_verification_chain() {
             workspace: workspace.to_string_lossy().to_string(),
             snapshot: snapshots.to_string_lossy().to_string(),
             log: temp_dir.path().join("logs").to_string_lossy().to_string(),
+            ..Default::default()
         },
         ..Default::default()
     };

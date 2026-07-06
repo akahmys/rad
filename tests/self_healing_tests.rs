@@ -85,6 +85,7 @@ fn setup_runtime(
         active_processes,
         event_tx,
         None,
+        false,
     )
     .unwrap();
 
@@ -116,6 +117,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
         workspace: workspace.to_string_lossy().to_string(),
         snapshot: snapshots.to_string_lossy().to_string(),
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
+        hitl_enabled: false,
     };
     let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     
@@ -275,6 +277,7 @@ fn test_core_auto_self_healing_integration() {
         workspace: workspace.to_string_lossy().to_string(),
         snapshot: snapshots.to_string_lossy().to_string(),
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
+        hitl_enabled: false,
     };
     let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     

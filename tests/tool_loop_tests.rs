@@ -97,6 +97,7 @@ fn test_tool_loop_autonomy() {
         active_processes.clone(),
         event_tx,
         None,
+        false,
     )
     .unwrap();
 
@@ -182,6 +183,7 @@ fn test_context_recovery_with_tool_execution() {
             active_processes.clone(),
             event_tx,
             None,
+            false,
         )
         .unwrap();
 
@@ -225,6 +227,7 @@ fn test_context_recovery_with_tool_execution() {
             active_processes,
             event_tx,
             None,
+            false,
         )
         .unwrap();
 
