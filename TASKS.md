@@ -35,14 +35,14 @@ Last Updated: 2026-07-05
 - [x] AWU 25: Implement Tool Call Stream Parsing and Core RPC Dispatching
   - [x] Buffer and parse streaming `tool_calls` from chunk chunks
   - [x] Map and invoke Core RPC methods on complete tool call extraction
-- [/] AWU 26: Implement Autonomy Loop with System Prompt and Multi-turn Execution (Current)
-  - [ ] Send execution results back to the chat context as tool messages
-  - [ ] Add system prompt explaining rad architecture, constraints, and tool usage
+- [x] AWU 26: Implement Autonomy Loop with System Prompt and Multi-turn Execution
+  - [x] Send execution results back to the chat context as tool messages
+  - [x] Add system prompt explaining rad architecture, constraints, and tool usage
 - [x] AWU 26.5: Document Extension-Based Unified Tooling & Safety Architecture
   - [x] Update README.md to describe the unified tool and extension-based policy architecture
   - [x] Update ARCHITECTURE.md to clarify that Core is decoupled from MCP/Skills and offloads policies to Extensions
   - [x] Update PLANS.md to align version plans with the extension-offloaded design
-- [ ] AWU 27: Verify Tool Execution Integration Test & Zero-Warning Audit
+- [/] AWU 27: Verify Tool Execution Integration Test & Zero-Warning Audit (Current)
   - [ ] Write integration test validating complete LLM-driven tool loop execution
   - [ ] Pass check secrets, clippy, and unit/integration tests with zero warnings
 

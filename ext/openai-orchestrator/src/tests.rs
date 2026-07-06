@@ -8,6 +8,7 @@ fn test_sse_parsing() {
         assistant: String::new(),
         stream: "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\ndata: [DONE]\n".to_string(),
         tool_calls: HashMap::new(),
+        pending_tool_calls: Vec::new(),
     };
     
     let res = process_sse_buffer(&mut state);
@@ -21,6 +22,7 @@ fn test_sse_parsing_tool_call() {
         assistant: String::new(),
         stream: "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"file_read\",\"arguments\":\"{\\\"path\\\":\\\"/tmp/foo\\\"}\"}}]}}]}\n\ndata: [DONE]\n".to_string(),
         tool_calls: HashMap::new(),
+        pending_tool_calls: Vec::new(),
     };
     
     let res = process_sse_buffer(&mut state);
