@@ -89,9 +89,9 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 
 ## Detailed Plan: Version 0.4.0 (Resiliency & Extension-based Security Hooks) (Current)
 
-* **AWU 31: Extension-based Security Verification Hooks (Current)**
+* **AWU 31: Extension-based Security Verification Hooks**
   - Implement custom request/response interception hooks in the API Gateway to allow WebAssembly Extensions to dynamically inspect, approve, or reject filesystem and process operations (offloading sandbox/security to extensions).
-* **AWU 32: Extension Self-Healing**
+* **AWU 32: Extension Self-Healing (Current)**
   - Implement automatic Wasm instance recovery in Core. If the Extension crashes, Core will reload it and re-hydrate its state from the active DAG node.
 
 ## Detailed Plan: Version 0.4.x Stabilization (Comprehensive Audit & Refactoring)
