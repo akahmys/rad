@@ -208,7 +208,7 @@ impl Completer for CommandHelper {
                     candidates.push(cmd.to_string());
                 }
             }
-            Ok((pos + word.len(), candidates))
+            Ok((pos - word.len(), candidates))
         } else {
             Ok((pos, Vec::new()))
         }

@@ -123,9 +123,15 @@ Last Updated: 2026-07-05
   - [x] Perform audit: secret check, cargo check, clippy, and tests
 
 ## README.md Documentation
-- [x] AWU 44: Update README.md with User and Developer Guides (Current)
+- [x] AWU 44: Update README.md with User and Developer Guides
   - [x] Add User Guide section in README.md (installation, rad.json configuration, CLI slash commands, shell escape)
   - [x] Add Developer Guide section in README.md (architecture overview, building Wasm extensions, running tests)
+  - [x] Perform audit: secret check, cargo check, clippy, and tests
+
+## Version 0.6.x UX Stabilization (Continued)
+- [x] AWU 45: Fix REPL Slash Command Tab Completion
+  - [x] Correct start index calculation in `CommandHelper::complete` to `pos - word.len()`
+  - [x] Add unit tests for `CommandHelper` tab completion in `tests/command_tests.rs`
   - [x] Perform audit: secret check, cargo check, clippy, and tests
 
 

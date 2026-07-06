@@ -147,4 +147,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Add "Developer Guide" section explaining the project structure, Wasm extension development, build instructions, and running tests.
   - Perform verification audit (Clippy, secret check, tests).
 
-
+* **AWU 45: Fix REPL Slash Command Tab Completion (Current)**
+  - Correct the replacement start index returned by `CommandHelper::complete` in `src/command.rs` from `pos + word.len()` to `pos - word.len()`.
+  - Add unit tests for `CommandHelper` in `tests/command_tests.rs` to verify tab completion behavior.
+  - Perform verification audit (Clippy, secret check, tests).

@@ -119,3 +119,27 @@ fn test_command_execution() {
         _ => panic!("Expected CommandResult::StatusInfo"),
     }
 }
+
+#[test]
+fn test_command_completion() {
+    use rustyline::completion::Completer;
+    let helper = rad::command::CommandHelper::new();
+    let history = rustyline::history::MemHistory::new();
+    let ctx = rustyline::Context::new(&history);
+
+    // 1. "/" input
+    let res = helper.complete("/", 1, &ctx).unwrap();
+    assert_eq!(res.0, 0);
+    assert!(res.1.contains(&"/help".to_string()));
+    assert!(res.1.contains(&"/exit".to_string()));
+
+    // 2. "/he" input
+    let res = helper.complete("/he", 3, &ctx).unwrap();
+    assert_eq!(res.0, 0);
+    assert_eq!(res.1, vec!["/help".to_string()]);
+
+    // 3. Non-slash input
+    let res = helper.complete("regular", 7, &ctx).unwrap();
+    assert_eq!(res.0, 7);
+    assert!(res.1.is_empty());
+}
