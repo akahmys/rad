@@ -1,11 +1,5 @@
 {
   "nodes": {
-    "node_0": {
-      "id": "node_0",
-      "parent_ids": [],
-      "node_type": "user",
-      "text": "Hello"
-    },
     "node_1": {
       "id": "node_1",
       "parent_ids": [
@@ -13,6 +7,12 @@
       ],
       "node_type": "assistant",
       "text": ""
+    },
+    "node_0": {
+      "id": "node_0",
+      "parent_ids": [],
+      "node_type": "user",
+      "text": "Hello"
     }
   },
   "current_node_id": "node_0",
