@@ -182,9 +182,9 @@ fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i3
         return 0;
     }
 
-    let Ok(raw_request) = String::from_utf8(buf) else { return 0 };
+    let Ok(raw_request) = std::str::from_utf8(&buf) else { return 0 };
 
-    let Ok(request) = serde_json::from_str::<RasRpcRequest>(&raw_request) else {
+    let Ok(request) = serde_json::from_str::<RasRpcRequest>(raw_request) else {
         let resp = RasRpcResponse {
             id: None,
             result: Err("JSON Parse error in Host".to_string()),
