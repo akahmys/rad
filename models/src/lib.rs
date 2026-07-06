@@ -41,6 +41,10 @@ pub enum RasCoreEvent {
     HttpChunkReceived {
         chunk: String,
     },
+    /// Received an HTTP/connection error during LLM streaming.
+    HttpErrorReceived {
+        message: String,
+    },
     /// An extension requested a tool call.
     ToolCallRequested {
         call_id: String,

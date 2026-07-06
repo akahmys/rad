@@ -41,8 +41,8 @@ pub fn open_http_stream<S: ::std::hash::BuildHasher>(
         {
             Ok(rt) => rt,
             Err(e) => {
-                let _ = event_tx.send(RasCoreEvent::HttpChunkReceived {
-                    chunk: format!("Error creating runtime: {e}"),
+                let _ = event_tx.send(RasCoreEvent::HttpErrorReceived {
+                    message: format!("Error creating runtime: {e}"),
                 });
                 return;
             }
@@ -50,8 +50,8 @@ pub fn open_http_stream<S: ::std::hash::BuildHasher>(
 
         rt.block_on(async {
             if let Err(e) = run_http_stream_async(&url_owned, header_map, &body_owned, &event_tx, &timeout_policy).await {
-                let _ = event_tx.send(RasCoreEvent::HttpChunkReceived {
-                    chunk: format!("HTTP error: {e}"),
+                let _ = event_tx.send(RasCoreEvent::HttpErrorReceived {
+                    message: format!("HTTP error: {e}"),
                 });
             }
         });

@@ -87,6 +87,11 @@ Last Updated: 2026-07-05
   - [x] Implement TerminalController and refactor stdout/REPL print paths
 - [x] AWU 36: Dynamic Configuration Reload
   - [x] Implement /reload slash command and dynamic config updates in core
+- [x] AWU 37: Wasm-level HTTP Error Handling & Terminal Recovery (Current)
+  - [x] Add `HttpErrorReceived` variant to `RasCoreEvent` in `models/src/lib.rs`
+  - [x] Propagate HTTP connection/status errors from host via `HttpErrorReceived` in `src/http.rs`
+  - [x] Implement error handling for `HttpErrorReceived` in Wasm Extension (`ext/openai-orchestrator/src/orchestrator.rs`) to write the error to CLI and call `CompleteTask`
+
 
 
 
