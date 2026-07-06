@@ -55,10 +55,16 @@ fn main() {
     println!("Starting rad agent shell. Type 'exit' or 'quit' to end the session.");
 
     // Initialize rustyline editor
-    let mut rl = Editor::<CommandHelper, MemHistory>::with_history(
+    let mut rl = match Editor::<CommandHelper, MemHistory>::with_history(
         Config::default(),
         MemHistory::new(),
-    ).unwrap();
+    ) {
+        Ok(editor) => editor,
+        Err(e) => {
+            eprintln!("Failed to initialize shell editor: {e}");
+            std::process::exit(1);
+        }
+    };
 
     // Load history from .rad/history
     let history_path = std::path::PathBuf::from(&cfg.core.workspace).join(".rad/history");

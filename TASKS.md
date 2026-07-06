@@ -47,13 +47,14 @@ Last Updated: 2026-07-05
   - [x] Pass check secrets, clippy, and unit/integration tests with zero warnings
 
 ## Version 0.2.x Stabilization (Comprehensive Audit & Refactoring)
-- [/] AWU 27.5: Core & Autonomy Stabilization (Current)
-  - [ ] Write end-to-end integration tests for context recovery + tool execution
-  - [ ] Refactor technical debt in Wasm-Core serialized message definitions
-  - [ ] Ensure zero clippy warnings and no secrets in git stage
+- [x] AWU 27.5: Unify Data Models & Codebase-wide Refactoring
+  - [x] Create shared workspace crate `models` and migrate IPC, DAG, Timeout types
+  - [x] Refactor Core Subsystems (Process, FS, DAG, Wasm) to standardise error handling and clean up debt
+  - [x] Write end-to-end integration tests for context recovery + tool execution
+  - [x] Ensure zero clippy warnings and no secrets in git stage
 
 ## Version 0.3.0 Interactive UX & Human-in-the-Loop
-- [ ] AWU 28: Support Shell Escape (`!`) in REPL
+- [/] AWU 28: Support Shell Escape (`!`) in REPL (Current)
   - [ ] Parse and execute commands starting with `!` in Core's REPL
 - [ ] AWU 29: Dynamic Slash Commands
   - [ ] Support `/rollback`, `/status`, and custom slash commands
