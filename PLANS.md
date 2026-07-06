@@ -122,3 +122,10 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Implement a verification chain in the API Gateway. Run `rad_verify_rpc` on all runtimes sequentially. If any runtime rejects the host RPC (returns 0), reject the entire command.
 * **AWU 40: Multi-extension Integration Testing**
   - Add integration tests verifying multiple extensions active concurrently (e.g., orchestrator and security monitor), confirming correct broadcast and hook chaining.
+
+## Detailed Plan: Version 0.6.x UX Stabilization
+
+* **AWU 41: Display Thinking State on Subsequent LLM Stream Open (Current)**
+  - Modify `src/wasm/rpc.rs` so that when processing `RasRpcCommand::OpenHttpStream`, it sets the terminal state to `TerminalState::Thinking`.
+  - This ensures that even for second and subsequent LLM requests, the CLI will display `Thinking...` before the first tokens arrive, indicating that it is active rather than frozen.
+  - Perform verification audit (Clippy, secret check, tests).

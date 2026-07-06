@@ -99,6 +99,8 @@ pub fn execute_rpc_command(
             } else {
                 url.clone()
             };
+            // Set terminal state to Thinking to display the indicator
+            crate::terminal::get_terminal().set_state(crate::terminal::TerminalState::Thinking);
             let stream_id = network.open_http_stream(
                 &final_url,
                 headers.clone(),

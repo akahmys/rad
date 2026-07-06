@@ -102,3 +102,8 @@ Last Updated: 2026-07-05
 - [x] AWU 40: Multi-extension Integration Testing
   - [x] Write integration test verifying multi-extension setup (orchestrator + security hook)
   - [x] Ensure all tests pass, check secrets, clippy zero warnings
+
+## Version 0.6.x UX Stabilization
+- [x] AWU 41: Display Thinking State on Subsequent LLM Stream Open (Current)
+  - [x] Set terminal state to `TerminalState::Thinking` during `OpenHttpStream` handling in `src/wasm/rpc.rs`
+  - [x] Run secret checks, tests, clippy, and ensure everything passes with zero warnings
