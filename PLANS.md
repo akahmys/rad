@@ -73,11 +73,11 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 
 ## Detailed Plan: Version 0.3.0 (Interactive UX & Human-in-the-Loop) (Current)
 
-* **AWU 28: Support Shell Escape (`!`) in REPL (Current)**
+* **AWU 28: Support Shell Escape (`!`) in REPL**
   - Implement parsing for lines starting with `!` in Core's REPL to execute commands directly on the host shell without triggering the LLM.
 * **AWU 29: Dynamic Slash Commands**
   - Add support in Core and Extension for metadata commands (e.g., `/rollback <node_id>`, `/status`).
-* **AWU 30: Autonomous Execution Loop (YOLO by Default)**
+* **AWU 30: Autonomous Execution Loop (YOLO by Default) (Current)**
   - Implement full auto-execution loop in Core and Wasm Extension (YOLO by default).
   - Ensure the event-driven design permits Extensions to optionally intercept tool calls and block for human input (`HumanInputReceived`) if custom HITL logic is desired.
 

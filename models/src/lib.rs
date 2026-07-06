@@ -116,6 +116,9 @@ pub enum RasRpcCommand {
     },
     CompleteTask,
     GetDag,
+    AskHumanApproval {
+        prompt: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
