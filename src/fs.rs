@@ -6,11 +6,13 @@ pub mod watcher;
 #[cfg(test)]
 mod tests;
 
+use std::sync::Mutex;
+
 pub struct FsSandbox {
     workspace_dir: PathBuf,
     snapshot_dir: PathBuf,
-    fs_read_allow: Vec<String>,
-    fs_write_allow: Vec<String>,
+    fs_read_allow: Mutex<Vec<String>>,
+    fs_write_allow: Mutex<Vec<String>>,
 }
 
 impl FsSandbox {
@@ -24,9 +26,14 @@ impl FsSandbox {
         Self {
             workspace_dir,
             snapshot_dir,
-            fs_read_allow,
-            fs_write_allow,
+            fs_read_allow: Mutex::new(fs_read_allow),
+            fs_write_allow: Mutex::new(fs_write_allow),
         }
+    }
+
+    pub fn update_permissions(&self, read: Vec<String>, write: Vec<String>) {
+        *self.fs_read_allow.lock().unwrap() = read;
+        *self.fs_write_allow.lock().unwrap() = write;
     }
 
     #[must_use]
@@ -138,7 +145,8 @@ impl FsSandbox {
     ///
     /// Returns an error if the read permission check fails or file read fails.
     pub fn file_read(&self, path: &Path) -> Result<Vec<u8>, String> {
-        let allowed = self.has_permission(path, &self.fs_read_allow)?;
+        let read_allow = self.fs_read_allow.lock().unwrap();
+        let allowed = self.has_permission(path, &read_allow)?;
         if !allowed {
             return Err("Read permission denied".to_string());
         }
@@ -152,7 +160,8 @@ impl FsSandbox {
     ///
     /// Returns an error if the write permission check fails or file write fails.
     pub fn file_write(&self, path: &Path, data: &[u8]) -> Result<(), String> {
-        let allowed = self.has_permission(path, &self.fs_write_allow)?;
+        let write_allow = self.fs_write_allow.lock().unwrap();
+        let allowed = self.has_permission(path, &write_allow)?;
         if !allowed {
             return Err("Write permission denied".to_string());
         }
@@ -169,7 +178,8 @@ impl FsSandbox {
     ///
     /// Returns an error if the write permission check fails, patch parsing fails, or patch application fails.
     pub fn file_edit_patch(&self, path: &Path, diff: &str) -> Result<(), String> {
-        let allowed = self.has_permission(path, &self.fs_write_allow)?;
+        let write_allow = self.fs_write_allow.lock().unwrap();
+        let allowed = self.has_permission(path, &write_allow)?;
         if !allowed {
             return Err("Write permission denied".to_string());
         }

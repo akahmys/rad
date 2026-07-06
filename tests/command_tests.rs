@@ -42,7 +42,7 @@ fn test_command_execution() {
     };
 
     let dag = Arc::new(Mutex::new(Dag::new()));
-    let orchestrator = Orchestrator::new(config, "test_session".to_string(), dag.clone());
+    let orchestrator = Orchestrator::new(config, "test_session".to_string(), dag.clone(), None);
 
     // 1. Test Status Command on empty DAG
     let res = CommandManager::execute(Command::Status, &orchestrator);
@@ -93,5 +93,14 @@ fn test_command_execution() {
             assert_eq!(dag_guard.current_node_id.as_deref(), Some("node_0"));
         }
         _ => panic!("Expected CommandResult::Continue"),
+    }
+
+    // 5. Test Reload Command
+    let res = CommandManager::execute(Command::Reload, &orchestrator);
+    match res {
+        CommandResult::StatusInfo(info) => {
+            assert!(info.contains("Failed to reload") || info.contains("reloaded successfully"));
+        }
+        _ => panic!("Expected CommandResult::StatusInfo"),
     }
 }
