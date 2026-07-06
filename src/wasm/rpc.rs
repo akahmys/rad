@@ -47,6 +47,7 @@ pub fn execute_rpc_command(
     active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
     llm_timeout_policy: &Arc<Mutex<crate::ipc::TimeoutPolicy>>,
+    orchestrator: Option<&Arc<crate::orchestrator::Orchestrator>>,
     call_id: String,
 ) -> Result<serde_json::Value, String> {
     match cmd {
@@ -143,6 +144,16 @@ pub fn execute_rpc_command(
         RasRpcCommand::AskHumanApproval { prompt } => {
             let approved = ask_human_approval_internal(prompt)?;
             Ok(serde_json::Value::Bool(approved))
+        }
+        RasRpcCommand::ReportTokenUsage { prompt_tokens, completion_tokens } => {
+            if let Some(orch) = orchestrator {
+                let lock_res = orch.token_usage.lock();
+                if let Ok(mut usage) = lock_res {
+                    usage.prompt_tokens += prompt_tokens;
+                    usage.completion_tokens += completion_tokens;
+                }
+            }
+            Ok(serde_json::Value::Null)
         }
     }
 }

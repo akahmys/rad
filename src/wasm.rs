@@ -308,6 +308,7 @@ fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i3
     }
 
     let state = caller.data();
+    let orchestrator = state.orchestrator.as_ref().and_then(|w| w.upgrade());
     let result = rpc::execute_rpc_command(
         &request.command,
         &*state.sandbox,
@@ -317,6 +318,7 @@ fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i3
         &state.active_processes,
         &state.event_tx,
         &state.llm_timeout_policy,
+        orchestrator.as_ref(),
         request.id.clone().unwrap_or_else(|| "unknown".to_string()),
     );
 

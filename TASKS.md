@@ -107,3 +107,11 @@ Last Updated: 2026-07-05
 - [x] AWU 41: Display Thinking State on Subsequent LLM Stream Open (Current)
   - [x] Set terminal state to `TerminalState::Thinking` during `OpenHttpStream` handling in `src/wasm/rpc.rs`
   - [x] Run secret checks, tests, clippy, and ensure everything passes with zero warnings
+
+- [x] AWU 42: Track and Display Token Usage (Current)
+  - [x] Add `ReportTokenUsage` RPC command to `models/src/lib.rs`
+  - [x] Track accumulated prompt and completion tokens inside `Orchestrator`
+  - [x] Implement handling for `ReportTokenUsage` in `rpc.rs`
+  - [x] Display token usage statistics in `/status` CLI command
+  - [x] Report usage from `openai-orchestrator` Wasm extension
+  - [x] Run secret checks, tests, clippy, and ensure everything passes with zero warnings

@@ -123,14 +123,22 @@ impl CommandManager {
             Command::Status => {
                 let session_id = orchestrator.session_id.lock()
                     .map_or_else(|_| "unknown".to_string(), |guard| guard.clone());
+                let (prompt, completion) = if let Ok(usage_guard) = orchestrator.token_usage.lock() {
+                    (usage_guard.prompt_tokens, usage_guard.completion_tokens)
+                } else {
+                    (0, 0)
+                };
+                let total = prompt + completion;
                 if let Ok(dag_guard) = orchestrator.dag.lock() {
                     let total_nodes = dag_guard.nodes.len();
                     let current_node = dag_guard.current_node_id.as_deref().unwrap_or("None");
                     CommandResult::StatusInfo(format!(
-                        "Session ID: {session_id}\nTotal DAG Nodes: {total_nodes}\nCurrent DAG Node: {current_node}"
+                        "Session ID: {session_id}\nTotal DAG Nodes: {total_nodes}\nCurrent DAG Node: {current_node}\nToken Usage: Prompt: {prompt}, Completion: {completion}, Total: {total}"
                     ))
                 } else {
-                    CommandResult::StatusInfo(format!("Session ID: {session_id}"))
+                    CommandResult::StatusInfo(format!(
+                        "Session ID: {session_id}\nToken Usage: Prompt: {prompt}, Completion: {completion}, Total: {total}"
+                    ))
                 }
             }
             Command::Clear => {
