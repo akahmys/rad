@@ -53,7 +53,8 @@ impl bindings::RadExtensionImports for WasmState {
     ) -> Result<String, String> {
         let rpc_cmd = rad_models::RasRpcCommand::from(command);
         
-        permissions::check_permissions(&rpc_cmd, &self.permissions)?;
+        permissions::check_permissions(&rpc_cmd, &self.permissions)
+            .map_err(|e| format!("Permission denied in extension '{}': {e}", self.name))?;
  
         let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
         if let Some(ref orch) = orchestrator {
@@ -62,7 +63,8 @@ impl bindings::RadExtensionImports for WasmState {
                 command: rpc_cmd.clone(),
             };
             if let Ok(buf) = serde_json::to_vec(&req) {
-                orch.verify_rpc_exclude(&self.name, &req, &buf)?;
+                orch.verify_rpc_exclude(&self.name, &req, &buf)
+                    .map_err(|e| format!("Extension '{}' RPC verification failed: {e}", self.name))?;
             }
         }
 
@@ -83,7 +85,10 @@ impl bindings::RadExtensionImports for WasmState {
 
         match result {
             Ok(val) => Ok(val.to_string()),
-            Err(e) => Err(e),
+            Err(e) => {
+                eprintln!("[WASM Host RPC Error] Execution failed for extension '{}': {e}", self.name);
+                Err(format!("RPC command execution failed: {e}"))
+            }
         }
     }
 }
@@ -160,9 +165,10 @@ impl WasmRuntime {
 
     pub fn on_event(&mut self, event: &RasCoreEvent) -> Result<(), String> {
         let wit_event = bindings::radcomp::extension::types::RasCoreEvent::from(event.clone());
+        let ext_name = self.store.data().name.clone();
         self.extension
             .call_on_event(&mut self.store, &wit_event)
-            .map_err(|e| format!("Extension event call failed: {e}"))?
+            .map_err(|e| format_wasm_error(&ext_name, "on_event", &e))?
             .map_err(|e| format!("Extension internal error: {e}"))
     }
 
@@ -175,10 +181,11 @@ impl WasmRuntime {
         let request: crate::ipc::RasRpcRequest = serde_json::from_slice(req_bytes)
             .map_err(|e| format!("Failed to parse request bytes: {e}"))?;
         let bindings_cmd = bindings::radcomp::extension::types::RasRpcCommand::from(request.command);
+        let ext_name = self.store.data().name.clone();
         
         let approved = self.extension
             .call_verify_rpc(&mut self.store, &bindings_cmd)
-            .map_err(|e| format!("Failed to call 'verify_rpc': {e}"))?;
+            .map_err(|e| format_wasm_error(&ext_name, "verify_rpc", &e))?;
 
         if !approved {
             return Err("Operation rejected by security extension".to_string());
@@ -186,4 +193,10 @@ impl WasmRuntime {
 
         Ok(())
     }
+}
+
+fn format_wasm_error(ext_name: &str, action: &str, err: &wasmtime::Error) -> String {
+    let err_str = err.to_string();
+    eprintln!("[WASM Runtime Error] Extension '{ext_name}' failed during {action}. Details: {err_str}");
+    format!("Extension '{ext_name}' failed during {action}: {err_str}")
 }
