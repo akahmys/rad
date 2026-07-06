@@ -17,16 +17,11 @@ struct Args {
     session: Option<String>,
 }
 
-fn main() {
-    let args = Args::parse();
-
-    let cfg = match config::load_config(args.config.as_deref()) {
-        Ok(cfg) => cfg,
-        Err(e) => {
-            eprintln!("Error loading configuration: {e}");
-            std::process::exit(1);
-        }
-    };
+fn load_config_and_session(
+    args: &Args,
+) -> Result<(rad::config::Config, String, std::sync::Arc<std::sync::Mutex<rad::dag::Dag>>), String> {
+    let cfg = config::load_config(args.config.as_deref())
+        .map_err(|e| format!("Error loading configuration: {e}"))?;
 
     println!("Configuration loaded successfully!");
     println!("Workspace Dir: {}", cfg.core.workspace);
@@ -34,7 +29,7 @@ fn main() {
     println!("Log Dir: {}", cfg.core.log);
     println!("Extensions loaded: {}", cfg.extensions.len());
 
-    let session_id = args.session.unwrap_or_else(|| {
+    let session_id = args.session.clone().unwrap_or_else(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs())
@@ -48,29 +43,47 @@ fn main() {
         println!("Started new session: {session_id}");
         rad::dag::Dag::new()
     };
-    let dag_arc = std::sync::Arc::new(std::sync::Mutex::new(dag));
+
+    Ok((cfg, session_id, std::sync::Arc::new(std::sync::Mutex::new(dag))))
+}
+
+fn init_editor(workspace: &str) -> Result<(Editor<CommandHelper, MemHistory>, std::path::PathBuf), String> {
+    let mut rl = Editor::<CommandHelper, MemHistory>::with_history(
+        Config::default(),
+        MemHistory::new(),
+    )
+    .map_err(|e| format!("Failed to initialize shell editor: {e}"))?;
+
+    let history_path = std::path::PathBuf::from(workspace).join(".rad/history");
+    if history_path.exists() {
+        let _ = rl.history_mut().load(&history_path);
+    }
+
+    Ok((rl, history_path))
+}
+
+fn main() {
+    let args = Args::parse();
+
+    let (cfg, session_id, dag_arc) = match load_config_and_session(&args) {
+        Ok(val) => val,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
 
     let orchestrator = rad::orchestrator::Orchestrator::new(cfg.clone(), session_id.clone(), dag_arc.clone());
 
     println!("Starting rad agent shell. Type 'exit' or 'quit' to end the session.");
 
-    // Initialize rustyline editor
-    let mut rl = match Editor::<CommandHelper, MemHistory>::with_history(
-        Config::default(),
-        MemHistory::new(),
-    ) {
-        Ok(editor) => editor,
+    let (mut rl, history_path) = match init_editor(&cfg.core.workspace) {
+        Ok(val) => val,
         Err(e) => {
-            eprintln!("Failed to initialize shell editor: {e}");
+            eprintln!("{e}");
             std::process::exit(1);
         }
     };
-
-    // Load history from .rad/history
-    let history_path = std::path::PathBuf::from(&cfg.core.workspace).join(".rad/history");
-    if history_path.exists() {
-        let _ = rl.history_mut().load(&history_path);
-    }
 
     loop {
         let readline = rl.readline("rad > ");
@@ -82,6 +95,14 @@ fn main() {
                 }
                 
                 let _ = rl.add_history_entry(trimmed);
+
+                if let Some(stripped) = trimmed.strip_prefix('!') {
+                    let cmd_to_run = stripped.trim();
+                    if !cmd_to_run.is_empty() {
+                        rad::command::execute_shell(cmd_to_run);
+                    }
+                    continue;
+                }
 
                 if let Some(command) = CommandParser::parse(trimmed) {
                     match CommandManager::execute(command, &session_id) {
@@ -130,7 +151,6 @@ fn main() {
         }
     }
 
-    // Save history
     if let Some(parent) = history_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }

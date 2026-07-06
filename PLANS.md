@@ -9,10 +9,10 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.1: Core Infrastructure** (Process, FS, DAG, Wasm, PTY, HTTP, CI)
 - [x] **Version 0.2: Single-Process Agent Shell** (REPL, Event Streaming, Human-in-the-loop, Session)
 - [x] **Version 0.2.1: OpenAI-Compatible Wasm Extension & Enhanced UX**
-- [>] **Version 0.2.2: DAG-Based Context Management & Core Refactoring (Current)**
-- [ ] **Version 0.2.3: Tool Execution Loop & Autonomy**
-- [ ] **Version 0.2.x Stabilization: Comprehensive Audit & Refactoring**
-- [ ] **Version 0.3.0: Interactive UX & Human-in-the-Loop (YOLO & Slash Commands)**
+- [x] **Version 0.2.2: DAG-Based Context Management & Core Refactoring**
+- [x] **Version 0.2.3: Tool Execution Loop & Autonomy**
+- [x] **Version 0.2.x Stabilization: Comprehensive Audit & Refactoring**
+- [>] **Version 0.3.0: Interactive UX & Human-in-the-Loop (YOLO & Slash Commands) (Current)**
 - [ ] **Version 0.3.x Stabilization: Comprehensive Audit & Refactoring**
 - [ ] **Version 0.4.0: Resiliency & Extension-based Security Hooks (Recovery & Custom Hooks)**
 - [ ] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
@@ -71,9 +71,9 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Refactor technical debt in IPC/RPC serialization schemas between Core and Wasm.
   - Run clippy, tests, and secret checks with zero warnings.
 
-## Detailed Plan: Version 0.3.0 (Interactive UX & Human-in-the-Loop)
+## Detailed Plan: Version 0.3.0 (Interactive UX & Human-in-the-Loop) (Current)
 
-* **AWU 28: Support Shell Escape (`!`) in REPL**
+* **AWU 28: Support Shell Escape (`!`) in REPL (Current)**
   - Implement parsing for lines starting with `!` in Core's REPL to execute commands directly on the host shell without triggering the LLM.
 * **AWU 29: Dynamic Slash Commands**
   - Add support in Core and Extension for metadata commands (e.g., `/rollback <node_id>`, `/status`).
