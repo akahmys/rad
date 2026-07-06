@@ -56,12 +56,12 @@ Last Updated: 2026-07-06
   - [x] Add `Cargo.toml`, `wit/rad.wit` link, and basic `src/lib.rs` implementing `on_event` and `verify_rpc`.
   - [x] Validate compilation of the template.
 
-* [ ] **AWU 57: Create Go Extension Boilerplate Template** (Current)
-  - [ ] Implement a minimal `templates/go` directory structure.
-  - [ ] Add `go.mod`, skeleton code with `wit-bindgen-go`, and compilation script.
-  - [ ] Validate compilation of the Go template using tinygo.
+* [x] **AWU 57: Create Go Extension Boilerplate Template**
+  - [x] Implement a minimal `templates/go` directory structure.
+  - [x] Add `go.mod`, skeleton code with `wit-bindgen-go`, and compilation script.
+  - [x] Validate compilation of the Go template using tinygo.
 
-* [ ] **AWU 58: Enhance Extension Runtime Error Logs**
+* [ ] **AWU 58: Enhance Extension Runtime Error Logs** (Current)
   - [ ] Catch WASM engine errors and log descriptive panics or stack traces.
   - [ ] Add error contexts for RPC serialization/deserialization failures.
 
