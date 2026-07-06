@@ -133,7 +133,26 @@ pub fn execute_rpc_command(
             let value = dag.get_dag()?;
             Ok(value)
         }
+        RasRpcCommand::AskHumanApproval { prompt } => {
+            let approved = ask_human_approval_internal(prompt)?;
+            Ok(serde_json::Value::Bool(approved))
+        }
     }
+}
+
+fn ask_human_approval_internal(prompt: &str) -> Result<bool, String> {
+    println!("{prompt}");
+    if let Ok(val) = std::env::var("RAD_TEST_APPROVE") {
+        let approved = val == "y" || val == "yes";
+        return Ok(approved);
+    }
+    print!("Approve? (y/N): ");
+    std::io::stdout().flush().map_err(|e| format!("Failed to flush stdout: {e}"))?;
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).map_err(|e| format!("Failed to read stdin: {e}"))?;
+    let trimmed = input.trim().to_lowercase();
+    let approved = trimmed == "y" || trimmed == "yes";
+    Ok(approved)
 }
 
 fn spawn_bash_process_rpc(
@@ -143,6 +162,17 @@ fn spawn_bash_process_rpc(
     active_processes: &Arc<Mutex<HashMap<i32, RunningProcess, RandomState>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
 ) -> Result<serde_json::Value, String> {
+    let yolo = std::env::var("RAD_YOLO")
+        .map(|v| v != "0" && v.to_lowercase() != "false")
+        .unwrap_or(true);
+
+    if !yolo {
+        let approved = ask_human_approval_internal(&format!("Spawn bash process: {command}"))?;
+        if !approved {
+            return Err("User rejected execution of tool spawn_bash_process".to_string());
+        }
+    }
+
     let running = process_manager.spawn_bash_process(command, Some(sandbox.workspace_dir()))?;
     let pgid = running.pgid().as_raw();
 
