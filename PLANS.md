@@ -137,3 +137,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Display token usage statistics in `/status` CLI command.
   - Report usage from `openai-orchestrator` Wasm extension.
   - Perform validation audit (Clippy, secret check, tests).
+
+* **AWU 43: Align Crate Versions with Roadmap (Current)**
+  - Update crate versions in `Cargo.toml`, `models/Cargo.toml`, and `ext/openai-orchestrator/Cargo.toml` to `0.6.0`.
+  - Perform verification audit (Clippy, secret check, tests).
+

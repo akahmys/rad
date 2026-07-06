@@ -115,3 +115,10 @@ Last Updated: 2026-07-05
   - [x] Display token usage statistics in `/status` CLI command
   - [x] Report usage from `openai-orchestrator` Wasm extension
   - [x] Run secret checks, tests, clippy, and ensure everything passes with zero warnings
+
+- [x] AWU 43: Align Crate Versions with Roadmap (Current)
+  - [x] Update root `Cargo.toml` version to `0.6.0`
+  - [x] Update `models/Cargo.toml` version to `0.6.0`
+  - [x] Update `ext/openai-orchestrator/Cargo.toml` version to `0.6.0`
+  - [x] Perform audit: secret check, cargo check, clippy, and tests
+
