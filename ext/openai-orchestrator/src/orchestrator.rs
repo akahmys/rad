@@ -107,7 +107,6 @@ fn handle_human_input(text: String) -> Result<(), String> {
         tool_calls: HashMap::new(),
         pending_tool_calls: Vec::new(),
     });
-    
     let dag_val = call_host(RasRpcCommand::GetDag)?;
     let dag: Dag = serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
     let parent_id = dag.current_node_id.unwrap_or_default();
@@ -119,24 +118,16 @@ fn handle_human_input(text: String) -> Result<(), String> {
     trigger_llm_stream(state, messages)
 }
 
-fn handle_process_stdout(pgid: i32, data: Vec<u8>) -> Result<(), String> {
+fn append_process_output(pgid: i32, data: &[u8], is_stderr: bool) -> Result<(), String> {
     let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
     if let Some(state) = state_guard.as_mut() {
         for tc in &mut state.pending_tool_calls {
             if tc.pgid == Some(pgid) {
-                tc.stdout.extend_from_slice(&data);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn handle_process_stderr(pgid: i32, data: Vec<u8>) -> Result<(), String> {
-    let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
-    if let Some(state) = state_guard.as_mut() {
-        for tc in &mut state.pending_tool_calls {
-            if tc.pgid == Some(pgid) {
-                tc.stderr.extend_from_slice(&data);
+                if is_stderr {
+                    tc.stderr.extend_from_slice(data);
+                } else {
+                    tc.stdout.extend_from_slice(data);
+                }
             }
         }
     }
@@ -169,14 +160,18 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
         RasCoreEvent::HumanInputReceived { text } => handle_human_input(text),
         RasCoreEvent::HttpChunkReceived { chunk } => {
             let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
+            let mut done = false;
             if let Some(state) = state_guard.as_mut() {
                 state.stream.push_str(&chunk);
-                process_sse_buffer(state)?;
+                done = process_sse_buffer(state)?;
+            }
+            if done {
+                handle_done(state_guard)?;
             }
             Ok(())
         }
-        RasCoreEvent::ProcessStdout { pgid, data } => handle_process_stdout(pgid, data),
-        RasCoreEvent::ProcessStderr { pgid, data } => handle_process_stderr(pgid, data),
+        RasCoreEvent::ProcessStdout { pgid, data } => append_process_output(pgid, &data, false),
+        RasCoreEvent::ProcessStderr { pgid, data } => append_process_output(pgid, &data, true),
         RasCoreEvent::ProcessExited { pgid, exit_code } => handle_process_exited(pgid, exit_code),
         _ => Ok(()),
     }
@@ -202,12 +197,12 @@ pub fn trigger_llm_stream(_state: &OrchestratorState, messages: Vec<Message>) ->
 
 fn execute_and_collect_tools(
     pending_calls: Vec<PendingToolCall>,
-    state: &mut OrchestratorState,
-    state_guard: MutexGuard<'_, Option<OrchestratorState>>,
+    mut state_guard: MutexGuard<'_, Option<OrchestratorState>>,
 ) -> Result<(), String> {
     let mut all_sync_done = true;
+    let state = state_guard.as_mut().ok_or("State is None in execute_and_collect_tools")?;
     for mut tc in pending_calls {
-        match crate::tool::execute_tool(&tc) {
+        match crate::tool::execute_tool(&tc.name, &tc.arguments) {
             Ok(crate::tool::ToolExecutionResult::Sync(res)) => {
                 tc.result = Some(res);
                 state.pending_tool_calls.push(tc);
@@ -234,8 +229,9 @@ fn execute_and_collect_tools(
 
 type MutexGuard<'a, T> = std::sync::MutexGuard<'a, T>;
 
-fn handle_done(state: &mut OrchestratorState, state_guard: MutexGuard<'_, Option<OrchestratorState>>) -> Result<(), String> {
+fn handle_done(mut state_guard: MutexGuard<'_, Option<OrchestratorState>>) -> Result<(), String> {
     let _ = call_host(RasRpcCommand::WriteStdout { text: "\n".to_string() })?;
+    let state = state_guard.as_mut().ok_or("State is None in handle_done")?;
     let mut tool_indices: Vec<usize> = state.tool_calls.keys().copied().collect();
     tool_indices.sort_unstable();
     
@@ -283,7 +279,7 @@ fn handle_done(state: &mut OrchestratorState, state_guard: MutexGuard<'_, Option
     if pending_calls.is_empty() {
         let _ = call_host(RasRpcCommand::CompleteTask)?;
     } else {
-        execute_and_collect_tools(pending_calls, state, state_guard)?;
+        execute_and_collect_tools(pending_calls, state_guard)?;
     }
     Ok(())
 }
@@ -313,7 +309,8 @@ fn handle_stream_delta(state: &mut OrchestratorState, val: &serde_json::Value) {
     }
 }
 
-pub fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
+pub fn process_sse_buffer(state: &mut OrchestratorState) -> Result<bool, String> {
+    let mut done = false;
     while let Some(pos) = state.stream.find('\n') {
         let line = state.stream[..pos].trim().to_string();
         state.stream = state.stream[pos + 1..].to_string();
@@ -323,8 +320,7 @@ pub fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
         if line.starts_with("data:") {
             let data_str = line["data:".len()..].trim();
             if data_str == "[DONE]" {
-                let state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
-                handle_done(state, state_guard)?;
+                done = true;
                 break;
             }
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) {
@@ -332,5 +328,5 @@ pub fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
             }
         }
     }
-    Ok(())
+    Ok(done)
 }

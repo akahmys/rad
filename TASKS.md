@@ -42,12 +42,12 @@ Last Updated: 2026-07-05
   - [x] Update README.md to describe the unified tool and extension-based policy architecture
   - [x] Update ARCHITECTURE.md to clarify that Core is decoupled from MCP/Skills and offloads policies to Extensions
   - [x] Update PLANS.md to align version plans with the extension-offloaded design
-- [/] AWU 27: Verify Tool Execution Integration Test & Zero-Warning Audit (Current)
-  - [ ] Write integration test validating complete LLM-driven tool loop execution
-  - [ ] Pass check secrets, clippy, and unit/integration tests with zero warnings
+- [x] AWU 27: Verify Tool Execution Integration Test & Zero-Warning Audit
+  - [x] Write integration test validating complete LLM-driven tool loop execution
+  - [x] Pass check secrets, clippy, and unit/integration tests with zero warnings
 
 ## Version 0.2.x Stabilization (Comprehensive Audit & Refactoring)
-- [ ] AWU 27.5: Core & Autonomy Stabilization
+- [/] AWU 27.5: Core & Autonomy Stabilization (Current)
   - [ ] Write end-to-end integration tests for context recovery + tool execution
   - [ ] Refactor technical debt in Wasm-Core serialized message definitions
   - [ ] Ensure zero clippy warnings and no secrets in git stage
