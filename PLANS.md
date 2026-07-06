@@ -15,8 +15,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.3.0: Interactive UX & Human-in-the-Loop (YOLO & Slash Commands)**
 - [x] **Version 0.3.x Stabilization: Comprehensive Audit & Refactoring**
 - [x] **Version 0.4.0: Resiliency & Extension-based Security Hooks (Recovery & Custom Hooks)**
-- [>] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring (Current)**
-- [ ] **Version 1.0.0: Production Release & Stabilization (API Freeze, Packaging)**
+- [x] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
+- [>] **Version 1.0.0: Production Release & Stabilization (API Freeze, Packaging) (Current)**
 
 
 ## Detailed Plan: Version 0.2.2 (DAG-Based Context Management & Core Refactoring)
@@ -94,15 +94,15 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 * **AWU 32: Extension Self-Healing**
   - Implement automatic Wasm instance recovery in Core. If the Extension crashes, Core will reload it and re-hydrate its state from the active DAG node.
 
-## Detailed Plan: Version 0.4.x Stabilization (Comprehensive Audit & Refactoring) (Current)
+## Detailed Plan: Version 0.4.x Stabilization (Comprehensive Audit & Refactoring)
 
-* **AWU 32.5: Security & Chaos E2E Testing (Current)**
+* **AWU 32.5: Security & Chaos E2E Testing**
   - Run integration tests verifying that WebAssembly Extensions can successfully intercept and restrict filesystem/process requests.
   - Conduct chaos testing (abruptly crashing the Wasm runtime during file writes/process runs) to verify self-healing resilience.
 
-## Detailed Plan: Version 1.0.0 (Production Release & Stabilization)
+## Detailed Plan: Version 1.0.0 (Production Release & Stabilization) (Current)
 
-* **AWU 33: API Freeze & Serialization Optimization**
+* **AWU 33: API Freeze & Serialization Optimization (Current)**
   - Freeze the RPC command/event schemas. Optimize communication overhead.
 * **AWU 34: Packaging & Distribution**
   - Setup CI/CD release pipeline to build static binaries for target platforms (macOS, Linux, Windows).
