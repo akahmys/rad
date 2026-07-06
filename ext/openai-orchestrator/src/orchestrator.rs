@@ -174,6 +174,12 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
             }
             Ok(())
         }
+        RasCoreEvent::HttpErrorReceived { message } => {
+            let error_text = format!("\n\x1b[1;31mLLM Stream Error: {message}\x1b[0m\n");
+            let _ = call_host(RasRpcCommand::WriteStdout { text: error_text })?;
+            let _ = call_host(RasRpcCommand::CompleteTask)?;
+            Ok(())
+        }
         RasCoreEvent::ProcessStdout { pgid, data } => append_process_output(pgid, &data, false),
         RasCoreEvent::ProcessStderr { pgid, data } => append_process_output(pgid, &data, true),
         RasCoreEvent::ProcessExited { pgid, exit_code } => handle_process_exited(pgid, exit_code),

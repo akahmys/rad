@@ -288,6 +288,11 @@ impl Orchestrator {
                         runtime.on_event(&RasCoreEvent::HttpChunkReceived { chunk })?;
                     }
                 }
+                RasCoreEvent::HttpErrorReceived { message } => {
+                    if let Some(runtime) = wasm_runtime {
+                        runtime.on_event(&RasCoreEvent::HttpErrorReceived { message })?;
+                    }
+                }
                 RasCoreEvent::ProcessExited { pgid, exit_code } => {
                     if let Some(runtime) = wasm_runtime {
                         runtime.on_event(&RasCoreEvent::ProcessExited { pgid, exit_code })?;

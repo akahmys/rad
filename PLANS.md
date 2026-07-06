@@ -106,6 +106,11 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Freeze the RPC command/event schemas. Optimize communication overhead.
 * **AWU 34: Packaging & Distribution (Current)**
   - Setup CI/CD release pipeline to build static binaries for target platforms (macOS, Linux, Windows).
+* **AWU 37: Wasm-level HTTP Error Handling & Terminal Recovery**
+  - Add `HttpErrorReceived` event to `RasCoreEvent`.
+  - Propagate HTTP connection/status errors from host via `HttpErrorReceived` instead of parsing them as chunks.
+  - Implement handler in Wasm Extension to print the error to CLI and call `CompleteTask` to prevent CLI hang.
+
 
 
 
