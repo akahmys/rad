@@ -16,10 +16,10 @@ Last Updated: 2026-07-06
 - [x] Core Extensibility & Integration Layer (v0.7.0)
 
 ## Version 0.8.0 Large Codebase Optimization & Autonomy (Current)
-- [/] AWU 52: Semantic Repository Map Integration (Current)
-  - [ ] Extract code structure definitions using tree-sitter
-  - [ ] Inject semantic references into history DAG context
-- [ ] AWU 53: Autopilot Git Integration & Failure Recovery
+- [x] AWU 52: Semantic Repository Map Integration
+  - [x] Extract code structure definitions using tree-sitter
+  - [x] Inject semantic references into history DAG context
+- [/] AWU 53: Autopilot Git Integration & Failure Recovery (Current)
   - [ ] Implement dynamic local branching and auto-commits
   - [ ] Trigger rollbacks on verification failures
 

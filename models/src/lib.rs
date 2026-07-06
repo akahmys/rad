@@ -199,6 +199,8 @@ pub enum RasRpcCommand {
         name: String,
         message: String,
     },
+    /// Fetch semantic repository map of the workspace.
+    GetRepoMap,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

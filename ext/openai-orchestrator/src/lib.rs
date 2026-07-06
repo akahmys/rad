@@ -230,6 +230,7 @@ impl From<wit::RasRpcCommand> for CoreRpcCommand {
                 name: payload.name,
                 message: payload.message,
             },
+            wit::RasRpcCommand::GetRepoMap => CoreRpcCommand::GetRepoMap,
         }
     }
 }
@@ -291,6 +292,7 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
                 name,
                 message,
             }),
+            CoreRpcCommand::GetRepoMap => wit::RasRpcCommand::GetRepoMap,
         }
     }
 }

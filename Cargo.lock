@@ -24,6 +24,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aho-corasick"
+version = "1.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -99,15 +108,6 @@ name = "anyhow"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
-
-[[package]]
-name = "ar_archive_writer"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4087686b4b0a3427190bae57a1d9a478dbb2d40c5dc1bd6e2b6d797913bdd348"
-dependencies = [
- "object 0.37.3",
-]
 
 [[package]]
 name = "arbitrary"
@@ -260,14 +260,13 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.65"
+version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e228eec9be7c17ccb640b59b36a5cd805ea2a564a4c5e162c2f659fea30d3b96"
+checksum = "066fce287b1d4eafef758e89e09d724a24808a9196fe9756b8ca90e86d0719a2"
 dependencies = [
- "find-msvc-tools",
  "jobserver",
  "libc",
- "shlex",
+ "once_cell",
 ]
 
 [[package]]
@@ -761,12 +760,6 @@ dependencies = [
  "cfg-if",
  "libc",
 ]
-
-[[package]]
-name = "find-msvc-tools"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "fnv"
@@ -1644,15 +1637,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "object"
-version = "0.37.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1832,11 +1816,10 @@ dependencies = [
 
 [[package]]
 name = "psm"
-version = "0.1.31"
+version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "645dbe486e346d9b5de3ef16ede18c26e6c70ad97418f4874b8b1889d6e761ea"
+checksum = "aa37f80ca58604976033fae9515a8a2989fc13797d953f7c04fb8fa36a11f205"
 dependencies = [
- "ar_archive_writer",
  "cc",
 ]
 
@@ -1894,6 +1877,8 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tree-sitter",
+ "tree-sitter-rust",
  "wasmtime",
  "wasmtime-wasi",
 ]
@@ -1993,6 +1978,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "regex"
+version = "1.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1292b7759ae1cb9ec195452d1390a074f0cd8541ab7a5a8c31cd6db45d4a6ba"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.4.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e1dd4122fc1595e8162618945476892eefca7b88c52820e74af6262213cae8f"
+dependencies = [
+ "aho-corasick",
+ "memchr",
+ "regex-syntax",
+]
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
+
+[[package]]
 name = "reqwest"
 version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2040,9 +2054,9 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.17.14"
+version = "0.17.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7"
+checksum = "e75ec5e92c4d8aede845126adc388046234541629e76029599ed35a003c7ed24"
 dependencies = [
  "cc",
  "cfg-if",
@@ -2377,12 +2391,6 @@ checksum = "7ccc8076840c4da029af4f87e4e8daeb0fca6b87bbb02e10cb60b791450e11e4"
 dependencies = [
  "dirs 4.0.0",
 ]
-
-[[package]]
-name = "shlex"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "slab"
@@ -2747,6 +2755,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter"
+version = "0.20.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e747b1f9b7b931ed39a548c1fae149101497de3c1fc8d9e18c62c1a66c683d3d"
+dependencies = [
+ "cc",
+ "regex",
+]
+
+[[package]]
+name = "tree-sitter-rust"
+version = "0.20.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0832309b0b2b6d33760ce5c0e818cb47e1d72b468516bfe4134408926fa7594"
+dependencies = [
+ "cc",
+ "tree-sitter",
+]
+
+[[package]]
 name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3059,7 +3087,7 @@ dependencies = [
  "log",
  "mach2",
  "memfd",
- "object 0.36.7",
+ "object",
  "once_cell",
  "paste",
  "postcard",
@@ -3160,7 +3188,7 @@ dependencies = [
  "gimli",
  "itertools",
  "log",
- "object 0.36.7",
+ "object",
  "smallvec",
  "target-lexicon",
  "thiserror 1.0.69",
@@ -3182,7 +3210,7 @@ dependencies = [
  "gimli",
  "indexmap",
  "log",
- "object 0.36.7",
+ "object",
  "postcard",
  "rustc-demangle",
  "semver",
@@ -3217,7 +3245,7 @@ version = "29.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e7b61488a5ee00c35c8c22de707c36c0aecacf419a3be803a6a2ba5e860f56a"
 dependencies = [
- "object 0.36.7",
+ "object",
  "rustix 0.38.44",
  "wasmtime-versioned-export-macros",
 ]
@@ -3300,7 +3328,7 @@ dependencies = [
  "anyhow",
  "cranelift-codegen",
  "gimli",
- "object 0.36.7",
+ "object",
  "target-lexicon",
  "wasmparser 0.221.3",
  "wasmtime-cranelift",
