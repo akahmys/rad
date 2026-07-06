@@ -119,6 +119,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
         snapshot: snapshots.to_string_lossy().to_string(),
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
         hitl_enabled: false,
+        verification_command: None,
     };
     let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     
@@ -280,6 +281,7 @@ fn test_core_auto_self_healing_integration() {
         snapshot: snapshots.to_string_lossy().to_string(),
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
         hitl_enabled: false,
+        verification_command: None,
     };
     let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     

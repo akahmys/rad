@@ -19,7 +19,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.5.0: API Freeze & Distribution (API Freeze, Packaging)**
 - [x] **Version 0.6.0: Multi-extension Support**
 - [x] **Version 0.7.0: Core Extensibility & Integration Layer (WASM Bindings, HITL-YOLO, MCP Gateway)**
-- [>] **Version 0.8.0: Large Codebase Optimization & Autonomy (Current)**
+- [x] **Version 0.8.0: Large Codebase Optimization & Autonomy**
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -44,7 +44,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Implement integration tests validating HITL prompting behavior, multi-language bindings compile checks, and supervised MCP process execution.
   - Complete full codebase audit (Clippy zero warnings, Cargo test, check secrets).
 
-## Detailed Plan: Version 0.8.0 (Large Codebase Optimization & Autonomy) (Current)
+## Detailed Plan: Version 0.8.0 (Large Codebase Optimization & Autonomy)
 
 * **AWU 52: Semantic Repository Map Integration**
   - Extract code structure definitions (classes, functions, types) using tree-sitter or similar tools.
