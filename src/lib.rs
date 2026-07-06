@@ -9,5 +9,4 @@ pub mod session;
 pub mod command;
 pub mod orchestrator;
 pub mod subsystems;
-
-
+pub static THINKING_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
