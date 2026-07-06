@@ -1,6 +1,6 @@
 # PLANS
 
-Last Updated: 2026-07-05
+Last Updated: 2026-07-06
 
 ## Objective
 Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a production-ready agent runner, incorporating WebAssembly plugins, PTY support, streaming LLM API connection, and extensible hooks (allowing users to delegate security and sandboxing to extensions).
@@ -18,8 +18,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
 - [x] **Version 0.5.0: API Freeze & Distribution (API Freeze, Packaging)**
 - [x] **Version 0.6.0: Multi-extension Support**
-- [>] **Version 0.7.0: Core Extensibility & Integration Layer (WASM Bindings, HITL-YOLO, MCP Gateway) (Current)**
-
+- [x] **Version 0.7.0: Core Extensibility & Integration Layer (WASM Bindings, HITL-YOLO, MCP Gateway)**
 
 ## Bug Fixes
 
@@ -27,4 +26,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Fix `event_tx` being dropped prematurely in `src/orchestrator.rs`.
   - Update test files to include `hitl_enabled` field in `CoreConfig` initializers.
 
+* **AWU 51: Investigate & Fix LLM Second Turn Hang (Deadlock)**
+  - Release `STATE` mutex lock in `ext/openai-orchestrator/src/orchestrator.rs` before invoking any synchronous `call_host` RPCs (e.g., in `handle_done` and `execute_and_collect_tools`).
+  - Fix DAG traversal in `load_messages_from_dag` to skip non-LLM nodes (like `"merge"`) and filter out empty content or invalid messages to prevent LLM API errors.
 

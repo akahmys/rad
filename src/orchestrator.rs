@@ -191,6 +191,10 @@ impl Orchestrator {
             let (event_tx, event_rx) = channel::<RasCoreEvent>();
             
             let wasm_runtimes = self.get_or_init_runtimes(&event_tx)?;
+            for (name, runtime_arc) in &wasm_runtimes {
+                let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
+                runtime.set_event_tx(event_tx.clone());
+            }
 
             let mut success = true;
 

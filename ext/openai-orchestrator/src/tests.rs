@@ -1,6 +1,8 @@
-use super::*;
-use crate::orchestrator::{OrchestratorState, process_sse_buffer, handle_event, STATE};
+use crate::orchestrator::{handle_event, STATE};
+use crate::types::OrchestratorState;
+use crate::sse::process_sse_buffer;
 use std::collections::HashMap;
+use rad_models::RasCoreEvent;
 
 #[test]
 fn test_sse_parsing() {
