@@ -1,7 +1,10 @@
+#![deny(clippy::pedantic)]
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::config::Config;
 use crate::fs::FsSandbox;
 use crate::process::{ProcessManager, RunningProcess};
@@ -17,9 +20,12 @@ pub struct Orchestrator {
     active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
     pub session_id: String,
     wasm_runtime: Mutex<Option<WasmRuntime>>,
+    running_task: Mutex<Option<std::thread::JoinHandle<Result<(), String>>>>,
+    abort_flag: Arc<AtomicBool>,
 }
 
 impl Orchestrator {
+    #[must_use]
     pub fn new(config: Config, session_id: String, dag: Arc<Mutex<Dag>>) -> Self {
         let sandbox = Arc::new(FsSandbox::new(
             config.core.workspace.clone().into(),
@@ -38,15 +44,49 @@ impl Orchestrator {
             active_processes,
             session_id,
             wasm_runtime: Mutex::new(None),
+            running_task: Mutex::new(None),
+            abort_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    /// Spawns the autonomous execution loop in the same process.
+    /// Checks if a task is currently executing.
+    pub fn is_running(&self) -> bool {
+        let Ok(mut guard) = self.running_task.lock() else { return false; };
+        if let Some(ref handle) = *guard {
+            if handle.is_finished() {
+                *guard = None;
+                return false;
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Spawns the autonomous execution loop in a background thread.
     ///
     /// # Errors
     ///
-    /// Returns an error if Wasm runtime initialization or execution fails.
-    pub fn run_task(&self, instruction: String) -> Result<(), String> {
+    /// Returns an error if Wasm runtime initialization or execution fails,
+    /// or if a task is already running.
+    pub fn run_task(self: &Arc<Self>, instruction: String) -> Result<(), String> {
+        if self.is_running() {
+            return Err("A task is already running. Use /rollback to stop it first.".to_string());
+        }
+
+        self.abort_flag.store(false, Ordering::SeqCst);
+        let self_clone = self.clone();
+        let handle = std::thread::spawn(move || {
+            self_clone.run_task_internal(instruction)
+        });
+
+        if let Ok(mut guard) = self.running_task.lock() {
+            *guard = Some(handle);
+        }
+
+        Ok(())
+    }
+
+    fn run_task_internal(&self, instruction: String) -> Result<(), String> {
         let (event_tx, event_rx) = channel::<RasCoreEvent>();
         
         let mut wasm_guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
@@ -61,7 +101,7 @@ impl Orchestrator {
 
         drop(event_tx);
 
-        self.process_event_loop(event_rx, wasm_runtime)?;
+        self.process_event_loop(&event_rx, wasm_runtime)?;
 
         Ok(())
     }
@@ -71,11 +111,6 @@ impl Orchestrator {
         guard: &'a mut Option<WasmRuntime>,
         event_tx: Sender<RasCoreEvent>,
     ) -> Result<&'a mut Option<WasmRuntime>, String> {
-        if let Some(ref mut runtime) = *guard {
-            runtime.set_event_tx(event_tx);
-            return Ok(guard);
-        }
-
         let ext_config = self.config.extensions.iter().find(|e| e.enabled);
         let Some(ext) = ext_config else {
             return Ok(guard);
@@ -103,11 +138,14 @@ impl Orchestrator {
 
     fn process_event_loop(
         &self,
-        event_rx: Receiver<RasCoreEvent>,
+        event_rx: &Receiver<RasCoreEvent>,
         wasm_runtime: &mut Option<WasmRuntime>,
     ) -> Result<(), String> {
         while let Ok(event) = event_rx.recv() {
-            // Route events to terminal in real-time
+            if self.abort_flag.load(Ordering::SeqCst) {
+                break;
+            }
+
             let _ = route_event_to_terminal(&event);
 
             match event {
@@ -146,6 +184,19 @@ impl Orchestrator {
     ///
     /// Returns an error if the node ID does not exist in the DAG or filesystem rollback fails.
     pub fn rollback(&self, node_id: &str) -> Result<(), String> {
+        self.abort_flag.store(true, Ordering::SeqCst);
+
+        if let Ok(mut wasm_guard) = self.wasm_runtime.lock() {
+            *wasm_guard = None;
+        }
+
+        let Ok(mut guard) = self.running_task.lock() else {
+            return Err("Failed to lock running_task".to_string());
+        };
+        if let Some(handle) = guard.take() {
+            let _ = handle.join();
+        }
+
         let mut dag_guard = self.dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
         if !dag_guard.nodes.contains_key(node_id) {
             return Err(format!("Node '{node_id}' not found in DAG"));
@@ -159,14 +210,4 @@ impl Orchestrator {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_orchestrator_creation() {
-        let config = Config::default();
-        let dag = Arc::new(Mutex::new(Dag::new()));
-        let orch = Orchestrator::new(config, "test_session".to_string(), dag);
-        assert_eq!(orch.session_id, "test_session");
-    }
-}
+mod tests;
