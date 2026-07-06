@@ -1,15 +1,31 @@
 use super::*;
+use crate::orchestrator::{OrchestratorState, process_sse_buffer, handle_event, STATE};
+use std::collections::HashMap;
 
 #[test]
 fn test_sse_parsing() {
     let mut state = OrchestratorState {
-        assistant_buffer: String::new(),
-        stream_buffer: "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\ndata: [DONE]\n".to_string(),
+        assistant: String::new(),
+        stream: "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\ndata: [DONE]\n".to_string(),
+        tool_calls: HashMap::new(),
     };
     
     let res = process_sse_buffer(&mut state);
     assert!(res.is_ok());
-    assert_eq!(state.stream_buffer, "");
+    assert_eq!(state.stream, "");
+}
+
+#[test]
+fn test_sse_parsing_tool_call() {
+    let mut state = OrchestratorState {
+        assistant: String::new(),
+        stream: "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"file_read\",\"arguments\":\"{\\\"path\\\":\\\"/tmp/foo\\\"}\"}}]}}]}\n\ndata: [DONE]\n".to_string(),
+        tool_calls: HashMap::new(),
+    };
+    
+    let res = process_sse_buffer(&mut state);
+    assert!(res.is_ok());
+    assert_eq!(state.stream, "");
 }
 
 #[test]
@@ -27,5 +43,5 @@ fn test_handle_event_human_input() {
     
     let state_guard = STATE.lock().unwrap();
     let state = state_guard.as_ref().unwrap();
-    assert!(state.stream_buffer.is_empty());
+    assert!(state.stream.is_empty());
 }

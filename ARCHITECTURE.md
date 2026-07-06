@@ -351,14 +351,28 @@ sequenceDiagram
     Ext->>Core: RPC: set_node_text(node, "Physically restored state to node_a1b2")
 ```
 
-### 5.4 Skills and Workflows Layout & Discovery
+### 5.4 Unified Tooling, Policy Offloading, and Rollback Boundaries
 
-Skills (executable scripts/tools) and Workflows (development instructions/processes) can be extended without modifying the Core's code, relying on path definitions and LLM contexts.
+`rad` follows a strict philosophy of keeping the Core simple and offloading all logical policy decisions, workflow state-machines, and safety wrappers to Wasm Extensions. In this architecture, all tools (basic OS primitives, custom Skills, Workflows, and external MCP servers) are presented to the LLM as unified, flat Tool Calls.
 
-1. **Handling Skills**:
-   * Executable scripts are physically placed in the `.rad/skills/` directory.
-   * On startup, the Extension collects these scripts' details and includes their usage in the system prompt.
-   * If the LLM wants to execute them, it calls `.rad/skills/my_skill.sh` via the `spawn_bash_process` primitive.
-2. **Handling Workflows**:
-   * Workflow definitions (e.g., compliance steps in `CODING_RULES.md`, step-by-step commit rules) are injected into the LLM as initial DAG nodes or system prompts.
-   * The LLM tracks its own progress phase (Plan -> Design -> Test -> Commit) while referencing the current node.
+### 5.4.1 Tool Abstraction & Discovery
+
+1. **Basic OS Primitives (Core)**:
+   * Low-level primitives like `file_read`, `file_write`, `file_edit_patch`, and `spawn_bash_process` are exposed by the Core through the API Gateway.
+2. **Skills (Local Scripts)**:
+   * Executable scripts are placed in `.rad/skills/`. The Extension collects these scripts' specifications at startup and registers them to the LLM's tool pool. The LLM executes them by calling the script paths via `spawn_bash_process`.
+3. **External Model Context Protocol (MCP)**:
+   * Connection and schema mapping for external MCP servers are handled on the Extension side. The Extension fetches tool schemas from MCP servers, merges them with local schemas, and forwards tool invocations to the respective MCP servers.
+4. **Workflows (State Management)**:
+   * Workflow structures (such as the Plan-Execute-Test-Commit cycle) are managed entirely by the Extension. The Extension tracks the state (either via a config file like `state.json` or explicitly in DAG nodes) and may dynamically inject phase instructions into the system prompt or restrict the set of tools available to the LLM for that specific phase.
+
+### 5.4.2 Rollback Boundaries & External Side-Effects
+
+Because `rad` provides filesystem snapshot backups under `.rad/snapshots/`, there is a clear physical boundary between rollback-capable operations and non-rollback-capable operations:
+
+* **Rollback-Capable (Local State)**:
+  * Operations involving local file editing (`file_write`, `file_edit_patch`) are tracked by the Core's snapshot mechanism. If the agent fails a task, the local files can be rolled back to a clean state.
+* **Non-Rollback-Capable (External Side-Effects)**:
+  * Tools originating from external MCP servers or certain Skills (e.g., Slack notifications, GitHub PR creations, cloud database updates) produce external side-effects. These cannot be reversed by `rad`'s local snapshots.
+* **Architecture Guideline**:
+  * Because the LLM sees all tools as a flat list, the Extension (or the system prompt/rules) must enforce safety boundaries. For non-rollback-capable (non-reversible) tools, the Extension is encouraged to intercept the invocation and block for explicit human confirmation (Human-in-the-Loop) before routing the request.
