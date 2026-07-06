@@ -38,10 +38,33 @@ Last Updated: 2026-07-06
 
 ## Refactoring & Code Quality
 
-* [x] **AWU 54: Refactor Orchestrator & WASM RPC to adhere to File Size Limit** (Current)
+* [x] **AWU 54: Refactor Orchestrator & WASM RPC to adhere to File Size Limit**
   - [x] Refactor `src/orchestrator.rs` to move helper logic/runner into `src/orchestrator/runner.rs` or similar, reducing file size below 300 lines.
   - [x] Refactor `src/wasm/rpc.rs` by extracting RPC command handlers to reduce file size below 300 lines.
   - [x] Run verification tests and lint checks (Clippy zero warnings, Cargo test, check secrets).
+
+## Extension Developer Experience (DX) Kickoff (v0.0)
+
+* [x] **AWU 55: Create Extension Developer Guide (EXTENSIONS.md)**
+  - [x] Write detailed documentation for the `radcomp:extension` WIT interface and API endpoints.
+  - [x] Document permission configurations (`rad.json`) and runtime security guidelines.
+  - [x] Add instructions for compilation, environment setup, and debugging.
+  - [x] Verify formatting and paths.
+
+* [ ] **AWU 56: Create Rust Extension Boilerplate Template** (Current)
+  - [ ] Implement a minimal `templates/rust` directory structure.
+  - [ ] Add `Cargo.toml`, `wit/rad.wit` link, and basic `src/lib.rs` implementing `on_event` and `verify_rpc`.
+  - [ ] Validate compilation of the template.
+
+* [ ] **AWU 57: Create Go Extension Boilerplate Template**
+  - [ ] Implement a minimal `templates/go` directory structure.
+  - [ ] Add `go.mod`, skeleton code with `wit-bindgen-go`, and compilation script.
+  - [ ] Validate compilation of the Go template using tinygo.
+
+* [ ] **AWU 58: Enhance Extension Runtime Error Logs**
+  - [ ] Catch WASM engine errors and log descriptive panics or stack traces.
+  - [ ] Add error contexts for RPC serialization/deserialization failures.
+
 
 
 

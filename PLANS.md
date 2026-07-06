@@ -71,4 +71,20 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Refactor `src/wasm/rpc.rs` (307 lines) to be under 300 lines by extracting handlers for `RasRpcCommand` variants into dedicated helper functions or a sub-module.
   - Ensure all refactored code passes `cargo check`, `cargo clippy --all-targets` with zero warnings, and `cargo test`.
 
+## Extension Developer Experience (DX) Kickoff (v0.0)
+
+* **AWU 55: Create Extension Developer Guide (EXTENSIONS.md)**
+  - Document radcomp:extension WIT interface details, API behaviors, configuration options, and permissions setup.
+  - Provide compilation, deployment, and debugging guides for third-party extensions.
+
+* **AWU 56: Create Rust Extension Boilerplate Template**
+  - Implement a minimal templates/rust template using cargo and wit-bindgen to bootstrap third-party Rust extensions.
+
+* **AWU 57: Create Go Extension Boilerplate Template**
+  - Implement a minimal templates/go template using tinygo and wit-bindgen-go to bootstrap third-party Go extensions.
+
+* **AWU 58: Enhance Extension Runtime Error Logs**
+  - Improve error reporting in WASM runtime by printing detailed panics, stack traces, and RPC serialization error contexts to guide developers.
+
+
 
