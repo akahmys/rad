@@ -81,6 +81,7 @@ fn setup_runtime(
     let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
 
     let runtime = WasmRuntime::new_with_module(
+        "test-extension".to_string(),
         &module,
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
@@ -89,6 +90,7 @@ fn setup_runtime(
         network,
         active_processes,
         event_tx,
+        None,
     )
     .unwrap();
 

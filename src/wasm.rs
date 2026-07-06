@@ -16,6 +16,7 @@ pub mod rpc;
 mod tests;
 
 pub struct WasmState {
+    pub name: String,
     pub sandbox: Arc<dyn FsSubsystem>,
     pub process_manager: Arc<dyn ProcessSubsystem>,
     pub dag: Arc<dyn DagSubsystem>,
@@ -24,6 +25,7 @@ pub struct WasmState {
     pub active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
     pub event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
     pub llm_timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
+    pub orchestrator: Option<std::sync::Weak<crate::orchestrator::Orchestrator>>,
 }
 
 pub struct WasmRuntime {
@@ -40,6 +42,7 @@ impl WasmRuntime {
     /// Returns an error if engine creation, compilation, linking, or instantiation fails.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        name: String,
         wasm_path: &Path,
         permissions: PermissionConfig,
         sandbox: Arc<dyn FsSubsystem>,
@@ -48,6 +51,7 @@ impl WasmRuntime {
         network: Arc<dyn NetworkSubsystem>,
         active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
+        orchestrator: Option<std::sync::Weak<crate::orchestrator::Orchestrator>>,
     ) -> Result<Self, String> {
         let mut config = wasmtime::Config::new();
         config.wasm_multi_memory(true);
@@ -55,11 +59,12 @@ impl WasmRuntime {
         let module = Module::from_file(&engine, wasm_path)
             .map_err(|e| format!("Failed to load Wasm module from file: {e}"))?;
 
-        Self::new_with_module(&module, permissions, sandbox, process_manager, dag, network, active_processes, event_tx)
+        Self::new_with_module(name, &module, permissions, sandbox, process_manager, dag, network, active_processes, event_tx, orchestrator)
     }
 
     #[allow(clippy::too_many_arguments)]
     pub fn new_with_module(
+        name: String,
         module: &Module,
         permissions: PermissionConfig,
         sandbox: Arc<dyn FsSubsystem>,
@@ -68,6 +73,7 @@ impl WasmRuntime {
         network: Arc<dyn NetworkSubsystem>,
         active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
+        orchestrator: Option<std::sync::Weak<crate::orchestrator::Orchestrator>>,
     ) -> Result<Self, String> {
         let mut linker = Linker::new(module.engine());
 
@@ -80,6 +86,7 @@ impl WasmRuntime {
         ).map_err(|e| format!("Linker error: {e}"))?;
 
         let state = WasmState {
+            name,
             sandbox,
             process_manager,
             dag,
@@ -88,6 +95,7 @@ impl WasmRuntime {
             active_processes,
             event_tx,
             llm_timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Infinite)),
+            orchestrator,
         };
 
         let mut store = Store::new(module.engine(), state);
@@ -169,6 +177,59 @@ impl WasmRuntime {
         let state = self.store.data_mut();
         state.event_tx = event_tx;
     }
+
+    /// Invokes the security verification hook (`rad_verify_rpc`) on the extension.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if verify hook rejects the operation.
+    pub fn verify_rpc(&mut self, req_bytes: &[u8]) -> Result<(), String> {
+        let verify_fn = self.instance
+            .get_typed_func::<(i32, i32), u32>(&mut self.store, "rad_verify_rpc");
+        
+        let Ok(f) = verify_fn else {
+            return Ok(());
+        };
+
+        let len = i32::try_from(req_bytes.len()).map_err(|e| format!("Invalid length: {e}"))?;
+        let alloc_fn = self.instance
+            .get_typed_func::<i32, i32>(&mut self.store, "alloc")
+            .map_err(|e| format!("Failed to get 'alloc' export: {e}"))?;
+        
+        let ptr = alloc_fn
+            .call(&mut self.store, len)
+            .map_err(|e| format!("Failed to call 'alloc': {e}"))?;
+
+        let memory = self.instance
+            .get_export(&mut self.store, "memory")
+            .and_then(wasmtime::Extern::into_memory)
+            .ok_or_else(|| "Failed to get export memory".to_string())?;
+
+        let Ok(ptr_usize) = usize::try_from(ptr) else {
+            return Err("Invalid pointer".to_string());
+        };
+
+        memory
+            .write(&mut self.store, ptr_usize, req_bytes)
+            .map_err(|e| format!("Failed to write request to memory: {e}"))?;
+
+        let ret = f.call(&mut self.store, (ptr, len))
+            .map_err(|e| format!("Failed to call 'rad_verify_rpc': {e}"))?;
+
+        let dealloc_fn = self.instance
+            .get_typed_func::<(i32, i32), ()>(&mut self.store, "dealloc")
+            .map_err(|e| format!("Failed to get 'dealloc' export: {e}"))?;
+
+        dealloc_fn
+            .call(&mut self.store, (ptr, len))
+            .map_err(|e| format!("Failed to call 'dealloc' for verify request: {e}"))?;
+
+        if ret != 1 {
+            return Err("Operation rejected by security extension".to_string());
+        }
+
+        Ok(())
+    }
 }
 
 fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i32) -> u64 {
@@ -203,22 +264,47 @@ fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i3
         }
     }
 
-    // Call Wasm-based dynamic security verification hook if defined
-    let verify_fn = caller.get_export("rad_verify_rpc")
-        .and_then(|e| e.into_func())
-        .and_then(|f| f.typed::<(i32, i32), u32>(&*caller).ok());
+    // 1. First, call the calling instance's own verification hook (safe, no deadlock)
+    let my_verify_result = {
+        let verify_fn = caller.get_export("rad_verify_rpc")
+            .and_then(|e| e.into_func())
+            .and_then(|f| f.typed::<(i32, i32), u32>(&*caller).ok());
 
-    if let Some(f) = verify_fn {
-        match f.call(caller.as_context_mut(), (req_ptr, req_len)) {
-            Ok(1) => {}
-            _ => {
-                let resp = RasRpcResponse {
-                    id: request.id,
-                    result: Err("Operation rejected by security extension".to_string()),
-                };
-                return write_response_to_guest(caller, &resp);
+        if let Some(f) = verify_fn {
+            match f.call(caller.as_context_mut(), (req_ptr, req_len)) {
+                Ok(1) => Ok(()),
+                _ => Err("Operation rejected by security extension".to_string()),
             }
+        } else {
+            Ok(())
         }
+    };
+
+    if let Err(err_msg) = my_verify_result {
+        let resp = RasRpcResponse {
+            id: request.id,
+            result: Err(err_msg),
+        };
+        return write_response_to_guest(caller, &resp);
+    }
+
+    // 2. Next, verify against all OTHER active extensions through Orchestrator
+    let other_verify_result = {
+        let state = caller.data();
+        let my_name = state.name.clone();
+        if let Some(ref weak_orch) = state.orchestrator {
+            weak_orch.upgrade().map(|orch| orch.verify_rpc_exclude(&my_name, &request, &buf))
+        } else {
+            None
+        }
+    };
+
+    if let Some(Err(err_msg)) = other_verify_result {
+        let resp = RasRpcResponse {
+            id: request.id,
+            result: Err(err_msg),
+        };
+        return write_response_to_guest(caller, &resp);
     }
 
     let state = caller.data();

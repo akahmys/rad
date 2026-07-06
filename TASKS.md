@@ -96,9 +96,9 @@ Last Updated: 2026-07-05
 - [x] AWU 38: Support Multiple Active Wasm Runtimes in Orchestrator
   - [x] Refactor `Orchestrator` to store a `HashMap<String, WasmRuntime>` instead of a single `Option<WasmRuntime>`
   - [x] Load and initialize all enabled extensions from `rad.json`
-- [ ] AWU 39: Implement Event Broadcasting and Combined Security Verification (Current)
-  - [ ] Update event routing in `process_event_loop` to broadcast events to all loaded runtimes
-  - [ ] Implement sequential verification chain for `rad_verify_rpc` in API Gateway
-- [ ] AWU 40: Multi-extension Integration Testing
+- [x] AWU 39: Implement Event Broadcasting and Combined Security Verification
+  - [x] Update event routing in `process_event_loop` to broadcast events to all loaded runtimes
+  - [x] Implement sequential verification chain for `rad_verify_rpc` in API Gateway
+- [ ] AWU 40: Multi-extension Integration Testing (Current)
   - [ ] Write integration test verifying multi-extension setup (orchestrator + security hook)
   - [ ] Ensure all tests pass, check secrets, clippy zero warnings
