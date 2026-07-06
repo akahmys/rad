@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use wasmtime::{Caller, Engine, Instance, Linker, Module, Store};
+use wasmtime::{Caller, Engine, Instance, Linker, Module, Store, AsContextMut};
 
 use crate::config::PermissionConfig;
 use crate::ipc::{RasCoreEvent, RasRpcRequest, RasRpcResponse};
@@ -192,15 +192,36 @@ fn handle_host_rpc(caller: &mut Caller<'_, WasmState>, req_ptr: i32, req_len: i3
         return write_response_to_guest(caller, &resp);
     };
 
-    let state = caller.data();
-    if let Err(err_msg) = permissions::check_permissions(&request.command, &state.permissions) {
-        let resp = RasRpcResponse {
-            id: request.id,
-            result: Err(err_msg),
-        };
-        return write_response_to_guest(caller, &resp);
+    {
+        let state = caller.data();
+        if let Err(err_msg) = permissions::check_permissions(&request.command, &state.permissions) {
+            let resp = RasRpcResponse {
+                id: request.id,
+                result: Err(err_msg),
+            };
+            return write_response_to_guest(caller, &resp);
+        }
     }
 
+    // Call Wasm-based dynamic security verification hook if defined
+    let verify_fn = caller.get_export("rad_verify_rpc")
+        .and_then(|e| e.into_func())
+        .and_then(|f| f.typed::<(i32, i32), u32>(&*caller).ok());
+
+    if let Some(f) = verify_fn {
+        match f.call(caller.as_context_mut(), (req_ptr, req_len)) {
+            Ok(1) => {}
+            _ => {
+                let resp = RasRpcResponse {
+                    id: request.id,
+                    result: Err("Operation rejected by security extension".to_string()),
+                };
+                return write_response_to_guest(caller, &resp);
+            }
+        }
+    }
+
+    let state = caller.data();
     let result = rpc::execute_rpc_command(
         &request.command,
         &*state.sandbox,
