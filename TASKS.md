@@ -21,9 +21,9 @@ Last Updated: 2026-07-05
   - [x] Reconstruct `messages: Vec<Message>` by traversing history nodes in DAG topological order
   - [x] Save new user inputs (`CreateNode`, `SetNodeText`) and assistant responses into the DAG
   - [x] Remove `STATE` memory-based message array persistence
-- [/] AWU 22: Verify Context Restoration & Zero-Warning Audit (Current)
-  - [ ] Write integration test validating context restoration across session restarts/Extension reloads
-  - [ ] Achieve zero Clippy warnings, check secrets, and ensure all tests pass
+- [x] AWU 22: Verify Context Restoration & Zero-Warning Audit
+  - [x] Write integration test validating context restoration across session restarts/Extension reloads
+  - [x] Achieve zero Clippy warnings, check secrets, and ensure all tests pass
 - [x] AWU 23: Translate README.md to English & Document pi-coding-agent Inspiration
   - [x] Translate Japanese contents of `README.md` to English
   - [x] Explicitly describe that `rad` is inspired by `pi-coding-agent`
