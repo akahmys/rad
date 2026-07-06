@@ -54,9 +54,9 @@ Last Updated: 2026-07-05
   - [x] Ensure zero clippy warnings and no secrets in git stage
 
 ## Version 0.3.0 Interactive UX & Human-in-the-Loop
-- [/] AWU 28: Support Shell Escape (`!`) in REPL (Current)
-  - [ ] Parse and execute commands starting with `!` in Core's REPL
-- [ ] AWU 29: Dynamic Slash Commands
+- [x] AWU 28: Support Shell Escape (`!`) in REPL
+  - [x] Parse and execute commands starting with `!` in Core's REPL
+- [/] AWU 29: Dynamic Slash Commands (Current)
   - [ ] Support `/rollback`, `/status`, and custom slash commands
 - [ ] AWU 30: Autonomous Execution Loop (YOLO by Default)
   - [ ] Implement full auto-execution loop in Core and Extension

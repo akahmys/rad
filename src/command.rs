@@ -169,3 +169,24 @@ impl Validator for CommandHelper {
 }
 
 impl Helper for CommandHelper {}
+
+/// Executes a command directly on the host shell.
+pub fn execute_shell(cmd_str: &str) {
+    let mut cmd = std::process::Command::new("sh");
+    cmd.arg("-c").arg(cmd_str);
+    match cmd.status() {
+        Ok(status) => {
+            if !status.success() {
+                if let Some(code) = status.code() {
+                    eprintln!("Command exited with status code: {code}");
+                } else {
+                    eprintln!("Command terminated by signal");
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to execute command: {e}");
+        }
+    }
+}
+
