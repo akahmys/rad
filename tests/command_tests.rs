@@ -38,6 +38,7 @@ fn test_command_execution() {
             snapshot: snapshot.to_string_lossy().to_string(),
             log: log.to_string_lossy().to_string(),
             hitl_enabled: false,
+            verification_command: None,
         },
         ..Default::default()
     };

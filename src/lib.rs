@@ -12,3 +12,4 @@ pub mod subsystems;
 pub mod terminal;
 pub mod mcp;
 pub mod repo_map;
+pub mod git;

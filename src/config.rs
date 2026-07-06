@@ -16,6 +16,8 @@ pub struct CoreConfig {
     pub log: String,
     #[serde(default)]
     pub hitl_enabled: bool,
+    #[serde(default)]
+    pub verification_command: Option<String>,
 }
 
 impl Default for CoreConfig {
@@ -25,6 +27,7 @@ impl Default for CoreConfig {
             snapshot: default_snapshot_dir(),
             log: default_log_dir(),
             hitl_enabled: false,
+            verification_command: None,
         }
     }
 }

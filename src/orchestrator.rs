@@ -11,6 +11,7 @@ use crate::process::{ProcessManager, RunningProcess};
 use crate::dag::Dag;
 use crate::wasm::WasmRuntime;
 use crate::ipc::{RasCoreEvent, route_event_to_terminal};
+use crate::git;
 
 #[derive(Default, Debug, Clone)]
 pub struct TokenUsage {
@@ -184,6 +185,13 @@ impl Orchestrator {
     }
 
     fn run_task_internal(self: &Arc<Self>, instruction: &str) -> Result<(), String> {
+        let config = self.config.lock().unwrap().clone();
+        let workspace_path = Path::new(&config.core.workspace);
+        let session_id = self.session_id.lock().unwrap().clone();
+
+        // 1. Git Autopilot Setup
+        let (has_git, initial_sha) = setup_git_autopilot(workspace_path, &session_id);
+
         let mut attempts = 0;
         let max_attempts = 2;
 
@@ -248,6 +256,22 @@ impl Orchestrator {
 
             match self.process_event_loop(&event_rx, &wasm_runtimes) {
                 Ok(()) => {
+                    // Check verification command
+                    if let Some(ref verify_cmd) = config.core.verification_command {
+                        println!("Running autopilot verification: {verify_cmd}");
+                        if run_verification_cmd(workspace_path, verify_cmd) {
+                            println!("Verification PASSED.");
+                            if has_git {
+                                let _ = git::create_checkpoint(workspace_path, "verification_passed");
+                            }
+                        } else {
+                            if let Some(ref sha) = initial_sha {
+                                println!("Verification FAILED. Rolling back codebase to stable SHA: {sha}");
+                                let _ = git::rollback_to_checkpoint(workspace_path, sha);
+                            }
+                            return Err("Autopilot verification command failed. Codebase rolled back.".to_string());
+                        }
+                    }
                     break;
                 }
                 Err(e) => {
@@ -425,6 +449,54 @@ impl Orchestrator {
 
         Ok(())
     }
+}
+
+fn run_verification_cmd(workspace: &Path, command_str: &str) -> bool {
+    let output = if cfg!(target_os = "windows") {
+        std::process::Command::new("cmd")
+            .current_dir(workspace)
+            .args(["/C", command_str])
+            .output()
+    } else {
+        std::process::Command::new("sh")
+            .current_dir(workspace)
+            .args(["-c", command_str])
+            .output()
+    };
+
+    match output {
+        Ok(out) => {
+            let success = out.status.success();
+            if !success {
+                eprintln!("Verification FAILED: exit code = {:?}", out.status.code());
+                eprintln!("stderr: {}", String::from_utf8_lossy(&out.stderr));
+            }
+            success
+        }
+        Err(e) => {
+            eprintln!("Failed to execute verification command: {e}");
+            false
+        }
+    }
+}
+
+fn setup_git_autopilot(workspace_path: &Path, session_id: &str) -> (bool, Option<String>) {
+    let has_git = workspace_path.join(".git").exists();
+    let mut initial_sha = None;
+    if has_git {
+        match git::create_autopilot_branch(workspace_path, session_id) {
+            Ok(br) => {
+                println!("Autopilot branch created/checked out: {br}");
+                if let Ok(sha) = git::get_head_sha(workspace_path) {
+                    initial_sha = Some(sha);
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to setup autopilot branch: {e}");
+            }
+        }
+    }
+    (has_git, initial_sha)
 }
 
 #[cfg(test)]
