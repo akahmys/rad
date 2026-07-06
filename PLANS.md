@@ -18,9 +18,10 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
 - [x] **Version 0.5.0: API Freeze & Distribution (API Freeze, Packaging)**
 - [x] **Version 0.6.0: Multi-extension Support**
-- [>] **Version 0.7.0: Core Extensibility & Integration Layer (WASM Bindings, HITL-YOLO, MCP Gateway) (Current)**
+- [x] **Version 0.7.0: Core Extensibility & Integration Layer (WASM Bindings, HITL-YOLO, MCP Gateway)**
+- [>] **Version 0.8.0: Large Codebase Optimization & Autonomy (Current)**
 
-## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer) (Current)
+## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
 * **AWU 46: WIT-based Wasm Interface IDL Definition & WASI Integration**
   - Define Wasm Interface Types (WIT) for all RPC commands and events between Core and Extension.
@@ -34,7 +35,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Implement extension-side triggers (e.g. within `openai-orchestrator`'s host call handler) to use this interface when necessary, or ensure existing HITL workflows delegate cleanly to it.
   - Add integration tests verifying both HITL-enabled (prompt waiting) and YOLO mode (auto-approving) runs.
 
-* **AWU 48: Secure MCP (Model Context Protocol) Gateway Orchestration (Current)**
+* **AWU 48: Secure MCP (Model Context Protocol) Gateway Orchestration**
   - Implement `spawn_mcp_server` RPC command in Core to spawn and supervise external MCP server processes.
   - Add `allowed_mcp_servers` verification under `rad.json` inside the API Gateway to restrict which external MCP servers can be loaded.
   - Integrate a JSON-RPC based MCP client component in the Extension workspace.
@@ -42,6 +43,16 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 * **AWU 49: Integration Testing & Verification Audit**
   - Implement integration tests validating HITL prompting behavior, multi-language bindings compile checks, and supervised MCP process execution.
   - Complete full codebase audit (Clippy zero warnings, Cargo test, check secrets).
+
+## Detailed Plan: Version 0.8.0 (Large Codebase Optimization & Autonomy) (Current)
+
+* **AWU 52: Semantic Repository Map Integration**
+  - Extract code structure definitions (classes, functions, types) using tree-sitter or similar tools.
+  - Inject semantic references directly into the DAG context to guide LLM search without context token bloat.
+
+* **AWU 53: Autopilot Git Integration & Failure Recovery**
+  - Implement dynamic local branching and automatic checkpoint commits during multi-turn edits.
+  - Trigger automatic rollbacks (using Git branch reset and DAG state rehydration) if local verification checks fail.
 
 ## Bug Fixes
 

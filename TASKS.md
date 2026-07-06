@@ -13,22 +13,15 @@ Last Updated: 2026-07-06
 - [x] Resiliency & Extension-based Security Hooks (v0.4.0)
 - [x] API Freeze & Distribution (v0.5.0)
 - [x] Multi-extension Support (v0.6.0)
+- [x] Core Extensibility & Integration Layer (v0.7.0)
 
-## Version 0.7.0 Core Extensibility & Integration Layer (Current)
-- [x] AWU 46: WIT-based Wasm Interface IDL Definition & WASI Integration
-  - [x] Define WIT files for RPC commands and event schemas
-  - [x] Adapt Core Wasm runtime loader to support `wit-bindgen` style structures
-- [x] AWU 47: Human-in-the-Loop (HITL) with Default YOLO Mode
-  - [x] Add `hitl_enabled` boolean field to `CoreConfig` in `src/config.rs`
-  - [x] Implement `RasRpcCommand::AskHumanApproval` in Core
-  - [x] Implement integration tests verifying HITL prompting and YOLO mode runs
-- [x] AWU 48: Secure MCP (Model Context Protocol) Gateway Orchestration
-  - [x] Add `spawn_mcp_server` RPC in Core to manage external MCP server processes
-  - [x] Implement `allowed_mcp_servers` checklist verification in Core API Gateway
-  - [x] Integrate MCP JSON-RPC protocol implementation inside Extension
-- [/] AWU 49: Integration Testing & Verification Audit (Current)
-  - [ ] Write tests validating WIT bindings, HITL prompting, and supervised MCP processes
-  - [ ] Verify zero Clippy warnings, check secrets, and ensure all tests pass
+## Version 0.8.0 Large Codebase Optimization & Autonomy (Current)
+- [/] AWU 52: Semantic Repository Map Integration (Current)
+  - [ ] Extract code structure definitions using tree-sitter
+  - [ ] Inject semantic references into history DAG context
+- [ ] AWU 53: Autopilot Git Integration & Failure Recovery
+  - [ ] Implement dynamic local branching and auto-commits
+  - [ ] Trigger rollbacks on verification failures
 
 ## Bug Fixes
 
