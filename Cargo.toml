@@ -20,6 +20,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "m
 futures-util = "0.3"
 bytes = "1"
 rustyline = "14.0"
+rad-models = { path = "models" }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -28,6 +29,7 @@ tempfile = "3.8"
 members = [
     ".",
     "ext/openai-orchestrator",
+    "models",
 ]
 
 
