@@ -6,8 +6,10 @@
     clippy::unnecessary_wraps,
     clippy::missing_safety_doc,
     clippy::manual_strip,
-    clippy::collapsible_if
+    clippy::collapsible_if,
+    unsafe_op_in_unsafe_fn
 )]
+
 
 wit_bindgen::generate!({
     path: "../../wit/rad.wit",
@@ -26,6 +28,11 @@ use self::radcomp::extension::types as wit;
 mod types;
 mod orchestrator;
 mod tool;
+mod sse;
+mod llm;
+#[cfg(test)]
+mod tests;
+
 
 struct ExtensionImpl;
 
