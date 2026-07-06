@@ -79,9 +79,9 @@ Last Updated: 2026-07-05
   - [x] Execute chaos tests simulating sudden Wasm crash/timeouts during runtime operations
 
 ## Version 0.5.0 API Freeze & Distribution
-- [/] AWU 33: API Freeze & Serialization Optimization (Current)
-  - [ ] Finalize RPC models and improve communication efficiency
-- [ ] AWU 34: Packaging & Distribution
+- [x] AWU 33: API Freeze & Serialization Optimization
+  - [x] Finalize RPC models and improve communication efficiency
+- [/] AWU 34: Packaging & Distribution (Current)
   - [ ] Automate CI release builds for macOS, Linux, and Windows
 
 
