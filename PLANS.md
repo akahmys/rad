@@ -102,9 +102,9 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 
 ## Detailed Plan: Version 0.5.0 (API Freeze & Distribution) (Current)
 
-* **AWU 33: API Freeze & Serialization Optimization (Current)**
+* **AWU 33: API Freeze & Serialization Optimization**
   - Freeze the RPC command/event schemas. Optimize communication overhead.
-* **AWU 34: Packaging & Distribution**
+* **AWU 34: Packaging & Distribution (Current)**
   - Setup CI/CD release pipeline to build static binaries for target platforms (macOS, Linux, Windows).
 
 
