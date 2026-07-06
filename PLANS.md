@@ -17,6 +17,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.4.0: Resiliency & Extension-based Security Hooks (Recovery & Custom Hooks)**
 - [x] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
 - [>] **Version 0.5.0: API Freeze & Distribution (API Freeze, Packaging) (Current)**
+- [ ] **Version 0.6.0: Multi-extension Support**
 
 
 ## Detailed Plan: Version 0.2.2 (DAG-Based Context Management & Core Refactoring)
@@ -111,6 +112,13 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Propagate HTTP connection/status errors from host via `HttpErrorReceived` instead of parsing them as chunks.
   - Implement handler in Wasm Extension to print the error to CLI and call `CompleteTask` to prevent CLI hang.
 
+## Detailed Plan: Version 0.6.0 (Multi-extension Support)
 
-
-
+* **AWU 38: Support Multiple Active Wasm Runtimes in Orchestrator**
+  - Refactor `Orchestrator` to store a `HashMap<String, WasmRuntime>` instead of a single `Option<WasmRuntime>`.
+  - Load all enabled extensions from `rad.json` during initialization, initializing each runtime with its specific permissions.
+* **AWU 39: Implement Event Broadcasting and Combined Security Verification**
+  - Update event routing in `process_event_loop` to broadcast events to all loaded runtimes.
+  - Implement a verification chain in the API Gateway. Run `rad_verify_rpc` on all runtimes sequentially. If any runtime rejects the host RPC (returns 0), reject the entire command.
+* **AWU 40: Multi-extension Integration Testing**
+  - Add integration tests verifying multiple extensions active concurrently (e.g., orchestrator and security monitor), confirming correct broadcast and hook chaining.

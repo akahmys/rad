@@ -20,7 +20,7 @@ pub struct Orchestrator {
     pub dag: Arc<Mutex<Dag>>,
     active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
     pub session_id: Mutex<String>,
-    wasm_runtime: Mutex<Option<WasmRuntime>>,
+    wasm_runtime: Mutex<HashMap<String, WasmRuntime>>,
     running_task: Mutex<Option<std::thread::JoinHandle<Result<(), String>>>>,
     abort_flag: Arc<AtomicBool>,
 }
@@ -45,7 +45,7 @@ impl Orchestrator {
             dag,
             active_processes,
             session_id: Mutex::new(session_id),
-            wasm_runtime: Mutex::new(None),
+            wasm_runtime: Mutex::new(HashMap::new()),
             running_task: Mutex::new(None),
             abort_flag: Arc::new(AtomicBool::new(false)),
         }
@@ -100,7 +100,7 @@ impl Orchestrator {
         // 5. Reset Wasm runtime state
         let mut wasm_guard = self.wasm_runtime.lock()
             .map_err(|e| format!("Failed to lock wasm_runtime Mutex: {e}"))?;
-        *wasm_guard = None;
+        wasm_guard.clear();
 
         Ok(new_id)
     }
@@ -128,7 +128,7 @@ impl Orchestrator {
         // 3. Reset Wasm runtime state so it gets re-initialized with new configs on next run
         let mut wasm_guard = self.wasm_runtime.lock()
             .map_err(|e| format!("Failed to lock wasm_runtime Mutex: {e}"))?;
-        *wasm_guard = None;
+        wasm_guard.clear();
 
         Ok(())
     }
@@ -178,7 +178,9 @@ impl Orchestrator {
             let (event_tx, event_rx) = channel::<RasCoreEvent>();
             
             let mut wasm_guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
-            let wasm_runtime = self.get_or_init_runtime(&mut wasm_guard, event_tx.clone())?;
+            let wasm_runtimes = self.get_or_init_runtimes(&mut wasm_guard, &event_tx)?;
+
+            let mut success = true;
 
             if attempts > 0 {
                 let active_calls = {
@@ -194,39 +196,47 @@ impl Orchestrator {
                 };
 
                 let rehydrate_event = RasCoreEvent::Rehydrate { active_calls };
-                if let Some(ref mut runtime) = *wasm_runtime {
-                    match runtime.on_event(&rehydrate_event) {
-                        Ok(()) => {}
-                        Err(e) => {
-                            eprintln!("Failed to rehydrate runtime: {e}");
-                            attempts += 1;
-                            continue;
-                        }
+                for (name, runtime) in wasm_runtimes.iter_mut() {
+                    if let Err(e) = runtime.on_event(&rehydrate_event) {
+                        eprintln!("Failed to rehydrate runtime {name}: {e}");
+                        success = false;
+                        break;
                     }
+                }
+                if !success {
+                    wasm_runtimes.clear();
+                    attempts += 1;
+                    continue;
                 }
             }
 
             let init_event = RasCoreEvent::HumanInputReceived { text: instruction.to_string() };
-            if let Some(ref mut runtime) = *wasm_runtime {
-                if let Err(e) = runtime.on_event(&init_event) {
-                    eprintln!("Wasm execution error: {e}. Recovering...");
-                    *wasm_runtime = None;
+            if wasm_runtimes.is_empty() {
+                let _ = event_tx.send(init_event);
+            } else {
+                for (name, runtime) in wasm_runtimes.iter_mut() {
+                    if let Err(e) = runtime.on_event(&init_event) {
+                        eprintln!("Wasm execution error on {name}: {e}. Recovering...");
+                        success = false;
+                        break;
+                    }
+                }
+                if !success {
+                    wasm_runtimes.clear();
                     attempts += 1;
                     continue;
                 }
-            } else {
-                let _ = event_tx.send(init_event);
             }
 
             drop(event_tx);
 
-            match self.process_event_loop(&event_rx, wasm_runtime) {
+            match self.process_event_loop(&event_rx, wasm_runtimes) {
                 Ok(()) => {
                     break;
                 }
                 Err(e) => {
                     eprintln!("Wasm runtime crashed: {e}. Recovering...");
-                    *wasm_runtime = None;
+                    wasm_runtimes.clear();
                     attempts += 1;
                 }
             }
@@ -239,41 +249,45 @@ impl Orchestrator {
         Ok(())
     }
 
-    fn get_or_init_runtime<'a>(
+    fn get_or_init_runtimes<'a>(
         &self,
-        guard: &'a mut Option<WasmRuntime>,
-        event_tx: Sender<RasCoreEvent>,
-    ) -> Result<&'a mut Option<WasmRuntime>, String> {
+        guard: &'a mut HashMap<String, WasmRuntime>,
+        event_tx: &Sender<RasCoreEvent>,
+    ) -> Result<&'a mut HashMap<String, WasmRuntime>, String> {
         let config_guard = self.config.lock().unwrap();
-        let ext_config = config_guard.extensions.iter().find(|e| e.enabled);
-        let Some(ext) = ext_config else {
-            return Ok(guard);
-        };
-
-        let permissions = ext.permissions.clone().unwrap_or_default();
-        let wasm_path = Path::new(&ext.source);
-        if wasm_path.exists() {
-            let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: self.dag.clone() });
-            let network_subsystem = Arc::new(crate::http::HttpManager);
-            let runtime = WasmRuntime::new(
-                wasm_path,
-                permissions,
-                self.sandbox.clone() as Arc<dyn crate::subsystems::FsSubsystem>,
-                self.process_manager.clone() as Arc<dyn crate::subsystems::ProcessSubsystem>,
-                dag_subsystem,
-                network_subsystem,
-                self.active_processes.clone(),
-                event_tx,
-            )?;
-            *guard = Some(runtime);
+        for ext in &config_guard.extensions {
+            if !ext.enabled {
+                continue;
+            }
+            if guard.contains_key(&ext.name) {
+                continue;
+            }
+            let permissions = ext.permissions.clone().unwrap_or_default();
+            let wasm_path = Path::new(&ext.source);
+            if wasm_path.exists() {
+                let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: self.dag.clone() });
+                let network_subsystem = Arc::new(crate::http::HttpManager);
+                let runtime = WasmRuntime::new(
+                    wasm_path,
+                    permissions,
+                    self.sandbox.clone() as Arc<dyn crate::subsystems::FsSubsystem>,
+                    self.process_manager.clone() as Arc<dyn crate::subsystems::ProcessSubsystem>,
+                    dag_subsystem,
+                    network_subsystem,
+                    self.active_processes.clone(),
+                    event_tx.clone(),
+                )?;
+                guard.insert(ext.name.clone(), runtime);
+            }
         }
         Ok(guard)
     }
 
+
     fn process_event_loop(
         &self,
         event_rx: &Receiver<RasCoreEvent>,
-        wasm_runtime: &mut Option<WasmRuntime>,
+        wasm_runtimes: &mut HashMap<String, WasmRuntime>,
     ) -> Result<(), String> {
         while let Ok(event) = event_rx.recv() {
             if self.abort_flag.load(Ordering::SeqCst) {
@@ -284,38 +298,38 @@ impl Orchestrator {
 
             match event {
                 RasCoreEvent::HttpChunkReceived { chunk } => {
-                    if let Some(runtime) = wasm_runtime {
-                        runtime.on_event(&RasCoreEvent::HttpChunkReceived { chunk })?;
+                    for runtime in wasm_runtimes.values_mut() {
+                        runtime.on_event(&RasCoreEvent::HttpChunkReceived { chunk: chunk.clone() })?;
                     }
                 }
                 RasCoreEvent::HttpErrorReceived { message } => {
-                    if let Some(runtime) = wasm_runtime {
-                        runtime.on_event(&RasCoreEvent::HttpErrorReceived { message })?;
+                    for runtime in wasm_runtimes.values_mut() {
+                        runtime.on_event(&RasCoreEvent::HttpErrorReceived { message: message.clone() })?;
                     }
                 }
                 RasCoreEvent::ProcessExited { pgid, exit_code } => {
-                    if let Some(runtime) = wasm_runtime {
+                    for runtime in wasm_runtimes.values_mut() {
                         runtime.on_event(&RasCoreEvent::ProcessExited { pgid, exit_code })?;
                     }
                 }
                 RasCoreEvent::ProcessStdout { pgid, data } => {
-                    if let Some(runtime) = wasm_runtime {
+                    for runtime in wasm_runtimes.values_mut() {
                         runtime.on_event(&RasCoreEvent::ProcessStdout { pgid, data: data.clone() })?;
                     }
                 }
                 RasCoreEvent::ProcessStderr { pgid, data } => {
-                    if let Some(runtime) = wasm_runtime {
+                    for runtime in wasm_runtimes.values_mut() {
                         runtime.on_event(&RasCoreEvent::ProcessStderr { pgid, data: data.clone() })?;
                     }
                 }
                 RasCoreEvent::FileChanged { path, change_type } => {
-                    if let Some(runtime) = wasm_runtime {
-                        runtime.on_event(&RasCoreEvent::FileChanged { path, change_type })?;
+                    for runtime in wasm_runtimes.values_mut() {
+                        runtime.on_event(&RasCoreEvent::FileChanged { path: path.clone(), change_type: change_type.clone() })?;
                     }
                 }
                 RasCoreEvent::StreamTimeout { target, duration_ms } => {
-                    if let Some(runtime) = wasm_runtime {
-                        runtime.on_event(&RasCoreEvent::StreamTimeout { target, duration_ms })?;
+                    for runtime in wasm_runtimes.values_mut() {
+                        runtime.on_event(&RasCoreEvent::StreamTimeout { target: target.clone(), duration_ms })?;
                     }
                 }
                 RasCoreEvent::TaskCompleted => {
@@ -336,7 +350,7 @@ impl Orchestrator {
         self.abort_flag.store(true, Ordering::SeqCst);
 
         if let Ok(mut wasm_guard) = self.wasm_runtime.lock() {
-            *wasm_guard = None;
+            wasm_guard.clear();
         }
 
         let Ok(mut guard) = self.running_task.lock() else {
