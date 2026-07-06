@@ -51,12 +51,12 @@ Last Updated: 2026-07-06
   - [x] Add instructions for compilation, environment setup, and debugging.
   - [x] Verify formatting and paths.
 
-* [ ] **AWU 56: Create Rust Extension Boilerplate Template** (Current)
-  - [ ] Implement a minimal `templates/rust` directory structure.
-  - [ ] Add `Cargo.toml`, `wit/rad.wit` link, and basic `src/lib.rs` implementing `on_event` and `verify_rpc`.
-  - [ ] Validate compilation of the template.
+* [x] **AWU 56: Create Rust Extension Boilerplate Template**
+  - [x] Implement a minimal `templates/rust` directory structure.
+  - [x] Add `Cargo.toml`, `wit/rad.wit` link, and basic `src/lib.rs` implementing `on_event` and `verify_rpc`.
+  - [x] Validate compilation of the template.
 
-* [ ] **AWU 57: Create Go Extension Boilerplate Template**
+* [ ] **AWU 57: Create Go Extension Boilerplate Template** (Current)
   - [ ] Implement a minimal `templates/go` directory structure.
   - [ ] Add `go.mod`, skeleton code with `wit-bindgen-go`, and compilation script.
   - [ ] Validate compilation of the Go template using tinygo.

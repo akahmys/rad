@@ -1,0 +1,168 @@
+package radcomp:extension;
+
+interface types {
+    variant target {
+        llm,
+        process(s32),
+    }
+
+    variant timeout-policy {
+        dynamic(dynamic-policy),
+        infinite,
+    }
+
+    record dynamic-policy {
+        heartbeat-timeout-ms: u64,
+        max-silent-wait-ms: u64,
+    }
+
+    record pending-tool-call-info {
+        id: string,
+        name: string,
+        arguments: string,
+        pgid: option<s32>,
+    }
+
+    variant ras-core-event {
+        http-chunk-received(string),
+        http-error-received(string),
+        tool-call-requested(tool-call-request),
+        process-spawned(process-spawn-info),
+        process-stdout(process-output),
+        process-stderr(process-output),
+        process-exited(process-exit-info),
+        file-changed(file-change-info),
+        stream-timeout(stream-timeout-info),
+        human-input-received(string),
+        task-completed,
+        rehydrate(list<pending-tool-call-info>),
+        mcp-response(mcp-response-payload),
+    }
+
+    record mcp-response-payload {
+        name: string,
+        message: string,
+    }
+
+    record tool-call-request {
+        call-id: string,
+        name: string,
+        args: string, // JSON string
+    }
+
+    record process-spawn-info {
+        pgid: s32,
+        pid: s32,
+    }
+
+    record process-output {
+        pgid: s32,
+        data: list<u8>,
+    }
+
+    record process-exit-info {
+        pgid: s32,
+        exit-code: option<s32>,
+    }
+
+    record file-change-info {
+        path: string,
+        change-type: string,
+    }
+
+    record stream-timeout-info {
+        target: string,
+        duration-ms: u64,
+    }
+
+    variant ras-rpc-command {
+        file-read(string),
+        file-write(file-write-payload),
+        file-edit-patch(file-patch-payload),
+        spawn-bash-process(string),
+        create-node(create-node-payload),
+        set-node-text(set-node-text-payload),
+        merge-nodes(merge-nodes-payload),
+        delete-node(string),
+        take-snapshot(take-snapshot-payload),
+        checkout-snapshot(string),
+        open-http-stream(open-http-stream-payload),
+        set-stream-timeout-policy(set-stream-timeout-policy-payload),
+        write-stdout(string),
+        complete-task,
+        get-dag,
+        ask-human-approval(string),
+        report-token-usage(report-token-usage-payload),
+        spawn-mcp-server(spawn-mcp-server-payload),
+        send-mcp-request(send-mcp-request-payload),
+        get-repo-map,
+    }
+
+    record spawn-mcp-server-payload {
+        name: string,
+        command: string,
+        args: list<string>,
+    }
+
+    record send-mcp-request-payload {
+        name: string,
+        message: string,
+    }
+
+    record file-write-payload {
+        path: string,
+        data: list<u8>,
+    }
+
+    record file-patch-payload {
+        path: string,
+        diff: string,
+    }
+
+    record create-node-payload {
+        parent-id: string,
+        node-type: string,
+    }
+
+    record set-node-text-payload {
+        node-id: string,
+        text: string,
+    }
+
+    record merge-nodes-payload {
+        node-ids: list<string>,
+        summary-text: string,
+    }
+
+    record take-snapshot-payload {
+        node-id: string,
+        target-paths: list<string>,
+    }
+
+    record open-http-stream-payload {
+        url: string,
+        headers: list<tuple<string, string>>,
+        body: string,
+    }
+
+    record set-stream-timeout-policy-payload {
+        target: target,
+        policy: timeout-policy,
+    }
+
+    record report-token-usage-payload {
+        prompt-tokens: u32,
+        completion-tokens: u32,
+    }
+}
+
+world rad-extension {
+    use types.{ras-rpc-command, ras-core-event};
+    
+    // host functions that the extension can call
+    import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
+
+    // guest functions exported by the extension
+    export on-event: func(event: ras-core-event) -> result<_, string>;
+    export verify-rpc: func(command: ras-rpc-command) -> bool;
+}

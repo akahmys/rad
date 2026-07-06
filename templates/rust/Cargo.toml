@@ -1,0 +1,14 @@
+[package]
+name = "rad-extension-template"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Required for WASM component bindings generation
+wit-bindgen = "0.24.0"
+
+[workspace]
+
