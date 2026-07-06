@@ -68,9 +68,9 @@ Last Updated: 2026-07-05
   - [x] Refactor REPL command management to cleanly decouple core/wasm commands
 
 ## Version 0.4.0 Resiliency & Extension-based Security Hooks
-- [/] AWU 31: Extension-based Security Verification Hooks (Current)
-  - [ ] Implement interception hooks in API Gateway for dynamic operation inspection by Wasm Extensions
-- [ ] AWU 32: Extension Self-Healing
+- [x] AWU 31: Extension-based Security Verification Hooks
+  - [x] Implement interception hooks in API Gateway for dynamic operation inspection by Wasm Extensions
+- [/] AWU 32: Extension Self-Healing (Current)
   - [ ] Reload Wasm Extension and restore DAG context on Wasm panic/crash
 
 ## Version 0.4.x Stabilization (Comprehensive Audit & Refactoring)
