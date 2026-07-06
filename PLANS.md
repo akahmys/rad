@@ -27,10 +27,13 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Define Wasm Interface Types (WIT) for all RPC commands and events between Core and Extension.
   - Transition the Wasm host in Core to use `wit-bindgen` compatible WASI bindings, enabling multi-language plugin development (Go, TypeScript, etc.).
 
-* **AWU 47: Human-in-the-Loop (HITL) with Default YOLO Mode**
-  - Add `request_human_approval` RPC call to Core's Wasm host interface.
-  - Update `rad.json` configuration structure to include a `hitl_enabled` boolean (defaults to `false` for YOLO mode).
-  - Implement a terminal approval prompt in Core when `hitl_enabled` is active, otherwise instantly permit operations.
+* **AWU 47: Human-in-the-Loop (HITL) with Default YOLO Mode (Current)**
+  - Add `hitl_enabled` boolean field to `CoreConfig` in `src/config.rs` (defaults to `false` which is YOLO mode).
+  - Implement the handler for `RasRpcCommand::AskHumanApproval` in Core (`src/ipc.rs` and `src/wasm.rs`).
+    - If `hitl_enabled` is `false`, immediately return `"true"` (auto-approved).
+    - If `hitl_enabled` is `true`, prompt the user in the terminal (stdout/stdin) for `y/n` confirmation, and return `"true"` or `"false"` based on user response.
+  - Implement extension-side triggers (e.g. within `openai-orchestrator`'s host call handler) to use this interface when necessary, or ensure existing HITL workflows delegate cleanly to it.
+  - Add integration tests verifying both HITL-enabled (prompt waiting) and YOLO mode (auto-approving) runs.
 
 * **AWU 48: Secure MCP (Model Context Protocol) Gateway Orchestration**
   - Implement `spawn_mcp_server` RPC command in Core to spawn and supervise external MCP server processes.
