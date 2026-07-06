@@ -137,3 +137,42 @@ pub extern "C" fn rad_on_event(ptr: *const u8, len: i32) -> u64 {
     
     0
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rad_verify_rpc(ptr: *const u8, len: i32) -> u32 {
+    let len = match usize::try_from(len) {
+        Ok(l) => l,
+        Err(_) => return 0,
+    };
+    if ptr.is_null() || len == 0 {
+        return 0;
+    }
+
+    let rpc_bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+    let request: serde_json::Value = match serde_json::from_slice(rpc_bytes) {
+        Ok(r) => r,
+        Err(_) => return 0,
+    };
+
+    if let Some(method) = request.get("method").and_then(serde_json::Value::as_str) {
+        if method == "FileWrite" {
+            if let Some(params) = request.get("params") {
+                if let Some(path) = params.get("path").and_then(serde_json::Value::as_str) {
+                    if path.contains("blocked.txt") {
+                        return 0;
+                    }
+                }
+            }
+        } else if method == "SpawnBashProcess" {
+            if let Some(params) = request.get("params") {
+                if let Some(cmd) = params.get("command").and_then(serde_json::Value::as_str) {
+                    if cmd.contains("blocked_command") {
+                        return 0;
+                    }
+                }
+            }
+        }
+    }
+
+    1
+}
