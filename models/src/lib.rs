@@ -93,6 +93,11 @@ pub enum RasCoreEvent {
     Rehydrate {
         active_calls: Vec<PendingToolCallInfo>,
     },
+    /// Message response received from external MCP server.
+    McpResponse {
+        name: String,
+        message: String,
+    },
 }
 
 /// Recovery metadata for a pending process/tool execution.
@@ -182,6 +187,17 @@ pub enum RasRpcCommand {
     ReportTokenUsage {
         prompt_tokens: u32,
         completion_tokens: u32,
+    },
+    /// Spawn an external MCP server process.
+    SpawnMcpServer {
+        name: String,
+        command: String,
+        args: Vec<String>,
+    },
+    /// Send JSON-RPC message to external MCP server.
+    SendMcpRequest {
+        name: String,
+        message: String,
     },
 }
 

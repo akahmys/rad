@@ -36,6 +36,12 @@ interface types {
         human-input-received(string),
         task-completed,
         rehydrate(list<pending-tool-call-info>),
+        mcp-response(mcp-response-payload),
+    }
+
+    record mcp-response-payload {
+        name: string,
+        message: string,
     }
 
     record tool-call-request {
@@ -87,6 +93,19 @@ interface types {
         get-dag,
         ask-human-approval(string),
         report-token-usage(report-token-usage-payload),
+        spawn-mcp-server(spawn-mcp-server-payload),
+        send-mcp-request(send-mcp-request-payload),
+    }
+
+    record spawn-mcp-server-payload {
+        name: string,
+        command: string,
+        args: list<string>,
+    }
+
+    record send-mcp-request-payload {
+        name: string,
+        message: string,
     }
 
     record file-write-payload {

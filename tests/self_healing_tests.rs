@@ -55,6 +55,7 @@ fn setup_runtime(
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
+        ..Default::default()
     };
 
     let sandbox = Arc::new(FsSandbox::new(
@@ -133,6 +134,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
+        ..Default::default()
     };
 
     config.extensions = vec![rad::config::ExtensionConfig {
@@ -293,6 +295,7 @@ fn test_core_auto_self_healing_integration() {
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
+        ..Default::default()
     };
 
     config.extensions = vec![rad::config::ExtensionConfig {

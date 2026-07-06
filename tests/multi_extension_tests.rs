@@ -79,6 +79,7 @@ fn test_multi_extension_verification_chain() {
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
+        ..Default::default()
     };
 
     // Define TWO extensions pointing to the same WASM source but having different names.

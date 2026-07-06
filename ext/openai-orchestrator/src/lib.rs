@@ -221,6 +221,15 @@ impl From<wit::RasRpcCommand> for CoreRpcCommand {
                 prompt_tokens: payload.prompt_tokens,
                 completion_tokens: payload.completion_tokens,
             },
+            wit::RasRpcCommand::SpawnMcpServer(payload) => CoreRpcCommand::SpawnMcpServer {
+                name: payload.name,
+                command: payload.command,
+                args: payload.args,
+            },
+            wit::RasRpcCommand::SendMcpRequest(payload) => CoreRpcCommand::SendMcpRequest {
+                name: payload.name,
+                message: payload.message,
+            },
         }
     }
 }
@@ -273,6 +282,15 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
                 prompt_tokens,
                 completion_tokens,
             }),
+            CoreRpcCommand::SpawnMcpServer { name, command, args } => wit::RasRpcCommand::SpawnMcpServer(wit::SpawnMcpServerPayload {
+                name,
+                command,
+                args,
+            }),
+            CoreRpcCommand::SendMcpRequest { name, message } => wit::RasRpcCommand::SendMcpRequest(wit::SendMcpRequestPayload {
+                name,
+                message,
+            }),
         }
     }
 }
@@ -316,6 +334,12 @@ impl From<wit::RasCoreEvent> for CoreCoreEvent {
             wit::RasCoreEvent::Rehydrate(active_calls) => {
                 CoreCoreEvent::Rehydrate {
                     active_calls: active_calls.into_iter().map(rad_models::PendingToolCallInfo::from).collect(),
+                }
+            }
+            wit::RasCoreEvent::McpResponse(payload) => {
+                CoreCoreEvent::McpResponse {
+                    name: payload.name,
+                    message: payload.message,
                 }
             }
         }

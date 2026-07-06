@@ -10,3 +10,4 @@ pub mod command;
 pub mod orchestrator;
 pub mod subsystems;
 pub mod terminal;
+pub mod mcp;

@@ -87,7 +87,7 @@ fn test_context_restoration() {
             allow_commands: vec![],
             block_commands: vec![],
         }),
-        network: None,
+        ..Default::default()
     };
 
     // Shared DAG to simulate database/filesystem persistence across restarts

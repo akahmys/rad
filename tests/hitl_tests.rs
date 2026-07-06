@@ -55,6 +55,7 @@ fn setup_runtime(
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
+        ..Default::default()
     };
 
     let sandbox = Arc::new(FsSandbox::new(

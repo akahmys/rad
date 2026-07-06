@@ -69,8 +69,7 @@ fn test_verify_rpc_blocked_file() {
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
         fs_write_allow: vec!["*".to_string()],
-        execution: None,
-        network: None,
+        ..Default::default()
     };
     let mut ctx = setup_test_context(perms);
 
@@ -97,7 +96,7 @@ fn test_verify_rpc_blocked_command() {
             allow_commands: vec![],
             block_commands: vec![],
         }),
-        network: None,
+        ..Default::default()
     };
     let mut ctx = setup_test_context(perms);
 
@@ -117,8 +116,7 @@ fn test_verify_rpc_allowed() {
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
         fs_write_allow: vec!["*".to_string()],
-        execution: None,
-        network: None,
+        ..Default::default()
     };
     let mut ctx = setup_test_context(perms);
 

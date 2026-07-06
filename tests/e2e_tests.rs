@@ -91,7 +91,7 @@ fn test_e2e_full_flow() {
             allow_commands: vec![],
             block_commands: vec![],
         }),
-        network: None,
+        ..Default::default()
     };
 
     let mut ctx = setup_test_context(perms);
