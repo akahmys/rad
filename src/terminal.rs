@@ -42,7 +42,7 @@ impl TerminalController {
 
         match new_state {
             TerminalState::Thinking => {
-                print!("Thinking... ");
+                print!("\x1b[1;33mThinking... \x1b[0m");
                 let _ = std::io::Write::flush(&mut std::io::stdout());
             }
             TerminalState::Idle => {
