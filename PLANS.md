@@ -12,8 +12,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.2.2: DAG-Based Context Management & Core Refactoring**
 - [x] **Version 0.2.3: Tool Execution Loop & Autonomy**
 - [x] **Version 0.2.x Stabilization: Comprehensive Audit & Refactoring**
-- [>] **Version 0.3.0: Interactive UX & Human-in-the-Loop (YOLO & Slash Commands) (Current)**
-- [ ] **Version 0.3.x Stabilization: Comprehensive Audit & Refactoring**
+- [x] **Version 0.3.0: Interactive UX & Human-in-the-Loop (YOLO & Slash Commands)**
+- [>] **Version 0.3.x Stabilization: Comprehensive Audit & Refactoring (Current)**
 - [ ] **Version 0.4.0: Resiliency & Extension-based Security Hooks (Recovery & Custom Hooks)**
 - [ ] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
 - [ ] **Version 1.0.0: Production Release & Stabilization (API Freeze, Packaging)**
@@ -77,13 +77,13 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Implement parsing for lines starting with `!` in Core's REPL to execute commands directly on the host shell without triggering the LLM.
 * **AWU 29: Dynamic Slash Commands**
   - Add support in Core and Extension for metadata commands (e.g., `/rollback <node_id>`, `/status`).
-* **AWU 30: Autonomous Execution Loop (YOLO by Default) (Current)**
+* **AWU 30: Autonomous Execution Loop (YOLO by Default)**
   - Implement full auto-execution loop in Core and Wasm Extension (YOLO by default).
   - Ensure the event-driven design permits Extensions to optionally intercept tool calls and block for human input (`HumanInputReceived`) if custom HITL logic is desired.
 
-## Detailed Plan: Version 0.3.x Stabilization (Comprehensive Audit & Refactoring)
+## Detailed Plan: Version 0.3.x Stabilization (Comprehensive Audit & Refactoring) (Current)
 
-* **AWU 30.5: UX & REPL Control Stabilization**
+* **AWU 30.5: UX & REPL Control Stabilization (Current)**
   - Audit and test edge cases combining async shell escapes (`!`), slash commands, and the main Wasm loop.
   - Refactor REPL command manager logic to decouple built-in commands from Wasm-level interceptors.
 
