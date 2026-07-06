@@ -121,6 +121,17 @@ pub extern "C" fn rad_on_event(ptr: *const u8, len: i32) -> u64 {
     
     if let Err(e) = orchestrator::handle_event(event) {
         eprintln!("Error in handle_event: {e}");
+        let err_str = e.to_string();
+        let err_len = err_str.len();
+        let err_ptr = alloc(err_len as i32);
+        if !err_ptr.is_null() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(err_str.as_ptr(), err_ptr, err_len);
+            }
+            let ptr_u64 = err_ptr as u64;
+            let len_u64 = err_len as u64;
+            return (ptr_u64 << 32) | len_u64;
+        }
         return 3;
     }
     

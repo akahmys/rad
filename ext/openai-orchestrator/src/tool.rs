@@ -65,14 +65,14 @@ pub enum ToolExecutionResult {
     Async(i32),
 }
 
-pub fn execute_tool(tc: &ToolCallBuffer) -> Result<ToolExecutionResult, String> {
-    match tc.name.as_str() {
+pub fn execute_tool(name: &str, arguments: &str) -> Result<ToolExecutionResult, String> {
+    match name {
         "file_read" => {
             #[derive(Deserialize)]
             struct Args {
                 path: std::path::PathBuf,
             }
-            let args: Args = serde_json::from_str(&tc.arguments)
+            let args: Args = serde_json::from_str(arguments)
                 .map_err(|e| format!("Failed to parse file_read args: {e}"))?;
             let val = call_host(RasRpcCommand::FileRead { path: args.path })?;
             
@@ -92,7 +92,7 @@ pub fn execute_tool(tc: &ToolCallBuffer) -> Result<ToolExecutionResult, String> 
                 path: std::path::PathBuf,
                 content: String,
             }
-            let args: Args = serde_json::from_str(&tc.arguments)
+            let args: Args = serde_json::from_str(arguments)
                 .map_err(|e| format!("Failed to parse file_write args: {e}"))?;
             let _ = call_host(RasRpcCommand::FileWrite {
                 path: args.path,
@@ -106,7 +106,7 @@ pub fn execute_tool(tc: &ToolCallBuffer) -> Result<ToolExecutionResult, String> 
                 path: std::path::PathBuf,
                 diff: String,
             }
-            let args: Args = serde_json::from_str(&tc.arguments)
+            let args: Args = serde_json::from_str(arguments)
                 .map_err(|e| format!("Failed to parse file_edit_patch args: {e}"))?;
             let _ = call_host(RasRpcCommand::FileEditPatch {
                 path: args.path,
@@ -119,7 +119,7 @@ pub fn execute_tool(tc: &ToolCallBuffer) -> Result<ToolExecutionResult, String> 
             struct Args {
                 command: String,
             }
-            let args: Args = serde_json::from_str(&tc.arguments)
+            let args: Args = serde_json::from_str(arguments)
                 .map_err(|e| format!("Failed to parse spawn_bash_process args: {e}"))?;
             let val = call_host(RasRpcCommand::SpawnBashProcess {
                 command: args.command,
