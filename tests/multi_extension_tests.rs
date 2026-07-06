@@ -65,7 +65,7 @@ fn test_multi_extension_verification_chain() {
         ..Default::default()
     };
 
-    let wasm_path = "target/wasm32-unknown-unknown/debug/openai_orchestrator.wasm";
+    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
         fs_write_allow: vec!["*".to_string()],

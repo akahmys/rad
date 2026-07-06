@@ -19,16 +19,16 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          targets: wasm32-wasip2
 
       - name: Build Wasm
-        run: cargo build --target wasm32-unknown-unknown --release -p openai-orchestrator
+        run: cargo build --target wasm32-wasip2 --release -p openai-orchestrator
 
       - name: Upload Wasm Artifact
         uses: actions/upload-artifact@v4
         with:
           name: openai_orchestrator.wasm
-          path: target/wasm32-unknown-unknown/release/openai_orchestrator.wasm
+          path: target/wasm32-wasip2/release/openai_orchestrator.wasm
 
   build-core:
     name: Build Core Binary

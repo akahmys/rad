@@ -7,7 +7,7 @@
   "extensions": [
     {
       "name": "openai-orchestrator",
-      "source": "target/wasm32-unknown-unknown/release/openai_orchestrator.wasm",
+      "source": "target/wasm32-wasip2/release/openai_orchestrator.wasm",
       "enabled": true,
       "permissions": {
         "fs_read_allow": ["*"],

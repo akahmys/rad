@@ -1,7 +1,7 @@
 use rad::config::{ExecutionConfig, PermissionConfig};
 use rad::dag::Dag;
 use rad::fs::FsSandbox;
-use rad::ipc::{RasRpcCommand, RasRpcRequest, RasRpcResponse};
+use rad::ipc::RasRpcCommand;
 use rad::process::{ProcessManager, RunningProcess};
 use rad::wasm::WasmRuntime;
 
@@ -11,30 +11,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use wasmtime::{Engine, Module};
-
-const E2E_WAT: &str = r#"
-(module
-  (import "env" "rad_host_rpc" (func $host_rpc (param i32 i32) (result i64)))
-  (memory (export "memory") 1)
-  (global $alloc_ptr (mut i32) (i32.const 1024))
-
-  (func (export "alloc") (param $size i32) (result i32)
-    (local $ptr i32)
-    (local.set $ptr (global.get $alloc_ptr))
-    (global.set $alloc_ptr (i32.add (local.get $ptr) (local.get $size)))
-    (local.get $ptr)
-  )
-
-  (func (export "dealloc") (param $ptr i32) (param $size i32)
-    ;; no-op
-  )
-
-  (func (export "run_step") (param $ptr i32) (param $len i32) (result i64)
-    (call $host_rpc (local.get $ptr) (local.get $len))
-  )
-)
-"#;
 
 struct TestContext {
     _temp_dir: tempfile::TempDir,
@@ -61,17 +37,13 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let dag = Arc::new(Mutex::new(Dag::new()));
     let active_processes = Arc::new(Mutex::new(HashMap::new()));
 
-    let mut config = wasmtime::Config::new();
-    config.wasm_multi_memory(true);
-    let engine = Engine::new(&config).unwrap();
-    let module = Module::new(&engine, E2E_WAT).unwrap();
-
+    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
     let network_subsystem = Arc::new(rad::http::HttpManager);
     let (event_tx, _event_rx) = std::sync::mpsc::channel();
-    let runtime = WasmRuntime::new_with_module(
+    let runtime = WasmRuntime::new(
         "test-extension".to_string(),
-        &module,
+        std::path::Path::new(wasm_path),
         perms,
         sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
         process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
@@ -93,59 +65,19 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
 }
 
 fn call_rpc(ctx: &mut TestContext, command: RasRpcCommand) -> Result<serde_json::Value, String> {
-    let request = RasRpcRequest {
-        id: Some("test_id".to_string()),
-        command,
-    };
-    let req_bytes = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
-    let len = i32::try_from(req_bytes.len()).map_err(|e| e.to_string())?;
-
-    let alloc_fn = ctx
-        .runtime
-        .instance
-        .get_typed_func::<i32, i32>(&mut ctx.runtime.store, "alloc")
-        .map_err(|e| e.to_string())?;
-
-    let ptr = alloc_fn
-        .call(&mut ctx.runtime.store, len)
-        .map_err(|e| e.to_string())?;
-
-    let memory = ctx
-        .runtime
-        .instance
-        .get_export(&mut ctx.runtime.store, "memory")
-        .and_then(wasmtime::Extern::into_memory)
-        .ok_or_else(|| "Failed to get memory".to_string())?;
-
-    memory
-        .write(&mut ctx.runtime.store, ptr as usize, &req_bytes)
-        .map_err(|e| e.to_string())?;
-
-    let run_step_fn = ctx
-        .runtime
-        .instance
-        .get_typed_func::<(i32, i32), u64>(&mut ctx.runtime.store, "run_step")
-        .map_err(|e| e.to_string())?;
-
-    let ret = run_step_fn
-        .call(&mut ctx.runtime.store, (ptr, len))
-        .map_err(|e| e.to_string())?;
-
-    let resp_ptr = (ret >> 32) as usize;
-    let resp_len = (ret & 0xFFFF_FFFF) as usize;
-
-    if resp_ptr == 0 || resp_len == 0 {
-        return Err("Empty response from host RPC".to_string());
+    use rad::wasm::bindings::RadExtensionImports;
+    let wit_cmd = rad::wasm::bindings::radcomp::extension::types::RasRpcCommand::from(command);
+    let res = ctx.runtime.store.data_mut().host_rpc(wit_cmd);
+    match res {
+        Ok(json_str) => {
+            if json_str.is_empty() || json_str == "null" {
+                Ok(serde_json::Value::Null)
+            } else {
+                serde_json::from_str(&json_str).map_err(|e| e.to_string())
+            }
+        }
+        Err(err_msg) => Err(err_msg),
     }
-
-    let mut resp_buf = vec![0; resp_len];
-    memory
-        .read(&ctx.runtime.store, resp_ptr, &mut resp_buf)
-        .map_err(|e| e.to_string())?;
-
-    let response: RasRpcResponse = serde_json::from_slice(&resp_buf).map_err(|e| e.to_string())?;
-
-    response.result
 }
 
 #[test]
