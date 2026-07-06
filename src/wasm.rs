@@ -12,6 +12,7 @@ use crate::subsystems::{FsSubsystem, ProcessSubsystem, DagSubsystem, NetworkSubs
 
 pub mod permissions;
 pub mod rpc;
+pub mod rpc_process;
 pub mod bindings;
 
 #[cfg(test)]
