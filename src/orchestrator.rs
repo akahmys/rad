@@ -140,6 +140,22 @@ impl Orchestrator {
         Ok(())
     }
 
+    /// Rolls back the session state (DAG and filesystem sandbox) to the specified node.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the node ID does not exist in the DAG or filesystem rollback fails.
+    pub fn rollback(&self, node_id: &str) -> Result<(), String> {
+        let mut dag_guard = self.dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
+        if !dag_guard.nodes.contains_key(node_id) {
+            return Err(format!("Node '{node_id}' not found in DAG"));
+        }
+
+        self.sandbox.checkout_snapshot(node_id)?;
+        dag_guard.current_node_id = Some(node_id.to_string());
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

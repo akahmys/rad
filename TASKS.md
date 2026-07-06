@@ -56,9 +56,9 @@ Last Updated: 2026-07-05
 ## Version 0.3.0 Interactive UX & Human-in-the-Loop
 - [x] AWU 28: Support Shell Escape (`!`) in REPL
   - [x] Parse and execute commands starting with `!` in Core's REPL
-- [/] AWU 29: Dynamic Slash Commands (Current)
-  - [ ] Support `/rollback`, `/status`, and custom slash commands
-- [ ] AWU 30: Autonomous Execution Loop (YOLO by Default)
+- [x] AWU 29: Dynamic Slash Commands
+  - [x] Support `/rollback`, `/status`, and custom slash commands
+- [/] AWU 30: Autonomous Execution Loop (YOLO by Default) (Current)
   - [ ] Implement full auto-execution loop in Core and Extension
   - [ ] Verify that Wasm Extensions can optionally intercept and block for user confirmation
 

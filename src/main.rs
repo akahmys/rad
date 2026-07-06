@@ -105,7 +105,7 @@ fn main() {
                 }
 
                 if let Some(command) = CommandParser::parse(trimmed) {
-                    match CommandManager::execute(command, &session_id) {
+                    match CommandManager::execute(command, &orchestrator) {
                         CommandResult::Continue => {}
                         CommandResult::Exit => {
                             println!("Goodbye!");

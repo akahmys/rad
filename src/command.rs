@@ -22,6 +22,8 @@ pub enum Command {
     Clear,
     /// Display information about the current session ID.
     Session(String),
+    /// Roll back the session state to a specific node ID.
+    Rollback(String),
 }
 
 impl fmt::Display for Command {
@@ -32,6 +34,7 @@ impl fmt::Display for Command {
             Command::Status => write!(f, "/status"),
             Command::Clear => write!(f, "/clear"),
             Command::Session(id) => write!(f, "/session {id}"),
+            Command::Rollback(id) => write!(f, "/rollback {id}"),
         }
     }
 }
@@ -66,6 +69,13 @@ impl CommandParser {
                     None
                 }
             }
+            "/rollback" => {
+                if parts.len() > 1 {
+                    Some(Command::Rollback(parts[1].to_string()))
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -87,25 +97,48 @@ pub struct CommandManager;
 impl CommandManager {
     /// Executes the given command and returns the result.
     #[must_use]
-    pub fn execute(command: Command, session_id: &str) -> CommandResult {
+    pub fn execute(command: Command, orchestrator: &crate::orchestrator::Orchestrator) -> CommandResult {
         match command {
             Command::Help => {
                 println!("Available Slash Commands:");
-                println!("  /help       - Show this help message");
-                println!("  /exit       - Exit the session");
-                println!("  /status     - Show current session status");
-                println!("  /clear      - Clear the terminal screen");
-                println!("  /session <id> - Show the current session ID");
+                println!("  /help           - Show this help message");
+                println!("  /exit           - Exit the session");
+                println!("  /status         - Show current session status and DAG info");
+                println!("  /clear          - Clear the terminal screen");
+                println!("  /session <id>   - Show the current session ID");
+                println!("  /rollback <id>  - Roll back session to a specific DAG node");
                 CommandResult::Continue
             }
             Command::Exit => CommandResult::Exit,
-            Command::Status => CommandResult::StatusInfo(format!("Current session: {session_id}")),
+            Command::Status => {
+                if let Ok(dag_guard) = orchestrator.dag.lock() {
+                    let total_nodes = dag_guard.nodes.len();
+                    let current_node = dag_guard.current_node_id.as_deref().unwrap_or("None");
+                    CommandResult::StatusInfo(format!(
+                        "Session ID: {}\nTotal DAG Nodes: {}\nCurrent DAG Node: {}",
+                        orchestrator.session_id, total_nodes, current_node
+                    ))
+                } else {
+                    CommandResult::StatusInfo(format!("Session ID: {}", orchestrator.session_id))
+                }
+            }
             Command::Clear => {
                 // ANSI escape sequences to clear screen and reset cursor to top-left
                 print!("{}[2J{}[1;1H", 27 as char, 27 as char);
                 CommandResult::Continue
             }
             Command::Session(id) => CommandResult::StatusInfo(format!("Current session: {id}")),
+            Command::Rollback(node_id) => {
+                match orchestrator.rollback(&node_id) {
+                    Ok(()) => {
+                        println!("Session successfully rolled back to node: {node_id}");
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to rollback: {e}");
+                    }
+                }
+                CommandResult::Continue
+            }
         }
     }
 }
@@ -136,7 +169,7 @@ impl Completer for CommandHelper {
     ) -> Result<(usize, Vec<String>), ReadlineError> {
         if word.starts_with('/') {
             let mut candidates = Vec::new();
-            let commands = ["/help", "/exit", "/status", "/clear", "/session"];
+            let commands = ["/help", "/exit", "/status", "/clear", "/session", "/rollback"];
             for cmd in commands {
                 if cmd.starts_with(word) {
                     candidates.push(cmd.to_string());
