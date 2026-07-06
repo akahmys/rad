@@ -13,8 +13,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.2.3: Tool Execution Loop & Autonomy**
 - [x] **Version 0.2.x Stabilization: Comprehensive Audit & Refactoring**
 - [x] **Version 0.3.0: Interactive UX & Human-in-the-Loop (YOLO & Slash Commands)**
-- [>] **Version 0.3.x Stabilization: Comprehensive Audit & Refactoring (Current)**
-- [ ] **Version 0.4.0: Resiliency & Extension-based Security Hooks (Recovery & Custom Hooks)**
+- [x] **Version 0.3.x Stabilization: Comprehensive Audit & Refactoring**
+- [>] **Version 0.4.0: Resiliency & Extension-based Security Hooks (Recovery & Custom Hooks) (Current)**
 - [ ] **Version 0.4.x Stabilization: Comprehensive Audit & Refactoring**
 - [ ] **Version 1.0.0: Production Release & Stabilization (API Freeze, Packaging)**
 
@@ -81,15 +81,15 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Implement full auto-execution loop in Core and Wasm Extension (YOLO by default).
   - Ensure the event-driven design permits Extensions to optionally intercept tool calls and block for human input (`HumanInputReceived`) if custom HITL logic is desired.
 
-## Detailed Plan: Version 0.3.x Stabilization (Comprehensive Audit & Refactoring) (Current)
+## Detailed Plan: Version 0.3.x Stabilization (Comprehensive Audit & Refactoring)
 
-* **AWU 30.5: UX & REPL Control Stabilization (Current)**
+* **AWU 30.5: UX & REPL Control Stabilization**
   - Audit and test edge cases combining async shell escapes (`!`), slash commands, and the main Wasm loop.
   - Refactor REPL command manager logic to decouple built-in commands from Wasm-level interceptors.
 
-## Detailed Plan: Version 0.4.0 (Resiliency & Extension-based Security Hooks)
+## Detailed Plan: Version 0.4.0 (Resiliency & Extension-based Security Hooks) (Current)
 
-* **AWU 31: Extension-based Security Verification Hooks**
+* **AWU 31: Extension-based Security Verification Hooks (Current)**
   - Implement custom request/response interception hooks in the API Gateway to allow WebAssembly Extensions to dynamically inspect, approve, or reject filesystem and process operations (offloading sandbox/security to extensions).
 * **AWU 32: Extension Self-Healing**
   - Implement automatic Wasm instance recovery in Core. If the Extension crashes, Core will reload it and re-hydrate its state from the active DAG node.
