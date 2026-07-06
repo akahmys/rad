@@ -85,6 +85,7 @@ fn setup_runtime(
         active_processes,
         event_tx,
         None,
+        false,
     )
     .unwrap();
 

@@ -51,6 +51,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
         active_processes.clone(),
         event_tx,
         None,
+        false,
     ).unwrap();
 
     TestContext {

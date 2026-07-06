@@ -33,6 +33,7 @@ fn test_async_task_cancellation_on_rollback() {
         workspace: workspace.to_string_lossy().to_string(),
         snapshot: snapshots.to_string_lossy().to_string(),
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
+        hitl_enabled: false,
     };
     let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     config.extensions = vec![rad::config::ExtensionConfig {

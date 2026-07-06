@@ -28,6 +28,7 @@ pub struct WasmState {
     pub event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
     pub llm_timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
     pub orchestrator: Option<std::sync::Weak<crate::orchestrator::Orchestrator>>,
+    pub hitl_enabled: bool,
     pub wasi: WasiCtx,
     pub resource_table: ResourceTable,
 }
@@ -74,6 +75,7 @@ impl bindings::RadExtensionImports for WasmState {
             &self.llm_timeout_policy,
             orchestrator.as_ref(),
             "wasm_call".to_string(),
+            self.hitl_enabled,
         );
 
         match result {
@@ -102,6 +104,7 @@ impl WasmRuntime {
         active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
         orchestrator: Option<std::sync::Weak<crate::orchestrator::Orchestrator>>,
+        hitl_enabled: bool,
     ) -> Result<Self, String> {
         let mut config = wasmtime::Config::new();
         config.wasm_multi_memory(true);
@@ -133,6 +136,7 @@ impl WasmRuntime {
             event_tx,
             llm_timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Infinite)),
             orchestrator,
+            hitl_enabled,
             wasi,
             resource_table,
         };
