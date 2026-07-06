@@ -85,6 +85,8 @@ Last Updated: 2026-07-05
   - [x] Automate CI release builds for macOS, Linux, and Windows
 - [x] AWU 35: Unified Terminal Controller
   - [x] Implement TerminalController and refactor stdout/REPL print paths
+- [x] AWU 36: Dynamic Configuration Reload
+  - [x] Implement /reload slash command and dynamic config updates in core
 
 
 

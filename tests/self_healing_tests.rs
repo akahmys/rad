@@ -158,7 +158,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
         n0
     };
 
-    let _orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(config, "test_session".to_string(), dag.clone()));
+    let _orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(config, "test_session".to_string(), dag.clone(), None));
 
     // Setup network mocks using environment or custom server if needed.
     // However, to keep it self-contained without real network, we verify that the orchestrator's
@@ -315,7 +315,7 @@ fn test_core_auto_self_healing_integration() {
         n0
     };
 
-    let orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(config, "test_session".to_string(), dag.clone()));
+    let orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(config, "test_session".to_string(), dag.clone(), None));
 
     let run_res = orchestrator.run_task("start".to_string());
     assert!(run_res.is_ok(), "Task spawning failed");

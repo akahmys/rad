@@ -56,7 +56,7 @@ fn test_async_task_cancellation_on_rollback() {
         n0
     };
 
-    let orchestrator = Arc::new(Orchestrator::new(config, "test_session".to_string(), dag.clone()));
+    let orchestrator = Arc::new(Orchestrator::new(config, "test_session".to_string(), dag.clone(), None));
 
     // Trigger run_task (it will run asynchronously in background thread)
     let _ = orchestrator.run_task("hello".to_string());

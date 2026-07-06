@@ -13,7 +13,8 @@ use crate::wasm::WasmRuntime;
 use crate::ipc::{RasCoreEvent, route_event_to_terminal};
 
 pub struct Orchestrator {
-    config: Config,
+    config: Mutex<Config>,
+    config_path: Option<String>,
     sandbox: Arc<FsSandbox>,
     process_manager: Arc<ProcessManager>,
     pub dag: Arc<Mutex<Dag>>,
@@ -26,7 +27,7 @@ pub struct Orchestrator {
 
 impl Orchestrator {
     #[must_use]
-    pub fn new(config: Config, session_id: String, dag: Arc<Mutex<Dag>>) -> Self {
+    pub fn new(config: Config, session_id: String, dag: Arc<Mutex<Dag>>, config_path: Option<String>) -> Self {
         let sandbox = Arc::new(FsSandbox::new(
             config.core.workspace.clone().into(),
             config.core.snapshot.clone().into(),
@@ -37,7 +38,8 @@ impl Orchestrator {
         let active_processes = Arc::new(Mutex::new(HashMap::new()));
 
         Self {
-            config,
+            config: Mutex::new(config),
+            config_path,
             sandbox,
             process_manager,
             dag,
@@ -47,6 +49,34 @@ impl Orchestrator {
             running_task: Mutex::new(None),
             abort_flag: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Dynamically reloads configuration from `config_path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if reloading fails.
+    pub fn reload(&self) -> Result<(), String> {
+        let new_cfg = crate::config::load_config(self.config_path.as_deref())
+            .map_err(|e| format!("Failed to load configuration: {e}"))?;
+
+        // 1. Overwrite config
+        let mut config_guard = self.config.lock()
+            .map_err(|e| format!("Failed to lock config Mutex: {e}"))?;
+        *config_guard = new_cfg.clone();
+
+        // 2. Update sandbox file system permissions
+        self.sandbox.update_permissions(
+            new_cfg.extensions.iter().flat_map(|e| e.permissions.as_ref().map(|p| p.fs_read_allow.clone()).unwrap_or_default()).collect(),
+            new_cfg.extensions.iter().flat_map(|e| e.permissions.as_ref().map(|p| p.fs_write_allow.clone()).unwrap_or_default()).collect(),
+        );
+
+        // 3. Reset Wasm runtime state so it gets re-initialized with new configs on next run
+        let mut wasm_guard = self.wasm_runtime.lock()
+            .map_err(|e| format!("Failed to lock wasm_runtime Mutex: {e}"))?;
+        *wasm_guard = None;
+
+        Ok(())
     }
 
     /// Checks if a task is currently executing.
@@ -160,7 +190,8 @@ impl Orchestrator {
         guard: &'a mut Option<WasmRuntime>,
         event_tx: Sender<RasCoreEvent>,
     ) -> Result<&'a mut Option<WasmRuntime>, String> {
-        let ext_config = self.config.extensions.iter().find(|e| e.enabled);
+        let config_guard = self.config.lock().unwrap();
+        let ext_config = config_guard.extensions.iter().find(|e| e.enabled);
         let Some(ext) = ext_config else {
             return Ok(guard);
         };

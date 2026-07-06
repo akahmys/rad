@@ -24,6 +24,8 @@ pub enum Command {
     Session(String),
     /// Roll back the session state to a specific node ID.
     Rollback(String),
+    /// Reload configuration file dynamically.
+    Reload,
 }
 
 impl fmt::Display for Command {
@@ -35,6 +37,7 @@ impl fmt::Display for Command {
             Command::Clear => write!(f, "/clear"),
             Command::Session(id) => write!(f, "/session {id}"),
             Command::Rollback(id) => write!(f, "/rollback {id}"),
+            Command::Reload => write!(f, "/reload"),
         }
     }
 }
@@ -76,6 +79,7 @@ impl CommandParser {
                     None
                 }
             }
+            "/reload" => Some(Command::Reload),
             _ => None,
         }
     }
@@ -107,6 +111,7 @@ impl CommandManager {
                 println!("  /clear          - Clear the terminal screen");
                 println!("  /session <id>   - Show the current session ID");
                 println!("  /rollback <id>  - Roll back session to a specific DAG node");
+                println!("  /reload         - Reload configuration file dynamically");
                 CommandResult::Continue
             }
             Command::Exit => CommandResult::Exit,
@@ -139,6 +144,12 @@ impl CommandManager {
                 }
                 CommandResult::Continue
             }
+            Command::Reload => {
+                match orchestrator.reload() {
+                    Ok(()) => CommandResult::StatusInfo("\x1b[32mConfiguration reloaded successfully!\x1b[0m".to_string()),
+                    Err(e) => CommandResult::StatusInfo(format!("\x1b[1;31mFailed to reload configuration: {e}\x1b[0m")),
+                }
+            }
         }
     }
 }
@@ -169,7 +180,7 @@ impl Completer for CommandHelper {
     ) -> Result<(usize, Vec<String>), ReadlineError> {
         if word.starts_with('/') {
             let mut candidates = Vec::new();
-            let commands = ["/help", "/exit", "/status", "/clear", "/session", "/rollback"];
+            let commands = ["/help", "/exit", "/status", "/clear", "/session", "/rollback", "/reload"];
             for cmd in commands {
                 if cmd.starts_with(word) {
                     candidates.push(cmd.to_string());
