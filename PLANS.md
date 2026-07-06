@@ -57,6 +57,9 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 * **AWU 26: Implement Autonomy Loop with System Prompt and Multi-turn Execution**
   - Feed tool execution results back to LLM as `tool` role messages
   - Implement automatic multi-turn loop and inject a system prompt explaining rad context and tools
+* **AWU 26.5: Document Extension-Based Unified Tooling & Safety Architecture (Current)**
+  - Reflect the unified tool framework concept in README.md, ARCHITECTURE.md, and PLANS.md.
+  - Document that basic commands, Skills, Workflows, and MCP are treated as unified Tool Calls by the LLM, offloading safety and workflow policies entirely to optional Wasm Extensions.
 * **AWU 27: Verify Tool Execution Integration Test & Zero-Warning Audit**
   - Add integration tests verifying LLM-driven tool execution (e.g., executing a command and reading a file)
   - Verify zero Clippy warnings across all workspace targets

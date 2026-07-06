@@ -9,25 +9,28 @@
     clippy::collapsible_if
 )]
 
-use std::collections::HashMap;
-use std::sync::Mutex;
-use serde::{Deserialize, Serialize};
+mod types;
+use types::{RasRpcCommand, RasCoreEvent};
+
+#[cfg(not(test))]
+use types::{RasRpcRequest, RasRpcResponse};
 
 #[cfg(test)]
-mod tests;
+use types::Dag;
 
-mod types;
-use types::{
-    Target, TimeoutPolicy, RasRpcCommand, RasRpcRequest, RasRpcResponse,
-    RasCoreEvent, DagNode, Dag
-};
+#[cfg(test)]
+use std::collections::HashMap;
 
 #[cfg(not(test))]
 unsafe extern "C" {
     fn rad_host_rpc(ptr: *const u8, len: usize) -> u64;
 }
 
+#[cfg(test)]
+mod tests;
+
 mod orchestrator;
+mod tool;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn alloc(size: i32) -> *mut u8 {

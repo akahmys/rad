@@ -1,42 +1,13 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
-use serde::{Deserialize, Serialize};
 use crate::types::{RasRpcCommand, RasCoreEvent, Dag};
 use crate::call_host;
-
-#[derive(Serialize, Clone)]
-pub struct FunctionDefinition {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    pub parameters: serde_json::Value,
-}
-
-#[derive(Serialize, Clone)]
-pub struct Tool {
-    #[serde(rename = "type")]
-    pub tool_type: String,
-    pub function: FunctionDefinition,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Message {
-    pub role: String,
-    pub content: String,
-}
-
-#[derive(Serialize)]
-pub struct ChatCompletionsRequest {
-    pub model: String,
-    pub messages: Vec<Message>,
-    pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<Tool>>,
-}
+use crate::tool::{Tool, ToolCallBuffer, execute_tool_call, Message, ChatCompletionsRequest, FunctionDefinition};
 
 pub struct OrchestratorState {
-    pub assistant_buffer: String,
-    pub stream_buffer: String,
+    pub assistant: String,
+    pub stream: String,
+    pub tool_calls: HashMap<usize, ToolCallBuffer>,
 }
 
 pub static STATE: Mutex<Option<OrchestratorState>> = Mutex::new(None);
@@ -69,8 +40,9 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
         RasCoreEvent::HumanInputReceived { text } => {
             let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
             let state = state_guard.get_or_insert_with(|| OrchestratorState {
-                assistant_buffer: String::new(),
-                stream_buffer: String::new(),
+                assistant: String::new(),
+                stream: String::new(),
+                tool_calls: HashMap::new(),
             });
             
             let dag_val = call_host(RasRpcCommand::GetDag)?;
@@ -95,7 +67,7 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
         RasCoreEvent::HttpChunkReceived { chunk } => {
             let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
             if let Some(state) = state_guard.as_mut() {
-                state.stream_buffer.push_str(&chunk);
+                state.stream.push_str(&chunk);
                 process_sse_buffer(state)?;
             }
         }
@@ -207,9 +179,9 @@ pub fn trigger_llm_stream(_state: &OrchestratorState, messages: Vec<Message>) ->
 }
 
 pub fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
-    while let Some(pos) = state.stream_buffer.find('\n') {
-        let line = state.stream_buffer[..pos].trim().to_string();
-        state.stream_buffer = state.stream_buffer[pos + 1..].to_string();
+    while let Some(pos) = state.stream.find('\n') {
+        let line = state.stream[..pos].trim().to_string();
+        state.stream = state.stream[pos + 1..].to_string();
         
         if line.is_empty() {
             continue;
@@ -222,6 +194,15 @@ pub fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
                     text: "\n".to_string(),
                 })?;
                 
+                let mut tool_indices: Vec<usize> = state.tool_calls.keys().copied().collect();
+                tool_indices.sort_unstable();
+                for idx in tool_indices {
+                    if let Some(tool_call) = state.tool_calls.get(&idx) {
+                        execute_tool_call(tool_call)?;
+                    }
+                }
+                state.tool_calls.clear();
+
                 let dag_val = call_host(RasRpcCommand::GetDag)?;
                 let dag: Dag = serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
                 let parent_id = dag.current_node_id.unwrap_or_default();
@@ -234,23 +215,43 @@ pub fn process_sse_buffer(state: &mut OrchestratorState) -> Result<(), String> {
                 
                 call_host(RasRpcCommand::SetNodeText {
                     node_id: assistant_node_id.to_string(),
-                    text: state.assistant_buffer.clone(),
+                    text: state.assistant.clone(),
                 })?;
 
-                state.assistant_buffer.clear();
+                state.assistant.clear();
                 let _ = call_host(RasRpcCommand::CompleteTask)?;
                 break;
             }
             
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) {
-                if let Some(content) = val.pointer("/choices/0/delta/content").and_then(|v| v.as_str()) {
+                if let Some(content) = val.pointer("/choices/0/delta/content").and_then(serde_json::Value::as_str) {
                     let _ = call_host(RasRpcCommand::WriteStdout {
                         text: content.to_string(),
                     })?;
-                    state.assistant_buffer.push_str(content);
+                    state.assistant.push_str(content);
+                }
+                
+                if let Some(tool_calls) = val.pointer("/choices/0/delta/tool_calls").and_then(serde_json::Value::as_array) {
+                    for tc in tool_calls {
+                        if let Some(index) = tc.get("index").and_then(serde_json::Value::as_u64).and_then(|i| usize::try_from(i).ok()) {
+                            let entry = state.tool_calls.entry(index).or_default();
+                            if let Some(id) = tc.get("id").and_then(serde_json::Value::as_str) {
+                                entry.id.push_str(id);
+                            }
+                            if let Some(func) = tc.get("function").and_then(serde_json::Value::as_object) {
+                                if let Some(name) = func.get("name").and_then(serde_json::Value::as_str) {
+                                    entry.name.push_str(name);
+                                }
+                                if let Some(args) = func.get("arguments").and_then(serde_json::Value::as_str) {
+                                    entry.arguments.push_str(args);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
     Ok(())
 }
+
