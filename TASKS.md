@@ -122,3 +122,10 @@ Last Updated: 2026-07-05
   - [x] Update `ext/openai-orchestrator/Cargo.toml` version to `0.6.0`
   - [x] Perform audit: secret check, cargo check, clippy, and tests
 
+## README.md Documentation
+- [x] AWU 44: Update README.md with User and Developer Guides (Current)
+  - [x] Add User Guide section in README.md (installation, rad.json configuration, CLI slash commands, shell escape)
+  - [x] Add Developer Guide section in README.md (architecture overview, building Wasm extensions, running tests)
+  - [x] Perform audit: secret check, cargo check, clippy, and tests
+
+

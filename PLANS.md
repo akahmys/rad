@@ -142,3 +142,9 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Update crate versions in `Cargo.toml`, `models/Cargo.toml`, and `ext/openai-orchestrator/Cargo.toml` to `0.6.0`.
   - Perform verification audit (Clippy, secret check, tests).
 
+* **AWU 44: Update README.md with User and Developer Guides (Current)**
+  - Add "User Guide" section covering installation, configuration (`rad.json`), and CLI usage (including slash commands).
+  - Add "Developer Guide" section explaining the project structure, Wasm extension development, build instructions, and running tests.
+  - Perform verification audit (Clippy, secret check, tests).
+
+

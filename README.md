@@ -42,6 +42,65 @@ cargo test
 
 ---
 
-## 3. License
+## 3. User Guide
+
+### 3.1 CLI Usage & Interaction
+When you run `rad`, you are entered into an interactive shell (REPL) where you can chat with the AI agent.
+
+* **Direct Chat**: Type your request or prompt directly, and the agent will run the autonomy loop to resolve it.
+* **Shell Escape (`!`)**: Prefix any command with `!` to run it directly on your host shell without LLM involvement.
+  ```bash
+  ! ls -la
+  ```
+* **Metadata & Slash Commands**: Use commands prefixed with `/` for CLI control:
+  * `/status`: Displays current session status, DAG history node information, and accumulated token usage.
+  * `/rollback <node_id>`: Instantly rolls back the workspace directory state and context to the designated DAG node snapshot.
+  * `/reload`: Dynamically reloads the configuration.
+
+### 3.2 Capability-Based Security (`rad.json`)
+All filesystem and process operations requested by the AI agent are validated against `rad.json` at the root of the workspace. If an action is not authorized in this capabilities mask, the API Gateway rejects the operation.
+
+Example `rad.json` structure:
+```json
+{
+  "allowed_commands": ["git", "cargo", "echo"],
+  "allowed_read_paths": ["/path/to/rad/src"],
+  "allowed_write_paths": ["/path/to/rad/src"]
+}
+```
+
+---
+
+## 4. Developer Guide
+
+### 4.1 Architecture Overview
+`rad` is designed with a clean separation of concerns:
+* **Core (Rust)**: Manages OS resources, process PGID tracking, DAG state history, snapshots, and the WASM runtime host. It acts as an API Gateway executing RPCs.
+* **Extensions (WASM)**: Contain policy logic (e.g., orchestrating with OpenAI API, generating tool calls, implementing custom loops). They are stateless and restore history dynamically from Core's DAG.
+
+### 4.2 Building WebAssembly Extensions
+To build the default OpenAI orchestrator extension:
+```bash
+cd ext/openai-orchestrator
+cargo build --target wasm32-wasi --release
+```
+The compiled WASM binary is copied to the location configured in `rad.json` (under `extensions` configuration).
+
+### 4.3 Running Tests & Compliance
+Before contributing code, verify compliance with project standards:
+* **Code Size limits**: Ensure functions and files adhere to the length limits described in `CODING_RULES.md` (e.g., maximum 300 lines per file).
+* **Verify Tests**: Run unit and integration tests:
+  ```bash
+  cargo test
+  ```
+* **Lint Check**: Ensure there are zero compiler or Clippy warnings:
+  ```bash
+  cargo clippy --all-targets -- -D warnings
+  ```
+
+---
+
+## 5. License
 
 [MIT License](LICENSE)
+
