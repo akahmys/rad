@@ -92,6 +92,13 @@ Last Updated: 2026-07-05
   - [x] Propagate HTTP connection/status errors from host via `HttpErrorReceived` in `src/http.rs`
   - [x] Implement error handling for `HttpErrorReceived` in Wasm Extension (`ext/openai-orchestrator/src/orchestrator.rs`) to write the error to CLI and call `CompleteTask`
 
-
-
-
+## Version 0.6.0 Multi-extension Support
+- [x] AWU 38: Support Multiple Active Wasm Runtimes in Orchestrator
+  - [x] Refactor `Orchestrator` to store a `HashMap<String, WasmRuntime>` instead of a single `Option<WasmRuntime>`
+  - [x] Load and initialize all enabled extensions from `rad.json`
+- [ ] AWU 39: Implement Event Broadcasting and Combined Security Verification (Current)
+  - [ ] Update event routing in `process_event_loop` to broadcast events to all loaded runtimes
+  - [ ] Implement sequential verification chain for `rad_verify_rpc` in API Gateway
+- [ ] AWU 40: Multi-extension Integration Testing
+  - [ ] Write integration test verifying multi-extension setup (orchestrator + security hook)
+  - [ ] Ensure all tests pass, check secrets, clippy zero warnings
