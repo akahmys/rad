@@ -13,6 +13,17 @@
         "fs_read_allow": ["*"],
         "fs_write_allow": ["*"]
       }
+    },
+    {
+      "name": "rust-template-extension",
+      "source": "templates/rust/target/wasm32-wasip1/release/rad_extension_template.wasm",
+      "enabled": true,
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"],
+        "rpc_allow": ["WriteStdout"]
+      }
     }
   ]
 }
+
