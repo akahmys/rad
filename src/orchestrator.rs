@@ -12,6 +12,12 @@ use crate::dag::Dag;
 use crate::wasm::WasmRuntime;
 use crate::ipc::{RasCoreEvent, route_event_to_terminal};
 
+#[derive(Default, Debug, Clone)]
+pub struct TokenUsage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+}
+
 pub struct Orchestrator {
     config: Mutex<Config>,
     config_path: Option<String>,
@@ -23,6 +29,7 @@ pub struct Orchestrator {
     wasm_runtime: Mutex<HashMap<String, Arc<Mutex<WasmRuntime>>>>,
     running_task: Mutex<Option<std::thread::JoinHandle<Result<(), String>>>>,
     abort_flag: Arc<AtomicBool>,
+    pub token_usage: Arc<Mutex<TokenUsage>>,
 }
 
 impl Orchestrator {
@@ -48,6 +55,7 @@ impl Orchestrator {
             wasm_runtime: Mutex::new(HashMap::new()),
             running_task: Mutex::new(None),
             abort_flag: Arc::new(AtomicBool::new(false)),
+            token_usage: Arc::new(Mutex::new(TokenUsage::default())),
         }
     }
 
@@ -101,6 +109,11 @@ impl Orchestrator {
         let mut wasm_guard = self.wasm_runtime.lock()
             .map_err(|e| format!("Failed to lock wasm_runtime Mutex: {e}"))?;
         wasm_guard.clear();
+
+        // 6. Reset token usage
+        if let Ok(mut token_guard) = self.token_usage.lock() {
+            *token_guard = TokenUsage::default();
+        }
 
         Ok(new_id)
     }

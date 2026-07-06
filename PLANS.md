@@ -129,3 +129,11 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Modify `src/wasm/rpc.rs` so that when processing `RasRpcCommand::OpenHttpStream`, it sets the terminal state to `TerminalState::Thinking`.
   - This ensures that even for second and subsequent LLM requests, the CLI will display `Thinking...` before the first tokens arrive, indicating that it is active rather than frozen.
   - Perform verification audit (Clippy, secret check, tests).
+
+* **AWU 42: Track and Display Token Usage**
+  - Add `ReportTokenUsage` RPC command to `models` shared library.
+  - Track accumulated prompt and completion tokens inside `Orchestrator`.
+  - Implement handling for `ReportTokenUsage` in `rpc.rs`.
+  - Display token usage statistics in `/status` CLI command.
+  - Report usage from `openai-orchestrator` Wasm extension.
+  - Perform validation audit (Clippy, secret check, tests).

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use crate::types::{RasRpcCommand, RasCoreEvent, Dag};
 use crate::call_host;
-use crate::tool::{ToolCallBuffer, Message, ChatCompletionsRequest, get_tool_definitions, ToolCall, ToolCallFunction};
+use crate::tool::{ToolCallBuffer, Message, ChatCompletionsRequest, get_tool_definitions, ToolCall, ToolCallFunction, StreamOptions};
 
 pub struct PendingToolCall {
     pub id: String,
@@ -214,6 +214,7 @@ pub fn trigger_llm_stream(_state: &OrchestratorState, messages: Vec<Message>) ->
         model: "qwen".to_string(),
         messages,
         stream: true,
+        stream_options: Some(StreamOptions { include_usage: true }),
         tools: Some(get_tool_definitions()),
     };
     let body = serde_json::to_string(&req).map_err(|e| format!("JSON serialize error: {e}"))?;
@@ -337,6 +338,13 @@ fn handle_stream_delta(state: &mut OrchestratorState, val: &serde_json::Value) {
                     }
                 }
             }
+        }
+    }
+    if let Some(usage) = val.get("usage") {
+        let prompt_tokens = usage.get("prompt_tokens").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+        let completion_tokens = usage.get("completion_tokens").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+        if prompt_tokens > 0 || completion_tokens > 0 {
+            let _ = call_host(RasRpcCommand::ReportTokenUsage { prompt_tokens, completion_tokens });
         }
     }
 }
