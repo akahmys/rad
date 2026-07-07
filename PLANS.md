@@ -25,7 +25,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.9.2: Local LLM Token Optimization & Status Metrics**
 - [x] **Version 0.9.3: LLM Reasoning & Thought Formatting UX Optimization**
 - [x] **Version 0.9.4: REPL Shell General Path Completion Fix**
-- [ ] **Version 0.9.5: Local Installation of Updated Binary & Extensions** (Current)
+- [x] **Version 0.9.5: Local Installation of Updated Binary & Extensions**
+- [ ] **Version 0.9.6: Remove Thinking Indicator Output** (Current)
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -165,3 +166,10 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Rebuild and compile the OpenAI Wasm Orchestrator extension
   - Execute `cargo install --path .` to install the updated rad binary locally
   - Verify the installed rad binary runs and version check
+
+## Detailed Plan: Version 0.9.6 (Remove Thinking Indicator Output)
+
+* **AWU 72: Remove Static Thinking Indicator Text from terminal.rs**
+  - Delete `Thinking...` print from `TerminalState::Thinking` match branch in `src/terminal.rs`
+  - Re-run all verification tests
+  - Rebuild Wasm extension and reinstall rad binary locally
