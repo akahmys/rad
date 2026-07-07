@@ -227,13 +227,11 @@ impl Completer for CommandHelper {
                 } else {
                     Ok((pos, Vec::new()))
                 }
+            } else if let Ok((pos_out, candidates)) = self.file_completer.complete(line, pos, ctx) {
+                let replacement_strings = candidates.into_iter().map(|c| c.replacement).collect();
+                Ok((pos_out, replacement_strings))
             } else {
-                if let Ok((pos_out, candidates)) = self.file_completer.complete(line, pos, ctx) {
-                    let replacement_strings = candidates.into_iter().map(|c| c.replacement).collect();
-                    Ok((pos_out, replacement_strings))
-                } else {
-                    Ok((pos, Vec::new()))
-                }
+                Ok((pos, Vec::new()))
             }
         } else {
             Ok((pos, Vec::new()))

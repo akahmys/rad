@@ -62,12 +62,20 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 }
 
 pub fn trigger_llm_stream(messages: Vec<Message>) -> Result<(), String> {
+    let mut tools = get_tool_definitions();
+
+    if let Ok(state_guard) = crate::orchestrator::STATE.lock() {
+        if let Some(state) = state_guard.as_ref() {
+            tools.extend(state.mcp_tools.clone());
+        }
+    }
+
     let req = ChatCompletionsRequest {
         model: "qwen".to_string(),
         messages,
         stream: true,
         stream_options: Some(StreamOptions { include_usage: true }),
-        tools: Some(get_tool_definitions()),
+        tools: Some(tools),
     };
     let body = serde_json::to_string(&req).map_err(|e| format!("JSON serialize error: {e}"))?;
     let mut headers = HashMap::new();

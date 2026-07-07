@@ -78,6 +78,22 @@ Last Updated: 2026-07-06
   - [x] Implement command completion for the `!` shell command prefix.
   - [x] Run verification tests and compile checks.
 
+## Version 0.9.0 Generic MCP Server Integration
+* [x] **AWU 61: Auto-spawn Configured MCP Servers in Orchestrator**
+  - [x] Update Wasm host RPC bridge or configuration resolver to pass configured MCP servers to `ext/openai-orchestrator`
+  - [x] Implement startup trigger in `ext/openai-orchestrator` to call `RasRpcCommand::SpawnMcpServer` for each allowed MCP server
+* [x] **AWU 62: Dynamically Register MCP Tools in LLM Context**
+  - [x] Implement initial handshake / schema retrieval from spawned MCP servers within the orchestrator Wasm
+  - [x] Adapt tool formatting inside `ext/openai-orchestrator/src/tool.rs` to dynamically generate tool definitions from MCP tool schemas
+* [x] **AWU 63: Execute MCP Tools and Route Responses**
+  - [x] Implement execution routing: intercept tool calls belonging to registered MCPs and direct them to `RasRpcCommand::SendMcpRequest`
+  - [x] Map MCP responses back to tool message content for LLM consumption
+* [x] **AWU 64: E2E Verification with Tavily/Playwright MCP**
+  - [x] Add MCP configuration entry to `rad.json`
+  - [x] Perform integration run and verify that the RAD agent can query Tavily search and operate via Playwright MCP
+
+
+
 
 
 

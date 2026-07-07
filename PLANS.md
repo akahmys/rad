@@ -20,6 +20,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.6.0: Multi-extension Support**
 - [x] **Version 0.7.0: Core Extensibility & Integration Layer (WASM Bindings, HITL-YOLO, MCP Gateway)**
 - [x] **Version 0.8.0: Large Codebase Optimization & Autonomy**
+- [ ] **Version 0.9.0: Browser Automation & Web Search Integration** (Current)
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -97,6 +98,26 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Integrate rustyline's FilenameCompleter into CommandHelper.
   - Enable tab completion for file paths in both normal inputs and '!' shell command prefixes.
   - Implement a basic command completer for '!' prefixes.
+
+## Detailed Plan: Version 0.9.0 (Generic MCP Server Integration)
+
+* **AWU 61: Auto-spawn Configured MCP Servers in Orchestrator**
+  - Update `ext/openai-orchestrator` to read configured MCP servers on startup.
+  - Invoke `RasRpcCommand::SpawnMcpServer` to spin up the configured MCP servers through the WASM host-RPC layer.
+
+* **AWU 62: Dynamically Register MCP Tools in LLM Context**
+  - Communicate with spawned MCP servers to discover their exposed tools (schema).
+  - Inject these dynamic tools into the OpenAI API completions requests along with default filesystem/bash tools.
+
+* **AWU 63: Execute MCP Tools and Route Responses**
+  - Implement dynamic routing in the tool execution loop: if a tool call belongs to an MCP server, send it via `RasRpcCommand::SendMcpRequest`.
+  - Handle asynchronous or streamed responses back to the LLM agent.
+
+* **AWU 64: E2E Verification with Tavily/Playwright MCP**
+  - Register external MCP servers (like Tavily and/or Playwright) in `rad.json`.
+  - Verify E2E flow: AI successfully calls the MCP search and browser tools to fetch real-time information.
+
+
 
 
 

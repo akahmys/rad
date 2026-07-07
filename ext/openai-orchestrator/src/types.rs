@@ -18,4 +18,7 @@ pub struct OrchestratorState {
     pub stream: String,
     pub tool_calls: HashMap<usize, ToolCallBuffer>,
     pub pending_tool_calls: Vec<PendingToolCall>,
+    pub expected_mcp_servers: Vec<String>,
+    pub mcp_tools: Vec<crate::tool::Tool>,
+    pub mcp_tool_providers: HashMap<String, String>,
 }
