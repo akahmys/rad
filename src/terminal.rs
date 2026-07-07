@@ -41,10 +41,7 @@ impl TerminalController {
         *state_guard = new_state;
 
         match new_state {
-            TerminalState::Thinking => {
-                print!("\x1b[1;33mThinking... \x1b[0m");
-                let _ = std::io::Write::flush(&mut std::io::stdout());
-            }
+            TerminalState::Thinking => {}
             TerminalState::Idle => {
                 // If task ends while thinking, erase indicator
                 if old_state == TerminalState::Thinking {

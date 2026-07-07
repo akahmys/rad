@@ -130,6 +130,12 @@ Last Updated: 2026-07-06
   - [x] Execute `cargo install --path .` to install the updated rad binary locally
   - [x] Verify the installed rad binary runs and version check
 
+## Version 0.9.6 Remove Thinking Indicator Output
+* [x] **AWU 72: Remove Static Thinking Indicator Text from terminal.rs** (Current)
+  - [x] Delete `Thinking...` print from `TerminalState::Thinking` match branch in `src/terminal.rs`
+  - [x] Re-run all verification tests
+  - [x] Rebuild Wasm extension and reinstall rad binary locally
+
 
 
 
