@@ -131,10 +131,17 @@ Last Updated: 2026-07-06
   - [x] Verify the installed rad binary runs and version check
 
 ## Version 0.9.6 Remove Thinking Indicator Output
-* [x] **AWU 72: Remove Static Thinking Indicator Text from terminal.rs** (Current)
+* [x] **AWU 72: Remove Static Thinking Indicator Text from terminal.rs**
   - [x] Delete `Thinking...` print from `TerminalState::Thinking` match branch in `src/terminal.rs`
   - [x] Re-run all verification tests
   - [x] Rebuild Wasm extension and reinstall rad binary locally
+
+## Version 0.9.7 Hide Agent Process Outputs
+* [x] **AWU 73: Hide Agent Process Outputs from REPL Terminal**
+  - [x] Modify `route_event_to_terminal` in `src/ipc.rs` to not output `ProcessStdout`/`ProcessStderr` to terminal
+  - [x] Re-run all verification tests (`cargo test`) and check clippy
+  - [x] Rebuild Wasm extensions and reinstall rad binary locally
+
 
 
 

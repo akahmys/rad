@@ -63,15 +63,9 @@ impl<R: BufRead, W: Write> IpcBridge<R, W> {
 ///
 /// Returns error if standard stream writing or flushing fails.
 pub fn route_event_to_terminal(event: &RasCoreEvent) -> Result<(), String> {
-    match event {
-        RasCoreEvent::ProcessStdout { data, .. } => {
-            crate::terminal::get_terminal().write_raw(data, false);
-        }
-        RasCoreEvent::ProcessStderr { data, .. } => {
-            crate::terminal::get_terminal().write_raw(data, true);
-        }
-        _ => {}
-    }
+    // Do not route process stdout/stderr directly to terminal to avoid polluting the REPL layout.
+    // The orchestrator Wasm extension will still receive and process these events.
+    let _ = event;
     Ok(())
 }
 
