@@ -183,3 +183,10 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - This prevents background agent execution (such as `find`, `ls` or directory map scans) from polluting the REPL session UI.
   - Run cargo test and clippy audits.
 
+## Detailed Plan: Version 0.9.8 (Fix AGENTS.md Autoloading via Host RPC)
+
+* **AWU 74: Fix AGENTS.md Autoloading via Host RPC**
+  - Modify `load_local_agent_rules` in `ext/openai-orchestrator/src/llm.rs` to fetch `.agents/AGENTS.md` and `AGENTS.md` via `call_host(RasRpcCommand::FileRead { path })` instead of `std::fs::read_to_string`.
+  - Safely decode the read bytes as a UTF-8 string.
+  - Run cargo test, clippy audits, and verify local autoloading.
+

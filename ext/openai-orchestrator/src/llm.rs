@@ -6,8 +6,13 @@ use crate::tool::{Message, ChatCompletionsRequest, get_tool_definitions, StreamO
 fn load_local_agent_rules() -> String {
     let paths = [".agents/AGENTS.md", "AGENTS.md"];
     for p in &paths {
-        if let Ok(content) = std::fs::read_to_string(p) {
-            return format!("\n\n### Local Project Rules ({p}):\n{content}");
+        let path_buf = std::path::PathBuf::from(p);
+        if let Ok(val) = call_host(RasRpcCommand::FileRead { path: path_buf }) {
+            if let Ok(bytes) = serde_json::from_value::<Vec<u8>>(val) {
+                if let Ok(content) = String::from_utf8(bytes) {
+                    return format!("\n\n### Local Project Rules ({p}):\n{content}");
+                }
+            }
         }
     }
     String::new()
