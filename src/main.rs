@@ -8,7 +8,7 @@ use rustyline::Config;
 use rustyline::history::{History, MemHistory};
 
 #[derive(Parser, Debug)]
-#[command(name = "rad", version = "0.2.0", about = "Rust Agent Dispatcher")]
+#[command(name = "rad", version, about = "Rust Agent Dispatcher")]
 struct Args {
     #[arg(short, long, help = "Path to config file")]
     config: Option<String>,
