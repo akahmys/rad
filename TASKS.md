@@ -142,6 +142,13 @@ Last Updated: 2026-07-06
   - [x] Re-run all verification tests (`cargo test`) and check clippy
   - [x] Rebuild Wasm extensions and reinstall rad binary locally
 
+## Version 0.9.8 Fix AGENTS.md Autoloading
+* [x] **AWU 74: Fix AGENTS.md Autoloading via Host RPC**
+  - [x] Modify `load_local_agent_rules` in `ext/openai-orchestrator/src/llm.rs` to fetch `.agents/AGENTS.md` and `AGENTS.md` via `call_host(RasRpcCommand::FileRead { path })`
+  - [x] Safely decode the read bytes as a UTF-8 string
+  - [x] Run cargo test, clippy audits, and verify local autoloading
+
+
 
 
 
