@@ -91,6 +91,14 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 * **AWU 59: Install RAD executable on Mac**
   - Install the compiled RAD binary to the local user cargo bin directory (~/.cargo/bin) so that 'rad' can be executed globally.
 
+## REPL Improvements
+
+* **AWU 60: Enable tab completion for shell commands and file paths**
+  - Integrate rustyline's FilenameCompleter into CommandHelper.
+  - Enable tab completion for file paths in both normal inputs and '!' shell command prefixes.
+  - Implement a basic command completer for '!' prefixes.
+
+
 
 
 

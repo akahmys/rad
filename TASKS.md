@@ -71,6 +71,14 @@ Last Updated: 2026-07-06
   - [x] Execute `cargo install --path .` to compile and install RAD to ~/.cargo/bin.
   - [x] Verify the installation by calling `rad --version`.
 
+## REPL Improvements
+
+* [x] **AWU 60: Enable tab completion for shell commands and file paths**
+  - [x] Update `CommandHelper` in `src/command.rs` to support file path completion using `rustyline::completion::FilenameCompleter`.
+  - [x] Implement command completion for the `!` shell command prefix.
+  - [x] Run verification tests and compile checks.
+
+
 
 
 
