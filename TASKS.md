@@ -92,6 +92,13 @@ Last Updated: 2026-07-06
   - [x] Add MCP configuration entry to `rad.json`
   - [x] Perform integration run and verify that the RAD agent can query Tavily search and operate via Playwright MCP
 
+## Version 0.9.1 Project Rule Loading & Identity Alignment
+* [x] **AWU 65: Implement Automatic AGENTS.md Loading & Identity Alignment**
+  - [x] Add `load_local_agent_rules` helper in `ext/openai-orchestrator/src/llm.rs` to scan for `.agents/AGENTS.md` and `AGENTS.md`
+  - [x] Update `get_system_prompt` to align with pi-coding-agent's identity statement for RAD
+  - [x] Append the loaded rules to the system prompt
+  - [x] Verify compilation and run test suites
+
 
 
 

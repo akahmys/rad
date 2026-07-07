@@ -20,7 +20,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.6.0: Multi-extension Support**
 - [x] **Version 0.7.0: Core Extensibility & Integration Layer (WASM Bindings, HITL-YOLO, MCP Gateway)**
 - [x] **Version 0.8.0: Large Codebase Optimization & Autonomy**
-- [ ] **Version 0.9.0: Browser Automation & Web Search Integration** (Current)
+- [x] **Version 0.9.0: Generic MCP Server Integration**
+- [x] **Version 0.9.1: Project Rule Loading & Identity Alignment**
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -116,6 +117,14 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 * **AWU 64: E2E Verification with Tavily/Playwright MCP**
   - Register external MCP servers (like Tavily and/or Playwright) in `rad.json`.
   - Verify E2E flow: AI successfully calls the MCP search and browser tools to fetch real-time information.
+
+## Detailed Plan: Version 0.9.1 (Project Rule Loading & Identity Alignment)
+
+* **AWU 65: Implement Automatic AGENTS.md Loading & Identity Alignment**
+  - Implement `load_local_agent_rules` helper in `ext/openai-orchestrator/src/llm.rs` to dynamically scan for `.agents/AGENTS.md` and `AGENTS.md` using the WASI filesystem API.
+  - Revise `get_system_prompt` to declare the agent identity statement in accordance with the minimalist `pi-coding-agent` style, adapted for `rad`.
+  - Append the loaded local rules to the main system prompt when constructing LLM requests.
+
 
 
 
