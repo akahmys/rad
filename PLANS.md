@@ -271,6 +271,32 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Update `ext/openai-orchestrator/Cargo.toml` to depend on the new workspace crates.
   - Ensure all features compile, and zero clippy warnings are observed.
 
+## Detailed Plan: Version 0.10.0 (Multi-Extension Responsibility Isolation)
+
+* **AWU 85: Define Role-Specific WIT Interfaces**
+  - Update `wit/rad.wit` to split interfaces for Security Guard, Tool Provider, and LLM Orchestrator.
+  - Generate new guest/host bindings.
+
+* **AWU 86: Update RAD Core Wasm Host Loader for Multi-Role Extensions**
+  - Refactor Wasm loading in `src/wasm.rs` to load multiple extensions and bind them to their respective WIT interfaces.
+  - Implement configuration parser updates for roles inside `rad.json`.
+
+* **AWU 87: Implement Standalone Security Guard Extension**
+  - Create `ext/security-guard` implementing `verify-rpc` export.
+  - Verify rejection tests pass via core.
+
+* **AWU 88: Implement Standalone Tool/MCP Provider Extension**
+  - Create `ext/mcp-tool-provider` implementing MCP gateway and tool resolver.
+  - Move dynamic JSON-RPC schemas and routing.
+
+* **AWU 89: Slim Down OpenAI Orchestrator Extension**
+  - Remove all security, tool schemas, and MCP execution logic from `ext/openai-orchestrator`.
+  - Let it query tools and route actions via Core's upgraded host APIs.
+
+* **AWU 90: Run E2E Multi-Extension Integration Verification**
+  - Write E2E test suites for multi-extension coordination and run full audits.
+
+
 
 
 

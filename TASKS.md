@@ -202,7 +202,7 @@ Last Updated: 2026-07-06
 
 
 ## Version 0.9.17 Security Isolation
-- [x] AWU 83: Decouple Security Logic from Orchestrator (Current)
+- [x] AWU 83: Decouple Security Logic from Orchestrator
   - [x] Move `verify_rpc` logic from `ext/openai-orchestrator/src/lib.rs` to new `security.rs` module
   - [x] Update `lib.rs` to call `security::verify_rpc`
   - [x] Re-run all verification tests (`cargo test`) and check clippy
@@ -211,6 +211,24 @@ Last Updated: 2026-07-06
 - [ ] AWU 84: Extract MCP Client and Tool Runner to Workspace Shared Crates
   - [ ] Create workspace library crates (e.g., `crates/rad-mcp`, `crates/rad-tool-runner`)
   - [ ] Relocate file resources and update `ext/openai-orchestrator/Cargo.toml`
+
+## Version 0.10.0 Multi-Extension Responsibility Isolation
+- [/] AWU 85: Define Role-Specific WIT Interfaces (Current)
+  - [ ] Update `wit/rad.wit` for Security, Tool, and Orchestrator
+  - [ ] Generate new guest/host bindings
+- [ ] AWU 86: Update RAD Core Wasm Host Loader for Multi-Role Extensions
+  - [ ] Refactor Wasm loading in `src/wasm.rs`
+  - [ ] Update `rad.json` schema parser for role configuration
+- [ ] AWU 87: Implement Standalone Security Guard Extension
+  - [ ] Create `ext/security-guard` implementing `verify-rpc`
+  - [ ] Verify rejection tests pass via core
+- [ ] AWU 88: Implement Standalone Tool/MCP Provider Extension
+  - [ ] Create `ext/mcp-tool-provider` implementing MCP gateway and tool resolver
+- [ ] AWU 89: Slim Down OpenAI Orchestrator Extension
+  - [ ] Remove security, tool schemas, and MCP execution logic from `ext/openai-orchestrator`
+- [ ] AWU 90: Run E2E Multi-Extension Integration Verification
+  - [ ] Write integration test suites and verify E2E coordination
+
 
 
 
