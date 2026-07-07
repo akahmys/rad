@@ -26,9 +26,10 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.9.3: LLM Reasoning & Thought Formatting UX Optimization**
 - [x] **Version 0.9.4: REPL Shell General Path Completion Fix**
 - [x] **Version 0.9.5: Local Installation of Updated Binary & Extensions**
-- [ ] **Version 0.9.6: Remove Thinking Indicator Output**
-- [ ] **Version 0.9.7: Hide Agent Process Outputs from REPL Terminal** (Current)
-
+- [x] **Version 0.9.6: Remove Thinking Indicator Output**
+- [x] **Version 0.9.7: Hide Agent Process Outputs from REPL Terminal**
+- [x] **Version 0.9.8: Fix AGENTS.md Autoloading via Host RPC**
+- [ ] **Version 0.9.9: Fix LLM Memory Loss via Sliding Window Fix** (Current)
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -189,4 +190,11 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Modify `load_local_agent_rules` in `ext/openai-orchestrator/src/llm.rs` to fetch `.agents/AGENTS.md` and `AGENTS.md` via `call_host(RasRpcCommand::FileRead { path })` instead of `std::fs::read_to_string`.
   - Safely decode the read bytes as a UTF-8 string.
   - Run cargo test, clippy audits, and verify local autoloading.
+
+## Detailed Plan: Version 0.9.9 (Fix LLM Memory Loss via Sliding Window Fix)
+
+* **AWU 75: Increase Default LLM History Window Limit**
+  - Update default `max_history_messages` from `6` to `30` in `ext/openai-orchestrator/src/llm.rs` to prevent immediate memory loss in multi-turn tool loops.
+  - Run cargo test and clippy audits.
+
 

@@ -148,6 +148,13 @@ Last Updated: 2026-07-06
   - [x] Safely decode the read bytes as a UTF-8 string
   - [x] Run cargo test, clippy audits, and verify local autoloading
 
+## Version 0.9.9 Fix LLM Memory Loss
+* [x] **AWU 75: Increase Default LLM History Window Limit**
+  - [x] Update default `max_history_messages` from `6` to `30` in `ext/openai-orchestrator/src/llm.rs`
+  - [x] Re-run all verification tests (`cargo test`) and check clippy
+  - [x] Rebuild Wasm extensions and reinstall rad binary locally
+
+
 
 
 
