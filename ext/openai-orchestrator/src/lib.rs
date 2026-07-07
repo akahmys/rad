@@ -4,7 +4,7 @@
 
 wit_bindgen::generate!({
     path: "../../wit/rad.wit",
-    world: "rad-extension",
+    world: "rad-orchestrator",
 });
 
 use rad_models::{RasRpcCommand as CoreRpcCommand, RasCoreEvent as CoreCoreEvent};
@@ -24,7 +24,6 @@ mod llm;
 pub mod mcp_client;
 pub mod tool_runner;
 mod conv;
-mod security;
 #[cfg(test)]
 mod tests;
 
@@ -36,11 +35,6 @@ impl Guest for ExtensionImpl {
     fn on_event(event: wit::RasCoreEvent) -> Result<(), String> {
         let core_event = CoreCoreEvent::from(event);
         orchestrator::handle_event(core_event)
-    }
-
-    fn verify_rpc(command: wit::RasRpcCommand) -> bool {
-        let rpc_cmd = CoreRpcCommand::from(command);
-        security::verify_rpc(&rpc_cmd)
     }
 }
 
@@ -75,9 +69,6 @@ pub(crate) fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, St
 #[cfg(not(test))]
 pub(crate) fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, String> {
     let wit_cmd = wit::RasRpcCommand::from(command);
-    if !ExtensionImpl::verify_rpc(wit_cmd.clone()) {
-        return Err("Operation rejected by security extension".to_string());
-    }
     match host_rpc(&wit_cmd) {
         Ok(json_str) => {
             if json_str.is_empty() || json_str == "null" {
