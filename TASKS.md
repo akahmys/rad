@@ -193,7 +193,7 @@ Last Updated: 2026-07-06
   - [x] Rebuild Wasm extensions and reinstall rad binary locally
 
 ## Version 0.9.16 OpenAI Orchestrator Extension Refactoring
-- [x] AWU 82: Refactor OpenAI Orchestrator Extension for Rule Compliance (Current)
+- [x] AWU 82: Refactor OpenAI Orchestrator Extension for Rule Compliance
   - [x] Extract WIT type conversion boilerplate to `ext/openai-orchestrator/src/conv.rs`
   - [x] Remove crate-level `#![allow(...)]` for clippy pedantic warnings and fix all warnings
   - [x] Verify `lib.rs` file size is under 300 lines
@@ -202,16 +202,15 @@ Last Updated: 2026-07-06
 
 
 ## Version 0.9.17 Security Isolation
-- [ ] AWU 83: Decouple Security Logic from Orchestrator
-  - [ ] Move `verify_rpc` logic from `ext/openai-orchestrator/src/lib.rs` to new `security.rs` module
-  - [ ] Update `lib.rs` to call `security::verify_rpc`
-  - [ ] Re-run all verification tests (`cargo test`) and check clippy
+- [x] AWU 83: Decouple Security Logic from Orchestrator (Current)
+  - [x] Move `verify_rpc` logic from `ext/openai-orchestrator/src/lib.rs` to new `security.rs` module
+  - [x] Update `lib.rs` to call `security::verify_rpc`
+  - [x] Re-run all verification tests (`cargo test`) and check clippy
 
 ## Version 0.9.18 Common Library Extraction
 - [ ] AWU 84: Extract MCP Client and Tool Runner to Workspace Shared Crates
   - [ ] Create workspace library crates (e.g., `crates/rad-mcp`, `crates/rad-tool-runner`)
   - [ ] Relocate file resources and update `ext/openai-orchestrator/Cargo.toml`
-  - [ ] Re-run all verification tests (`cargo test`) and check clippy
 
 
 
