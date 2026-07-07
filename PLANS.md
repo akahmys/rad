@@ -29,7 +29,11 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.9.6: Remove Thinking Indicator Output**
 - [x] **Version 0.9.7: Hide Agent Process Outputs from REPL Terminal**
 - [x] **Version 0.9.8: Fix AGENTS.md Autoloading via Host RPC**
-- [ ] **Version 0.9.9: Fix LLM Memory Loss via Sliding Window Fix** (Current)
+- [x] **Version 0.9.9: Fix LLM Memory Loss via Sliding Window Fix**
+- [ ] **Version 0.9.10: Silence Host RPC error log**
+- [ ] **Version 0.9.11: Combine multiple AGENTS.md rules** (Current)
+
+
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -196,5 +200,20 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 * **AWU 75: Increase Default LLM History Window Limit**
   - Update default `max_history_messages` from `6` to `30` in `ext/openai-orchestrator/src/llm.rs` to prevent immediate memory loss in multi-turn tool loops.
   - Run cargo test and clippy audits.
+
+## Detailed Plan: Version 0.9.10 (Silence Host RPC error log)
+
+* **AWU 76: Silence WASM Host RPC Error Terminal Print**
+  - Remove `eprintln!` from the `Err` branch of `host_rpc` inside `src/wasm.rs`.
+  - This prevents normal non-fatal errors (such as `FileRead` failing due to a missing `AGENTS.md`) from polluting the user terminal with red error banners.
+  - Run cargo test and clippy audits.
+
+## Detailed Plan: Version 0.9.11 (Combine multiple AGENTS.md rules)
+
+* **AWU 77: Combine Multiple AGENTS.md Files Instead of First-Match**
+  - Modify `load_local_agent_rules` in `ext/openai-orchestrator/src/llm.rs` to aggregate rules from all found paths (both `.agents/AGENTS.md` and `AGENTS.md`) instead of returning on the first match.
+  - Run cargo test and clippy audits.
+
+
 
 

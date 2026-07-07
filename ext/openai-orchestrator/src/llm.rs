@@ -5,17 +5,25 @@ use crate::tool::{Message, ChatCompletionsRequest, get_tool_definitions, StreamO
 
 fn load_local_agent_rules() -> String {
     let paths = [".agents/AGENTS.md", "AGENTS.md"];
+    let mut combined = String::new();
     for p in &paths {
         let path_buf = std::path::PathBuf::from(p);
         if let Ok(val) = call_host(RasRpcCommand::FileRead { path: path_buf }) {
             if let Ok(bytes) = serde_json::from_value::<Vec<u8>>(val) {
                 if let Ok(content) = String::from_utf8(bytes) {
-                    return format!("\n\n### Local Project Rules ({p}):\n{content}");
+                    if !combined.is_empty() {
+                        combined.push_str("\n\n");
+                    }
+                    combined.push_str(&format!("### Local Project Rules ({p}):\n{content}"));
                 }
             }
         }
     }
-    String::new()
+    if combined.is_empty() {
+        String::new()
+    } else {
+        format!("\n\n{combined}")
+    }
 }
 
 fn get_system_prompt() -> String {

@@ -154,6 +154,20 @@ Last Updated: 2026-07-06
   - [x] Re-run all verification tests (`cargo test`) and check clippy
   - [x] Rebuild Wasm extensions and reinstall rad binary locally
 
+## Version 0.9.10 Silence Host RPC error log
+* [x] **AWU 76: Silence WASM Host RPC Error Terminal Print**
+  - [x] Remove `eprintln!` from the `Err` branch of `host_rpc` inside `src/wasm.rs`
+  - [x] Re-run all verification tests (`cargo test`) and check clippy
+  - [x] Rebuild Wasm extensions and reinstall rad binary locally
+
+## Version 0.9.11 Combine multiple AGENTS.md rules
+* [x] **AWU 77: Combine Multiple AGENTS.md Files Instead of First-Match**
+  - [x] Modify `load_local_agent_rules` in `ext/openai-orchestrator/src/llm.rs` to combine found rules
+  - [x] Re-run all verification tests (`cargo test`) and check clippy
+  - [x] Rebuild Wasm extensions and reinstall rad binary locally
+
+
+
 
 
 
