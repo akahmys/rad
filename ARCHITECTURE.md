@@ -19,10 +19,17 @@ graph TD
         Gateway -->|2. Dispatch| Subsystems[Subsystems <br> Trait-based: FS, Process, DAG, Network]
     end
     
-    subgraph ExtensionSystem [Policy Layer]
-        WasmRuntime[Wasm Runtime] -->|RPC Orders| Gateway
-        Extension[Extensions <br> Stateless Wasm] -->|Prompt / Context / Compaction| LLM[External LLM API / Router]
-        Subsystems -->|Event Stream: JSON Bytes| WasmRuntime
+    subgraph ExtensionSystem [Policy Layer / Multi-Extension Cooperation]
+        WasmRuntime[Wasm Runtime] -->|RPC Orders / Verification| Gateway
+        
+        Orchestrator["1. LLM Orchestrator <br> (openai-agent.wasm)"]
+        SecurityGuard["2. Security Guard <br> (security-rules.wasm)"]
+        ToolProvider["3. Tool/MCP Provider <br> (mcp-bridge.wasm)"]
+
+        Orchestrator -->|1. Request Prompt| LLM[External LLM API / Router]
+        Orchestrator -->|2. Exec Tool RPC| WasmRuntime
+        WasmRuntime -->|3. Query Hook| SecurityGuard
+        WasmRuntime -->|4. Resolve Tools| ToolProvider
     end
 ```
 
@@ -37,8 +44,20 @@ The Extension subscribes to the event stream from the Core and makes all logical
 * **WIT (Wasm Interface Type) & WASI (v0.7.0+)**: To enable multi-language extension development (Rust, Go, TypeScript, etc.), RPC contracts and events are defined in WIT IDL files. Low-level bindings are automatically compiled via `wit-bindgen`.
 * **Statelessness (v0.2.2+)**: Instead of holding chat history in memory-based state arrays, the Extension fetches history dynamically from Core's DAG (`GetDag`) to ensure robustness across restarts.
 * **Conversation/Thought Context Construction**: Manages the history (context) sent to the LLM.
-* **Guardrails**: Applies safety checks before executing commands or editing files.
 * **Compaction**: Summarizes or truncates history to stay within token limits.
+
+### 1.3 Multi-Extension Cooperation & Responsibility Isolation
+To maximize modularity and robustness, `rad` supports chaining multiple extensions simultaneously. Instead of a single monolithic extension, policies are isolated into micro-extensions:
+
+1. **LLM Orchestrator (Decision Loop)**
+   - **Responsibility**: Manages the prompt logic, calls the LLM, and orchestrates the steps of the agent loop.
+   - **Isolation**: Focuses strictly on token completion and reasoning, calling tools abstractly via Core APIs.
+2. **Security Guard (Validation / verify-rpc)**
+   - **Responsibility**: Implements deep inspect rules to approve or deny physical RPC commands before the host executes them.
+   - **Isolation**: Even if the Orchestrator is hijacked via prompt injection, the independent Security Guard Wasm prevents damage (sandboxed verification).
+3. **Tool/MCP Provider (Capability Bridging)**
+   - **Responsibility**: Discovers, parses, and resolves dynamic schemas for external tools (e.g., via MCP servers) and marshals tool calls/replies.
+
 
 
 ---
