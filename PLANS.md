@@ -33,7 +33,9 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.9.10: Silence Host RPC error log**
 - [x] **Version 0.9.11: Combine multiple AGENTS.md rules**
 - [x] **Version 0.9.12: Fix 400 Bad Request**
-- [ ] **Version 0.9.13: Support Task Abort via Esc** (Current)
+- [x] **Version 0.9.13: Support Task Abort via Esc**
+- [ ] **Version 0.9.14: Fix CRLF Line Endings in Raw Mode** (Current)
+
 
 
 
@@ -231,6 +233,15 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Implement `pub fn abort(&self)` in `src/orchestrator.rs` to safely set `abort_flag` and join the running task thread.
   - Modify the waiting loop in `src/main.rs` to poll for `Esc` keypresses using `crossterm` in raw mode during execution.
   - Re-run all tests, check clippy, and reinstall the binary.
+
+## Detailed Plan: Version 0.9.14 (Fix CRLF Line Endings in Raw Mode)
+
+* **AWU 80: Fix Terminal Carriage Return (CRLF) in Raw Mode**
+  - Implement a `to_crlf` string converter helper inside `src/terminal.rs`.
+  - Apply `to_crlf` to `write_llm_token`, `write_log`, and `write_raw` in `TerminalController`.
+  - This ensures that when the terminal enters raw mode for `Esc` key polling, newlines (`\n`) are correctly printed as carriage-return + line-feed (`\r\n`), preventing the "staircase" format output.
+  - Run cargo test and clippy audits.
+
 
 
 
