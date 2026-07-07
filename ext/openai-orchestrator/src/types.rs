@@ -21,4 +21,6 @@ pub struct OrchestratorState {
     pub expected_mcp_servers: Vec<String>,
     pub mcp_tools: Vec<crate::tool::Tool>,
     pub mcp_tool_providers: HashMap<String, String>,
+    pub max_history_messages: Option<usize>,
+    pub max_tool_output_chars: Option<usize>,
 }

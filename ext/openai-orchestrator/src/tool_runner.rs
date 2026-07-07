@@ -4,9 +4,33 @@ use crate::call_host;
 use crate::tool::{Message, ToolCall, ToolCallFunction, execute_tool, ToolExecutionResult};
 use crate::orchestrator::STATE;
 
+fn trim_large_output(text: &str) -> String {
+    let max_chars = STATE.lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().and_then(|s| s.max_tool_output_chars))
+        .unwrap_or(2000);
+
+    if text.len() <= max_chars {
+        return text.to_string();
+    }
+
+    let head_len = max_chars / 4;
+    let tail_len = max_chars - head_len;
+
+    // Safely collect characters to avoid slicing mid-multibyte characters
+    let head: String = text.chars().take(head_len).collect();
+    let tail: String = text.chars().rev().take(tail_len).collect::<String>().chars().rev().collect();
+
+    format!(
+        "{head}\n\n... [TRUNCATED {} CHARACTERS FOR TOKEN SAVINGS] ...\n\n{tail}",
+        text.len() - max_chars
+    )
+}
+
 pub fn process_completed_tool_calls(pending: Vec<PendingToolCall>) -> Result<(), String> {
     for tc in pending {
-        let result_content = tc.result.unwrap_or_else(|| "No execution result.".to_string());
+        let raw_result = tc.result.unwrap_or_else(|| "No execution result.".to_string());
+        let result_content = trim_large_output(&raw_result);
         let tool_msg = Message {
             role: "tool".to_string(),
             content: Some(result_content),
@@ -35,6 +59,8 @@ pub fn process_completed_tool_calls(pending: Vec<PendingToolCall>) -> Result<(),
             expected_mcp_servers: Vec::new(),
             mcp_tools: Vec::new(),
             mcp_tool_providers: HashMap::new(),
+            max_history_messages: None,
+            max_tool_output_chars: None,
         });
     }
     crate::llm::trigger_llm_stream(messages)

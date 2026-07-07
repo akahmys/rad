@@ -63,6 +63,28 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
     }
 
     messages.reverse();
+
+    let max_history = crate::orchestrator::STATE.lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().and_then(|s| s.max_history_messages))
+        .unwrap_or(6);
+
+    let messages_to_send = if messages.len() > max_history && !messages.is_empty() {
+        let first_goal = messages[0].clone();
+        let remaining_len = messages.len() - 1;
+        let limit = max_history - 1;
+        let start_idx = if remaining_len > limit {
+            messages.len() - limit
+        } else {
+            1
+        };
+        let mut trimmed = vec![first_goal];
+        trimmed.extend(messages[start_idx..].to_vec());
+        trimmed
+    } else {
+        messages
+    };
+
     let mut all_messages = vec![Message {
         role: "system".to_string(),
         content: Some(get_system_prompt()),
@@ -70,7 +92,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
         tool_call_id: None,
         tool_calls: None,
     }];
-    all_messages.extend(messages);
+    all_messages.extend(messages_to_send);
     Ok(all_messages)
 }
 

@@ -99,6 +99,16 @@ Last Updated: 2026-07-06
   - [x] Append the loaded rules to the system prompt
   - [x] Verify compilation and run test suites
 
+## Version 0.9.2 Local LLM Token Optimization & Status Metrics
+* [x] **AWU 66: Parse Limit Configurations from rad.json**
+  - [x] Update `OrchestratorConfig` in `ext/openai-orchestrator/src/mcp_client.rs` to read `max_history_messages` and `max_tool_output_chars`
+  - [x] Store these settings in the global `OrchestratorState` during initialization
+* [x] **AWU 67: Implement Sliding History Window in Wasm Orchestrator**
+  - [x] Update `load_messages_from_dag` in `ext/openai-orchestrator/src/llm.rs` to slice history to N messages, while always keeping the first node (initial user prompt)
+* [x] **AWU 68: Implement Tool Output Trimming Utility**
+  - [x] Add `trim_large_output` helper in `ext/openai-orchestrator/src/tool_runner.rs` and apply it to tool responses
+  - [x] Run test suites and verify stability
+
 
 
 
