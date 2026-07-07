@@ -95,6 +95,49 @@ fn main() {
     run_repl(rl, &history_path, &orchestrator, &cfg, &session_id, &dag_arc);
 }
 
+#[cfg(unix)]
+struct RawModeGuard {
+    orig_termios: nix::sys::termios::Termios,
+}
+
+#[cfg(unix)]
+impl RawModeGuard {
+    fn enable() -> Result<Self, String> {
+        use nix::sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg};
+
+        let fd = std::io::stdin();
+        let orig_termios = tcgetattr(&fd).map_err(|e| format!("Failed to get termios: {e}"))?;
+        let mut raw_termios = orig_termios.clone();
+
+        raw_termios.local_flags.remove(LocalFlags::ICANON);
+        raw_termios.local_flags.remove(LocalFlags::ECHO);
+
+        tcsetattr(&fd, SetArg::TCSADRAIN, &raw_termios)
+            .map_err(|e| format!("Failed to set termios: {e}"))?;
+
+        Ok(Self { orig_termios })
+    }
+}
+
+#[cfg(unix)]
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        use nix::sys::termios::{tcsetattr, SetArg};
+        let fd = std::io::stdin();
+        let _ = tcsetattr(&fd, SetArg::TCSADRAIN, &self.orig_termios);
+    }
+}
+
+#[cfg(not(unix))]
+struct RawModeGuard;
+
+#[cfg(not(unix))]
+impl RawModeGuard {
+    fn enable() -> Result<Self, String> {
+        Ok(Self)
+    }
+}
+
 fn run_agent_task(task: &str, orchestrator: &std::sync::Arc<rad::orchestrator::Orchestrator>) -> Result<(), String> {
     rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Thinking);
 
@@ -103,19 +146,18 @@ fn run_agent_task(task: &str, orchestrator: &std::sync::Arc<rad::orchestrator::O
         return Err(format!("Execution error: {e}"));
     }
 
-    let _ = crossterm::terminal::enable_raw_mode();
+    let guard = RawModeGuard::enable()?;
     while orchestrator.is_running() {
         if let Ok(true) = crossterm::event::poll(std::time::Duration::from_millis(50)) {
             let ev = crossterm::event::read();
             if let Ok(crossterm::event::Event::Key(crossterm::event::KeyEvent { code: crossterm::event::KeyCode::Esc, .. })) = ev {
-                let _ = crossterm::terminal::disable_raw_mode();
+                std::mem::drop(guard);
                 println!("\n\x1b[1;33mTask execution aborted by user (Esc).\x1b[0m");
                 orchestrator.abort();
                 break;
             }
         }
     }
-    let _ = crossterm::terminal::disable_raw_mode();
     rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Idle);
     Ok(())
 }

@@ -180,6 +180,12 @@ Last Updated: 2026-07-06
   - [x] Re-run all verification tests (`cargo test`) and check clippy
   - [x] Rebuild Wasm extensions and reinstall rad binary locally
 
+## Version 0.9.14 Fix CRLF Line Endings in Raw Mode
+* [x] **AWU 80: Fix Terminal Carriage Return (CRLF) in Raw Mode**
+  - [x] Implement termios-based non-canonical mode in `src/main.rs` to avoid stripping CR
+  - [x] Re-run all verification tests (`cargo test`) and check clippy
+  - [x] Rebuild Wasm extensions and reinstall rad binary locally
+
 
 
 
