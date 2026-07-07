@@ -30,6 +30,8 @@ mod orchestrator;
 mod tool;
 mod sse;
 mod llm;
+pub mod mcp_client;
+pub mod tool_runner;
 #[cfg(test)]
 mod tests;
 

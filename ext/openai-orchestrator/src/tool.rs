@@ -67,12 +67,14 @@ pub struct ToolCallBuffer {
     pub arguments: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum ToolExecutionResult {
     Sync(String),
     Async(i32),
+    McpAsync,
 }
 
-pub fn execute_tool(name: &str, arguments: &str) -> Result<ToolExecutionResult, String> {
+pub fn execute_tool(tool_call_id: &str, name: &str, arguments: &str) -> Result<ToolExecutionResult, String> {
     match name {
         "file_read" => {
             #[derive(Deserialize)]
@@ -134,7 +136,39 @@ pub fn execute_tool(name: &str, arguments: &str) -> Result<ToolExecutionResult, 
             let pgid = val.as_i64().ok_or_else(|| format!("Expected process PGID integer, got: {val:?}"))?;
             Ok(ToolExecutionResult::Async(pgid as i32))
         }
-        other => Err(format!("Unknown tool call: {other}")),
+        other => {
+            let mut provider = None;
+            if let Ok(state_guard) = crate::orchestrator::STATE.lock() {
+                if let Some(state) = state_guard.as_ref() {
+                    if let Some(p) = state.mcp_tool_providers.get(other) {
+                        provider = Some(p.clone());
+                    }
+                }
+            }
+
+            if let Some(server_name) = provider {
+                let args_json: serde_json::Value = serde_json::from_str(arguments)
+                    .map_err(|e| format!("Failed to parse MCP tool args: {e}"))?;
+                let req = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": format!("mcp_call:{}", tool_call_id),
+                    "method": "tools/call",
+                    "params": {
+                        "name": other,
+                        "arguments": args_json
+                    }
+                });
+                let req_str = serde_json::to_string(&req)
+                    .map_err(|e| format!("Failed to serialize MCP request: {e}"))?;
+                let _ = call_host(RasRpcCommand::SendMcpRequest {
+                    name: server_name,
+                    message: req_str,
+                })?;
+                Ok(ToolExecutionResult::McpAsync)
+            } else {
+                Err(format!("Unknown tool call: {other}"))
+            }
+        }
     }
 }
 
