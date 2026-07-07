@@ -16,6 +16,8 @@ pub struct PendingToolCall {
 pub struct OrchestratorState {
     pub assistant: String,
     pub stream: String,
+    pub is_reasoning: bool,
+    pub reasoning_buffered: String,
     pub tool_calls: HashMap<usize, ToolCallBuffer>,
     pub pending_tool_calls: Vec<PendingToolCall>,
     pub expected_mcp_servers: Vec<String>,

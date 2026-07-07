@@ -48,7 +48,7 @@ impl TerminalController {
             TerminalState::Idle => {
                 // If task ends while thinking, erase indicator
                 if old_state == TerminalState::Thinking {
-                    print!("\r            \r");
+                    print!("\x1b[2K\r");
                     let _ = std::io::Write::flush(&mut std::io::stdout());
                 }
 
@@ -62,7 +62,7 @@ impl TerminalController {
             TerminalState::Streaming => {
                 // Erase Thinking indicator just before printing the first token
                 if old_state == TerminalState::Thinking {
-                    print!("\r            \r");
+                    print!("\x1b[2K\r");
                     let _ = std::io::Write::flush(&mut std::io::stdout());
                 }
             }
