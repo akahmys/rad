@@ -24,7 +24,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.9.1: Project Rule Loading & Identity Alignment**
 - [x] **Version 0.9.2: Local LLM Token Optimization & Status Metrics**
 - [x] **Version 0.9.3: LLM Reasoning & Thought Formatting UX Optimization**
-- [ ] **Version 0.9.4: REPL Shell General Path Completion Fix** (Current)
+- [x] **Version 0.9.4: REPL Shell General Path Completion Fix**
+- [ ] **Version 0.9.5: Local Installation of Updated Binary & Extensions** (Current)
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -157,3 +158,10 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Update `CommandHelper::complete` in `src/command.rs` to fallback to file completion
   - Add tests in `tests/command_tests.rs` to verify general prompt completion
   - Run verification tests and lint checks
+
+## Detailed Plan: Version 0.9.5 (Local Installation of Updated Binary & Extensions)
+
+* **AWU 71: Install Updated RAD and Wasm Extensions**
+  - Rebuild and compile the OpenAI Wasm Orchestrator extension
+  - Execute `cargo install --path .` to install the updated rad binary locally
+  - Verify the installed rad binary runs and version check

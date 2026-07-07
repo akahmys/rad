@@ -54,6 +54,8 @@ pub fn process_completed_tool_calls(pending: Vec<PendingToolCall>) -> Result<(),
         state_guard.get_or_insert_with(|| OrchestratorState {
             assistant: String::new(),
             stream: String::new(),
+            is_reasoning: false,
+            reasoning_buffered: String::new(),
             tool_calls: HashMap::new(),
             pending_tool_calls: Vec::new(),
             expected_mcp_servers: Vec::new(),
