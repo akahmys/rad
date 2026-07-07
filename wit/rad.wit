@@ -166,3 +166,26 @@ world rad-extension {
     export on-event: func(event: ras-core-event) -> result<_, string>;
     export verify-rpc: func(command: ras-rpc-command) -> bool;
 }
+
+world rad-orchestrator {
+    use types.{ras-rpc-command, ras-core-event};
+    
+    import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
+    export on-event: func(event: ras-core-event) -> result<_, string>;
+}
+
+world rad-security-guard {
+    use types.{ras-rpc-command};
+    
+    import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
+    export verify-rpc: func(command: ras-rpc-command) -> bool;
+}
+
+world rad-tool-provider {
+    use types.{ras-rpc-command};
+    
+    import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
+    export get-tools: func() -> result<string, string>;
+    export execute-tool: func(name: string, arguments: string) -> result<string, string>;
+}
+

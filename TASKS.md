@@ -213,12 +213,13 @@ Last Updated: 2026-07-06
   - [ ] Relocate file resources and update `ext/openai-orchestrator/Cargo.toml`
 
 ## Version 0.10.0 Multi-Extension Responsibility Isolation
-- [/] AWU 85: Define Role-Specific WIT Interfaces (Current)
-  - [ ] Update `wit/rad.wit` for Security, Tool, and Orchestrator
-  - [ ] Generate new guest/host bindings
-- [ ] AWU 86: Update RAD Core Wasm Host Loader for Multi-Role Extensions
+- [x] AWU 85: Define Role-Specific WIT Interfaces
+  - [x] Update `wit/rad.wit` for Security, Tool, and Orchestrator
+  - [x] Generate new guest/host bindings
+- [/] AWU 86: Update RAD Core Wasm Host Loader for Multi-Role Extensions (Current)
   - [ ] Refactor Wasm loading in `src/wasm.rs`
   - [ ] Update `rad.json` schema parser for role configuration
+
 - [ ] AWU 87: Implement Standalone Security Guard Extension
   - [ ] Create `ext/security-guard` implementing `verify-rpc`
   - [ ] Verify rejection tests pass via core
