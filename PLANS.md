@@ -26,7 +26,9 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.9.3: LLM Reasoning & Thought Formatting UX Optimization**
 - [x] **Version 0.9.4: REPL Shell General Path Completion Fix**
 - [x] **Version 0.9.5: Local Installation of Updated Binary & Extensions**
-- [ ] **Version 0.9.6: Remove Thinking Indicator Output** (Current)
+- [ ] **Version 0.9.6: Remove Thinking Indicator Output**
+- [ ] **Version 0.9.7: Hide Agent Process Outputs from REPL Terminal** (Current)
+
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -173,3 +175,11 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Delete `Thinking...` print from `TerminalState::Thinking` match branch in `src/terminal.rs`
   - Re-run all verification tests
   - Rebuild Wasm extension and reinstall rad binary locally
+
+## Detailed Plan: Version 0.9.7 (Hide Agent Process Outputs)
+
+* **AWU 73: Hide Agent Process Outputs from REPL Terminal**
+  - Modify `route_event_to_terminal` in `src/ipc.rs` to stop routing `ProcessStdout` and `ProcessStderr` directly to the terminal.
+  - This prevents background agent execution (such as `find`, `ls` or directory map scans) from polluting the REPL session UI.
+  - Run cargo test and clippy audits.
+
