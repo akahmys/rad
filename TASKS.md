@@ -124,6 +124,12 @@ Last Updated: 2026-07-06
   - [x] Add tests in `tests/command_tests.rs` to verify general prompt completion
   - [x] Run verification tests and lint checks
 
+## Version 0.9.5 Local Installation of Updated Binary & Extensions
+* [x] **AWU 71: Install Updated RAD and Wasm Extensions** (Current)
+  - [x] Rebuild and compile the OpenAI Wasm Orchestrator extension
+  - [x] Execute `cargo install --path .` to install the updated rad binary locally
+  - [x] Verify the installed rad binary runs and version check
+
 
 
 
