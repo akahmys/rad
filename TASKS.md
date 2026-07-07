@@ -222,10 +222,11 @@ Last Updated: 2026-07-06
 - [x] AWU 87: Implement Standalone Security Guard Extension
   - [x] Create `ext/security-guard` implementing `verify-rpc`
   - [x] Verify rejection tests pass via core
-- [/] AWU 88: Implement Standalone Tool/MCP Provider Extension (Current)
-  - [ ] Create `ext/mcp-tool-provider` implementing MCP gateway and tool resolver
-- [ ] AWU 89: Slim Down OpenAI Orchestrator Extension
+- [x] AWU 88: Implement Standalone Tool/MCP Provider Extension
+  - [x] Create `ext/mcp-tool-provider` implementing MCP gateway and tool resolver
+- [/] AWU 89: Slim Down OpenAI Orchestrator Extension (Current)
   - [ ] Remove security, tool schemas, and MCP execution logic from `ext/openai-orchestrator`
+
 
 
 

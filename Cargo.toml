@@ -34,8 +34,10 @@ members = [
     ".",
     "ext/openai-orchestrator",
     "ext/security-guard",
+    "ext/mcp-tool-provider",
     "models",
 ]
+
 
 
 
