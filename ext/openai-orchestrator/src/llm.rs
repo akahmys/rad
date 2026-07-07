@@ -98,6 +98,32 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
         messages
     };
 
+    let mut filtered_messages = Vec::new();
+    for msg in messages_to_send {
+        if msg.role == "tool" {
+            let has_matching_call = if let Some(ref tid) = msg.tool_call_id {
+                filtered_messages.iter().any(|prev_msg: &Message| {
+                    if prev_msg.role == "assistant" {
+                        if let Some(ref tcalls) = prev_msg.tool_calls {
+                            tcalls.iter().any(|tc| tc.id == *tid)
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                })
+            } else {
+                false
+            };
+            if has_matching_call {
+                filtered_messages.push(msg);
+            }
+        } else {
+            filtered_messages.push(msg);
+        }
+    }
+
     let mut all_messages = vec![Message {
         role: "system".to_string(),
         content: Some(get_system_prompt()),
@@ -105,7 +131,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
         tool_call_id: None,
         tool_calls: None,
     }];
-    all_messages.extend(messages_to_send);
+    all_messages.extend(filtered_messages);
     Ok(all_messages)
 }
 

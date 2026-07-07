@@ -30,8 +30,9 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.9.7: Hide Agent Process Outputs from REPL Terminal**
 - [x] **Version 0.9.8: Fix AGENTS.md Autoloading via Host RPC**
 - [x] **Version 0.9.9: Fix LLM Memory Loss via Sliding Window Fix**
-- [ ] **Version 0.9.10: Silence Host RPC error log**
-- [ ] **Version 0.9.11: Combine multiple AGENTS.md rules** (Current)
+- [x] **Version 0.9.10: Silence Host RPC error log**
+- [x] **Version 0.9.11: Combine multiple AGENTS.md rules**
+- [ ] **Version 0.9.12: Fix 400 Bad Request** (Current)
 
 
 
@@ -213,6 +214,14 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 * **AWU 77: Combine Multiple AGENTS.md Files Instead of First-Match**
   - Modify `load_local_agent_rules` in `ext/openai-orchestrator/src/llm.rs` to aggregate rules from all found paths (both `.agents/AGENTS.md` and `AGENTS.md`) instead of returning on the first match.
   - Run cargo test and clippy audits.
+
+## Detailed Plan: Version 0.9.12 (Fix 400 Bad Request by filtering isolated tool messages)
+
+* **AWU 78: Filter Out Isolated Tool Messages in llm.rs**
+  - Implement a filtering pass in `load_messages_from_dag` inside `ext/openai-orchestrator/src/llm.rs` to ensure any `tool` message has a corresponding `assistant` message with matching `tool_calls` preceding it.
+  - Remove any orphan `tool` messages to prevent LLM API 400 errors.
+  - Run cargo test, clippy audits, and reinstall rad locally.
+
 
 
 
