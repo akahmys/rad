@@ -15,6 +15,8 @@ fn handle_human_input(text: String) -> Result<(), String> {
         *state_guard = Some(OrchestratorState {
             assistant: String::new(),
             stream: String::new(),
+            is_reasoning: false,
+            reasoning_buffered: String::new(),
             tool_calls: HashMap::new(),
             pending_tool_calls: Vec::new(),
             expected_mcp_servers: mcp_names.clone(),
@@ -160,6 +162,8 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
             let state = state_guard.get_or_insert_with(|| OrchestratorState {
                 assistant: String::new(),
                 stream: String::new(),
+                is_reasoning: false,
+                reasoning_buffered: String::new(),
                 tool_calls: HashMap::new(),
                 pending_tool_calls: Vec::new(),
                 expected_mcp_servers: Vec::new(),
@@ -188,10 +192,16 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
 
 fn handle_done(mut state_guard: MutexGuard<'_, Option<OrchestratorState>>) -> Result<(), String> {
     let state = state_guard.as_mut().ok_or("State is None in handle_done")?;
+    if state.is_reasoning {
+        let _ = call_host(RasRpcCommand::WriteStdout { text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string() });
+        state.is_reasoning = false;
+    }
+
     let (assistant_tool_calls, pending_calls) = crate::tool_runner::extract_tool_calls(state);
 
     let assistant_content = if state.assistant.is_empty() { None } else { Some(state.assistant.clone()) };
     state.assistant.clear();
+    state.reasoning_buffered.clear();
 
     drop(state_guard);
 

@@ -99,6 +99,7 @@ Last Updated: 2026-07-06
   - [x] Append the loaded rules to the system prompt
   - [x] Verify compilation and run test suites
 
+
 ## Version 0.9.2 Local LLM Token Optimization & Status Metrics
 * [x] **AWU 66: Parse Limit Configurations from rad.json**
   - [x] Update `OrchestratorConfig` in `ext/openai-orchestrator/src/mcp_client.rs` to read `max_history_messages` and `max_tool_output_chars`
@@ -108,6 +109,14 @@ Last Updated: 2026-07-06
 * [x] **AWU 68: Implement Tool Output Trimming Utility**
   - [x] Add `trim_large_output` helper in `ext/openai-orchestrator/src/tool_runner.rs` and apply it to tool responses
   - [x] Run test suites and verify stability
+
+## Version 0.9.3 LLM Reasoning & Thought Formatting UX Optimization
+* [x] **AWU 69: Unify LLM Reasoning/Thought Formatting & UX** (Current)
+  - [x] Implement `\x1b[2K\r` ANSI escape sequence for erasing `Thinking...` in `src/terminal.rs`
+  - [x] Add `is_reasoning` and `reasoning_buffered` to `OrchestratorState` in `ext/openai-orchestrator/src/types.rs`
+  - [x] Update `sse.rs` to handle `reasoning_content` and `<thought>` tags, applying coloring and clear boundaries to terminal output
+  - [x] Update `orchestrator.rs` to initialize and manage reasoning states
+  - [x] Write tests and verify output format consistency
 
 
 

@@ -22,7 +22,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.8.0: Large Codebase Optimization & Autonomy**
 - [x] **Version 0.9.0: Generic MCP Server Integration**
 - [x] **Version 0.9.1: Project Rule Loading & Identity Alignment**
-- [ ] **Version 0.9.2: Local LLM Token Optimization & Status Metrics** (Current)
+- [x] **Version 0.9.2: Local LLM Token Optimization & Status Metrics**
+- [ ] **Version 0.9.3: LLM Reasoning & Thought Formatting UX Optimization** (Current)
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -139,3 +140,12 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 * **AWU 68: Implement Tool Output Trimming Utility**
   - Add `trim_large_output` string trimming function inside `ext/openai-orchestrator/src/tool_runner.rs`.
   - Check lengths of stdout/stderr and file reads and trim anything over 2,000 characters to a short summary (top & bottom format).
+
+## Detailed Plan: Version 0.9.3 (LLM Reasoning & Thought Formatting UX Optimization)
+
+* **AWU 69: Unify LLM Reasoning/Thought Formatting & UX**
+  - Implement `\x1b[2K\r` ANSI escape sequence for erasing `Thinking...` in `src/terminal.rs`
+  - Add `is_reasoning` and `reasoning_buffered` to `OrchestratorState` in `ext/openai-orchestrator/src/types.rs`
+  - Update `sse.rs` to handle `reasoning_content` and `<thought>` tags, applying coloring and clear boundaries to terminal output
+  - Update `orchestrator.rs` to initialize and manage reasoning states
+  - Write tests and verify output format consistency
