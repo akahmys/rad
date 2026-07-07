@@ -249,6 +249,30 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - This prevents LLMs from ignoring the truncation and making incorrect assumptions or code deletions.
   - Run cargo test and clippy audits, rebuild extensions, and reinstall rad locally.
 
+## Detailed Plan: Version 0.9.16 (OpenAI Orchestrator Extension Refactoring - Compliance)
+
+* **AWU 82: Refactor OpenAI Orchestrator Extension for Rule Compliance**
+  - Extract all type conversion boilerplate (`From`/`Into`) from `ext/openai-orchestrator/src/lib.rs` to `ext/openai-orchestrator/src/conv.rs`.
+  - Remove crate-level `#![allow(...)]` for clippy pedantic warnings in `ext/openai-orchestrator` and fix the code to have zero warnings.
+  - Verify file size of `lib.rs` is under 300 lines.
+  - Run clippy, cargo tests, rebuild extension and reinstall rad binary locally.
+
+## Detailed Plan: Version 0.9.17 (Security Isolation)
+
+* **AWU 83: Decouple Security Logic from Orchestrator**
+  - Move the `verify_rpc` logic from `ext/openai-orchestrator/src/lib.rs` to a new `security.rs` module.
+  - Ensure `lib.rs` calls the decoupled logic.
+  - Run cargo check, clippy, and verify extension compilation.
+
+## Detailed Plan: Version 0.9.18 (Common Library Extraction)
+
+* **AWU 84: Extract MCP Client and Tool Runner to Workspace Shared Crates**
+  - Move `mcp_client.rs` and `tool_runner.rs` into workspace-level library crates (e.g., `crates/rad-mcp` and `crates/rad-tool-runner`).
+  - Update `ext/openai-orchestrator/Cargo.toml` to depend on the new workspace crates.
+  - Ensure all features compile, and zero clippy warnings are observed.
+
+
+
 
 
 
