@@ -34,7 +34,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let dag = Arc::new(Mutex::new(Dag::new()));
     let active_processes = Arc::new(Mutex::new(HashMap::new()));
 
-    let wasm_path = std::path::Path::new("target/wasm32-wasip2/debug/openai_orchestrator.wasm");
+    let wasm_path = std::path::Path::new("target/wasm32-wasip2/debug/security_guard.wasm");
 
     let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: dag.clone() });
     let network_subsystem = Arc::new(crate::http::HttpManager);
@@ -43,7 +43,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         wasm_path,
-        "legacy".to_string(),
+        "security".to_string(),
         perms,
 
         sandbox.clone() as Arc<dyn FsSubsystem>,

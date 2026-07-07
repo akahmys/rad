@@ -225,5 +225,5 @@ Last Updated: 2026-07-06
   - [x] Create `ext/mcp-tool-provider` implementing MCP gateway and tool resolver
 - [x] AWU 89: Slim Down OpenAI Orchestrator Extension
   - [x] Remove security, tool schemas, and MCP execution logic from `ext/openai-orchestrator`
-- [/] AWU 90: Run E2E Multi-Extension Integration Verification (Current)
-  - [ ] Write integration test suites and verify E2E coordination
+- [x] AWU 90: Run E2E Multi-Extension Integration Verification
+  - [x] Write integration test suites and verify E2E coordination
