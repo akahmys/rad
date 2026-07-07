@@ -186,6 +186,13 @@ Last Updated: 2026-07-06
   - [x] Re-run all verification tests (`cargo test`) and check clippy
   - [x] Rebuild Wasm extensions and reinstall rad binary locally
 
+## Version 0.9.15 Improve Truncation Message for LLM Aware
+* [x] **AWU 81: Improve Truncation Warning Format for LLMs**
+  - [x] Modify `trim_large_output` in `ext/openai-orchestrator/src/tool_runner.rs`
+  - [x] Re-run all verification tests (`cargo test`) and check clippy
+  - [x] Rebuild Wasm extensions and reinstall rad binary locally
+
+
 
 
 

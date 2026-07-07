@@ -242,6 +242,14 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - This ensures that when the terminal enters raw mode for `Esc` key polling, newlines (`\n`) are correctly printed as carriage-return + line-feed (`\r\n`), preventing the "staircase" format output.
   - Run cargo test and clippy audits.
 
+## Detailed Plan: Version 0.9.15 (Improve Truncation Message for LLM Aware)
+
+* **AWU 81: Improve Truncation Warning Format for LLMs**
+  - Modify `trim_large_output` inside `ext/openai-orchestrator/src/tool_runner.rs` to format truncated file/tool outputs with a highly visible warning statement (e.g. `[ERROR: THIS PART IS TRUNCATED... YOU MUST READ THE LACKING RANGE SEPARATELY]`).
+  - This prevents LLMs from ignoring the truncation and making incorrect assumptions or code deletions.
+  - Run cargo test and clippy audits, rebuild extensions, and reinstall rad locally.
+
+
 
 
 

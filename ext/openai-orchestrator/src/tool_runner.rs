@@ -22,7 +22,7 @@ fn trim_large_output(text: &str) -> String {
     let tail: String = text.chars().rev().take(tail_len).collect::<String>().chars().rev().collect();
 
     format!(
-        "{head}\n\n... [TRUNCATED {} CHARACTERS FOR TOKEN SAVINGS] ...\n\n{tail}",
+        "{head}\n\n[ERROR: THIS PART IS TRUNCATED. YOU MUST READ THIS RANGE SEPARATELY BEFORE EDITING ({} characters saved)]\n\n{tail}",
         text.len() - max_chars
     )
 }
