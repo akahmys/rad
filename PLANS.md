@@ -22,6 +22,7 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.8.0: Large Codebase Optimization & Autonomy**
 - [x] **Version 0.9.0: Generic MCP Server Integration**
 - [x] **Version 0.9.1: Project Rule Loading & Identity Alignment**
+- [ ] **Version 0.9.2: Local LLM Token Optimization & Status Metrics** (Current)
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -125,10 +126,16 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Revise `get_system_prompt` to declare the agent identity statement in accordance with the minimalist `pi-coding-agent` style, adapted for `rad`.
   - Append the loaded local rules to the main system prompt when constructing LLM requests.
 
+## Detailed Plan: Version 0.9.2 (Local LLM Token Optimization & Status Metrics)
 
+* **AWU 66: Parse Limit Configurations from rad.json**
+  - Read `max_history_messages` and `max_tool_output_chars` parameters from the `openai-orchestrator` config block inside `rad.json`.
+  - Store these parameters dynamically within the Wasm extension state at launch.
 
+* **AWU 67: Implement Sliding History Window in Wasm Orchestrator**
+  - Modify `load_messages_from_dag` in `ext/openai-orchestrator/src/llm.rs` to slice conversational history to the latest `N` messages.
+  - Pin the initial user request (the very first DAG node) at the top of the history list to preserve goal state and context.
 
-
-
-
-
+* **AWU 68: Implement Tool Output Trimming Utility**
+  - Add `trim_large_output` string trimming function inside `ext/openai-orchestrator/src/tool_runner.rs`.
+  - Check lengths of stdout/stderr and file reads and trim anything over 2,000 characters to a short summary (top & bottom format).

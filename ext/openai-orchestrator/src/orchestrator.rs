@@ -20,6 +20,8 @@ fn handle_human_input(text: String) -> Result<(), String> {
             expected_mcp_servers: mcp_names.clone(),
             mcp_tools: Vec::new(),
             mcp_tool_providers: HashMap::new(),
+            max_history_messages: None,
+            max_tool_output_chars: None,
         });
     }
     let dag_val = call_host(RasRpcCommand::GetDag)?;
@@ -163,6 +165,8 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
                 expected_mcp_servers: Vec::new(),
                 mcp_tools: Vec::new(),
                 mcp_tool_providers: HashMap::new(),
+                max_history_messages: None,
+                max_tool_output_chars: None,
             });
             state.pending_tool_calls.clear();
             for call in active_calls {

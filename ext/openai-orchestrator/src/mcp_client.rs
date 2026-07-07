@@ -12,6 +12,8 @@ struct ExtensionConfigInfo {
 #[derive(serde::Deserialize)]
 struct OrchestratorConfig {
     mcp_servers: Option<HashMap<String, McpServerConfig>>,
+    max_history_messages: Option<usize>,
+    max_tool_output_chars: Option<usize>,
 }
 
 #[derive(serde::Deserialize, Clone)]
@@ -25,7 +27,7 @@ struct RadJsonConfig {
     extensions: Option<Vec<ExtensionConfigInfo>>,
 }
 
-fn load_mcp_configs() -> Result<HashMap<String, McpServerConfig>, String> {
+fn load_orchestrator_config() -> Result<Option<OrchestratorConfig>, String> {
     let paths = ["rad.json", ".rad/rad.json"];
     let mut content = None;
     for p in &paths {
@@ -35,27 +37,23 @@ fn load_mcp_configs() -> Result<HashMap<String, McpServerConfig>, String> {
         }
     }
     let Some(json_str) = content else {
-        return Ok(HashMap::new());
+        return Ok(None);
     };
 
     let cfg: RadJsonConfig = serde_json::from_str(&json_str)
-        .map_err(|e| format!("Failed to parse rad.json for MCP: {e}"))?;
+        .map_err(|e| format!("Failed to parse rad.json for orchestrator: {e}"))?;
 
     let Some(extensions) = cfg.extensions else {
-        return Ok(HashMap::new());
+        return Ok(None);
     };
 
     for ext in extensions {
         if ext.name == "openai-orchestrator" {
-            if let Some(config) = ext.config {
-                if let Some(servers) = config.mcp_servers {
-                    return Ok(servers);
-                }
-            }
+            return Ok(ext.config);
         }
     }
 
-    Ok(HashMap::new())
+    Ok(None)
 }
 
 /// Spawns the MCP servers configured in rad.json.
@@ -66,14 +64,24 @@ pub fn init_mcp_servers() -> Result<(), String> {
         return Ok(());
     }
 
-    let servers = load_mcp_configs()?;
-    for (name, cfg) in servers {
-        let payload = RasRpcCommand::SpawnMcpServer {
-            name,
-            command: cfg.command,
-            args: cfg.args,
-        };
-        let _ = call_host(payload)?;
+    if let Some(config) = load_orchestrator_config()? {
+        if let Ok(mut state_guard) = crate::orchestrator::STATE.lock() {
+            if let Some(state) = state_guard.as_mut() {
+                state.max_history_messages = config.max_history_messages;
+                state.max_tool_output_chars = config.max_tool_output_chars;
+            }
+        }
+
+        if let Some(servers) = config.mcp_servers {
+            for (name, cfg) in servers {
+                let payload = RasRpcCommand::SpawnMcpServer {
+                    name,
+                    command: cfg.command,
+                    args: cfg.args,
+                };
+                let _ = call_host(payload)?;
+            }
+        }
     }
 
     Ok(())
@@ -81,8 +89,12 @@ pub fn init_mcp_servers() -> Result<(), String> {
 
 /// Returns a list of configured MCP server names.
 pub fn get_configured_mcp_names() -> Result<Vec<String>, String> {
-    let servers = load_mcp_configs()?;
-    Ok(servers.keys().cloned().collect())
+    if let Some(config) = load_orchestrator_config()? {
+        if let Some(servers) = config.mcp_servers {
+            return Ok(servers.keys().cloned().collect());
+        }
+    }
+    Ok(Vec::new())
 }
 
 #[derive(serde::Deserialize)]
