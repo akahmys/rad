@@ -85,10 +85,7 @@ impl bindings::RadExtensionImports for WasmState {
 
         match result {
             Ok(val) => Ok(val.to_string()),
-            Err(e) => {
-                eprintln!("[WASM Host RPC Error] Execution failed for extension '{}': {e}", self.name);
-                Err(format!("RPC command execution failed: {e}"))
-            }
+            Err(e) => Err(format!("RPC command execution failed: {e}")),
         }
     }
 }
