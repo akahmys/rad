@@ -172,6 +172,15 @@ Last Updated: 2026-07-06
   - [x] Re-run all verification tests (`cargo test`) and check clippy
   - [x] Rebuild Wasm extensions and reinstall rad binary locally
 
+## Version 0.9.13 Support Task Abort via Esc
+* [x] **AWU 79: Support Task Abort via Esc Key**
+  - [x] Add `crossterm` dependency to `Cargo.toml`
+  - [x] Implement `pub fn abort(&self)` in `src/orchestrator.rs`
+  - [x] Modify the waiting loop in `src/main.rs` to catch `Esc` in raw mode
+  - [x] Re-run all verification tests (`cargo test`) and check clippy
+  - [x] Rebuild Wasm extensions and reinstall rad binary locally
+
+
 
 
 

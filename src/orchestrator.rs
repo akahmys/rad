@@ -185,6 +185,15 @@ impl Orchestrator {
 
         Ok(())
     }
+
+    /// Aborts the currently running task.
+    pub fn abort(&self) {
+        self.abort_flag.store(true, Ordering::SeqCst);
+        let Ok(mut guard) = self.running_task.lock() else { return; };
+        if let Some(handle) = guard.take() {
+            let _ = handle.join();
+        }
+    }
 }
 
 pub mod runner;
