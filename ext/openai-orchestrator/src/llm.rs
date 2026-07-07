@@ -72,7 +72,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
     let max_history = crate::orchestrator::STATE.lock()
         .ok()
         .and_then(|guard| guard.as_ref().and_then(|s| s.max_history_messages))
-        .unwrap_or(6);
+        .unwrap_or(30);
 
     let messages_to_send = if messages.len() > max_history && !messages.is_empty() {
         let first_goal = messages[0].clone();
