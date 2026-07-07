@@ -3,10 +3,23 @@ use crate::types::{RasRpcCommand, Dag};
 use crate::call_host;
 use crate::tool::{Message, ChatCompletionsRequest, get_tool_definitions, StreamOptions};
 
+fn load_local_agent_rules() -> String {
+    let paths = [".agents/AGENTS.md", "AGENTS.md"];
+    for p in &paths {
+        if let Ok(content) = std::fs::read_to_string(p) {
+            return format!("\n\n### Local Project Rules ({p}):\n{content}");
+        }
+    }
+    String::new()
+}
+
 fn get_system_prompt() -> String {
-    "You are Antigravity, a powerful agentic AI coding assistant running inside the Rad (Rust Agent Dispatcher) environment.\n\
-     You can read/write files and execute bash commands to achieve the user's goals.\n\
-     Be concise and focus on implementing features directly and incrementally.".to_string()
+    let mut prompt = "You are an expert coding assistant operating inside rad, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.".to_string();
+    let rules = load_local_agent_rules();
+    if !rules.is_empty() {
+        prompt.push_str(&rules);
+    }
+    prompt
 }
 
 pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
