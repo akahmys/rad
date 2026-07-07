@@ -166,6 +166,13 @@ Last Updated: 2026-07-06
   - [x] Re-run all verification tests (`cargo test`) and check clippy
   - [x] Rebuild Wasm extensions and reinstall rad binary locally
 
+## Version 0.9.12 Fix 400 Bad Request
+* [x] **AWU 78: Filter Out Isolated Tool Messages in llm.rs**
+  - [x] Modify `load_messages_from_dag` in `ext/openai-orchestrator/src/llm.rs` to filter out orphan `tool` messages
+  - [x] Re-run all verification tests (`cargo test`) and check clippy
+  - [x] Rebuild Wasm extensions and reinstall rad binary locally
+
+
 
 
 
