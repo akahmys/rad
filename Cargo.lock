@@ -2304,6 +2304,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "security-guard"
+version = "0.8.0"
+dependencies = [
+ "rad-models",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "wit-bindgen 0.36.0",
+]
+
+[[package]]
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"

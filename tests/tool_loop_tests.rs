@@ -90,9 +90,10 @@ fn test_tool_loop_autonomy() {
     let mut runtime = WasmRuntime::new(
         "test-extension".to_string(),
         std::path::Path::new(wasm_path),
-        "orchestrator".to_string(),
+        "legacy".to_string(),
         perms,
         sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
+
 
         process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
@@ -179,9 +180,10 @@ fn test_context_recovery_with_tool_execution() {
         let mut runtime = WasmRuntime::new(
             "test-extension".to_string(),
             std::path::Path::new(wasm_path),
-            "orchestrator".to_string(),
+            "legacy".to_string(),
             perms.clone(),
             sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
+
 
             process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
             dag_subsystem,
@@ -225,9 +227,10 @@ fn test_context_recovery_with_tool_execution() {
         let mut runtime = WasmRuntime::new(
             "test-extension".to_string(),
             std::path::Path::new(wasm_path),
-            "orchestrator".to_string(),
+            "legacy".to_string(),
             perms,
             sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
+
 
             process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
             dag_subsystem,
