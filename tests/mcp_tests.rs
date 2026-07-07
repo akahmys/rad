@@ -58,8 +58,10 @@ fn setup_runtime(
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         std::path::Path::new(wasm_path),
+        "orchestrator".to_string(),
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
+
         process_manager as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network,
@@ -93,7 +95,8 @@ fn test_mcp_permission_denied() {
             args: vec![],
         },
     };
-    let wit_cmd = rad::wasm::bindings::radcomp::extension::types::RasRpcCommand::from(req.command);
+    let wit_cmd = rad::wasm::bindings::wit::RasRpcCommand::from(req.command);
+
     let state = runtime.store.data_mut();
     let res = rad::wasm::bindings::RadExtensionImports::host_rpc(state, wit_cmd);
 
@@ -125,7 +128,8 @@ fn test_mcp_echo_communication() {
     runtime.verify_rpc(&req_bytes).unwrap();
 
     // Perform execution directly via Host RPC mock verification
-    let wit_cmd_spawn = rad::wasm::bindings::radcomp::extension::types::RasRpcCommand::from(req_spawn.command);
+    let wit_cmd_spawn = rad::wasm::bindings::wit::RasRpcCommand::from(req_spawn.command);
+
     let state = runtime.store.data_mut();
     let res_spawn = rad::wasm::bindings::RadExtensionImports::host_rpc(state, wit_cmd_spawn);
     assert!(res_spawn.is_ok());
@@ -142,7 +146,8 @@ fn test_mcp_echo_communication() {
     let req_send_bytes = serde_json::to_vec(&req_send).unwrap();
     runtime.verify_rpc(&req_send_bytes).unwrap();
 
-    let wit_cmd_send = rad::wasm::bindings::radcomp::extension::types::RasRpcCommand::from(req_send.command);
+    let wit_cmd_send = rad::wasm::bindings::wit::RasRpcCommand::from(req_send.command);
+
     let state = runtime.store.data_mut();
     let res_send = rad::wasm::bindings::RadExtensionImports::host_rpc(state, wit_cmd_send);
     assert!(res_send.is_ok());

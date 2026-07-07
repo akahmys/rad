@@ -43,7 +43,9 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         wasm_path,
+        "legacy".to_string(),
         perms,
+
         sandbox.clone() as Arc<dyn FsSubsystem>,
         process_manager.clone() as Arc<dyn ProcessSubsystem>,
         dag_subsystem,
@@ -53,6 +55,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
         None,
         false,
     ).unwrap();
+
 
     TestContext {
         _temp_dir: temp_dir,

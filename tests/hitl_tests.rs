@@ -79,8 +79,10 @@ fn setup_runtime(
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         std::path::Path::new(wasm_path),
+        "orchestrator".to_string(),
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
+
         process_manager as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network,

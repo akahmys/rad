@@ -165,6 +165,7 @@ impl Orchestrator {
                 let runtime = WasmRuntime::new(
                     ext.name.clone(),
                     wasm_path,
+                    ext.role.clone(),
                     permissions,
                     self.sandbox.clone() as Arc<dyn crate::subsystems::FsSubsystem>,
                     self.process_manager.clone() as Arc<dyn crate::subsystems::ProcessSubsystem>,

@@ -107,6 +107,8 @@ pub struct ExtensionConfig {
     pub source: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default = "default_role")]
+    pub role: String,
     pub permissions: Option<PermissionConfig>,
     #[serde(default)]
     pub config: HashMap<String, serde_json::Value>,
@@ -115,6 +117,11 @@ pub struct ExtensionConfig {
 fn default_true() -> bool {
     true
 }
+
+fn default_role() -> String {
+    "orchestrator".to_string()
+}
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Config {
