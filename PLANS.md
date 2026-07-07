@@ -32,7 +32,9 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.9.9: Fix LLM Memory Loss via Sliding Window Fix**
 - [x] **Version 0.9.10: Silence Host RPC error log**
 - [x] **Version 0.9.11: Combine multiple AGENTS.md rules**
-- [ ] **Version 0.9.12: Fix 400 Bad Request** (Current)
+- [x] **Version 0.9.12: Fix 400 Bad Request**
+- [ ] **Version 0.9.13: Support Task Abort via Esc** (Current)
+
 
 
 
@@ -221,6 +223,15 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Implement a filtering pass in `load_messages_from_dag` inside `ext/openai-orchestrator/src/llm.rs` to ensure any `tool` message has a corresponding `assistant` message with matching `tool_calls` preceding it.
   - Remove any orphan `tool` messages to prevent LLM API 400 errors.
   - Run cargo test, clippy audits, and reinstall rad locally.
+
+## Detailed Plan: Version 0.9.13 (Support Task Abort via Esc)
+
+* **AWU 79: Support Task Abort via Esc Key**
+  - Add `crossterm = "0.27"` to `Cargo.toml` dependencies.
+  - Implement `pub fn abort(&self)` in `src/orchestrator.rs` to safely set `abort_flag` and join the running task thread.
+  - Modify the waiting loop in `src/main.rs` to poll for `Esc` keypresses using `crossterm` in raw mode during execution.
+  - Re-run all tests, check clippy, and reinstall the binary.
+
 
 
 
