@@ -33,8 +33,10 @@ tempfile = "3.8"
 members = [
     ".",
     "ext/openai-orchestrator",
+    "ext/security-guard",
     "models",
 ]
+
 
 
 

@@ -88,7 +88,7 @@ fn test_multi_extension_verification_chain() {
         ExtensionConfig {
             name: "openai-orchestrator".to_string(),
             enabled: true,
-            role: "orchestrator".to_string(),
+            role: "legacy".to_string(),
             source: wasm_path.to_string(),
             permissions: Some(perms.clone()),
             config: HashMap::new(),
@@ -96,7 +96,7 @@ fn test_multi_extension_verification_chain() {
         ExtensionConfig {
             name: "security-monitor".to_string(),
             enabled: true,
-            role: "orchestrator".to_string(),
+            role: "legacy".to_string(),
             source: wasm_path.to_string(),
             permissions: Some(perms),
             config: HashMap::new(),

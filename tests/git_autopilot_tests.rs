@@ -70,7 +70,7 @@ fn setup_autopilot_orchestrator(
     config.extensions = vec![rad::config::ExtensionConfig {
         name: "openai-orchestrator".to_string(),
         enabled: true,
-        role: "orchestrator".to_string(),
+        role: "legacy".to_string(),
         source: "target/wasm32-wasip2/debug/openai_orchestrator.wasm".to_string(),
         permissions: Some(perms),
         config: HashMap::new(),

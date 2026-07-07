@@ -219,17 +219,13 @@ Last Updated: 2026-07-06
 - [x] AWU 86: Update RAD Core Wasm Host Loader for Multi-Role Extensions
   - [x] Refactor Wasm loading in `src/wasm.rs`
   - [x] Update `rad.json` schema parser for role configuration
-- [/] AWU 87: Implement Standalone Security Guard Extension (Current)
-  - [ ] Create `ext/security-guard` implementing `verify-rpc`
-  - [ ] Verify rejection tests pass via core
-
-- [ ] AWU 88: Implement Standalone Tool/MCP Provider Extension
+- [x] AWU 87: Implement Standalone Security Guard Extension
+  - [x] Create `ext/security-guard` implementing `verify-rpc`
+  - [x] Verify rejection tests pass via core
+- [/] AWU 88: Implement Standalone Tool/MCP Provider Extension (Current)
   - [ ] Create `ext/mcp-tool-provider` implementing MCP gateway and tool resolver
 - [ ] AWU 89: Slim Down OpenAI Orchestrator Extension
   - [ ] Remove security, tool schemas, and MCP execution logic from `ext/openai-orchestrator`
-- [ ] AWU 90: Run E2E Multi-Extension Integration Verification
-
-
 
 
 
