@@ -24,6 +24,7 @@ mod llm;
 pub mod mcp_client;
 pub mod tool_runner;
 mod conv;
+mod security;
 #[cfg(test)]
 mod tests;
 
@@ -39,22 +40,10 @@ impl Guest for ExtensionImpl {
 
     fn verify_rpc(command: wit::RasRpcCommand) -> bool {
         let rpc_cmd = CoreRpcCommand::from(command);
-        match rpc_cmd {
-            CoreRpcCommand::FileWrite { path, .. } => {
-                if path.to_string_lossy().contains("blocked.txt") {
-                    return false;
-                }
-            }
-            CoreRpcCommand::SpawnBashProcess { command } => {
-                if command.contains("blocked_command") {
-                    return false;
-                }
-            }
-            _ => {}
-        }
-        true
+        security::verify_rpc(&rpc_cmd)
     }
 }
+
 
 export!(ExtensionImpl);
 
