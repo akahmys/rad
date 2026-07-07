@@ -118,6 +118,12 @@ Last Updated: 2026-07-06
   - [x] Update `orchestrator.rs` to initialize and manage reasoning states
   - [x] Write tests and verify output format consistency
 
+## Version 0.9.4 REPL Shell General Path Completion Fix
+* [x] **AWU 70: Enable File Path Completion for General REPL Prompt** (Current)
+  - [x] Update `CommandHelper::complete` in `src/command.rs` to fallback to file completion
+  - [x] Add tests in `tests/command_tests.rs` to verify general prompt completion
+  - [x] Run verification tests and lint checks
+
 
 
 

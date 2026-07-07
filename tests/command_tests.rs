@@ -140,8 +140,18 @@ fn test_command_completion() {
     assert_eq!(res.0, 0);
     assert_eq!(res.1, vec!["/help".to_string()]);
 
-    // 3. Non-slash input
-    let res = helper.complete("regular", 7, &ctx).unwrap();
-    assert_eq!(res.0, 7);
-    assert!(res.1.is_empty());
+    // 3. Non-slash input (fallback to file completion)
+    let tmp = tempdir().unwrap();
+    let file_path = tmp.path().join("test_file.rs");
+    std::fs::File::create(&file_path).unwrap();
+
+    let original_dir = std::env::current_dir().unwrap();
+    std::env::set_current_dir(tmp.path()).unwrap();
+
+    let res = helper.complete("test_", 5, &ctx);
+    std::env::set_current_dir(original_dir).unwrap();
+
+    let (pos_out, candidates) = res.unwrap();
+    assert_eq!(pos_out, 0);
+    assert!(candidates.contains(&"test_file.rs".to_string()));
 }

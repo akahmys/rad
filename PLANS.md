@@ -23,7 +23,8 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
 - [x] **Version 0.9.0: Generic MCP Server Integration**
 - [x] **Version 0.9.1: Project Rule Loading & Identity Alignment**
 - [x] **Version 0.9.2: Local LLM Token Optimization & Status Metrics**
-- [ ] **Version 0.9.3: LLM Reasoning & Thought Formatting UX Optimization** (Current)
+- [x] **Version 0.9.3: LLM Reasoning & Thought Formatting UX Optimization**
+- [ ] **Version 0.9.4: REPL Shell General Path Completion Fix** (Current)
 
 ## Detailed Plan: Version 0.7.0 (Core Extensibility & Integration Layer)
 
@@ -149,3 +150,10 @@ Establish a comprehensive roadmap to build `rad` (Rust Agent Dispatcher) as a pr
   - Update `sse.rs` to handle `reasoning_content` and `<thought>` tags, applying coloring and clear boundaries to terminal output
   - Update `orchestrator.rs` to initialize and manage reasoning states
   - Write tests and verify output format consistency
+
+## Detailed Plan: Version 0.9.4 (REPL Shell General Path Completion Fix)
+
+* **AWU 70: Enable File Path Completion for General REPL Prompt**
+  - Update `CommandHelper::complete` in `src/command.rs` to fallback to file completion
+  - Add tests in `tests/command_tests.rs` to verify general prompt completion
+  - Run verification tests and lint checks
