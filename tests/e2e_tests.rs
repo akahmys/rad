@@ -44,8 +44,10 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         std::path::Path::new(wasm_path),
+        "orchestrator".to_string(),
         perms,
         sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
+
         process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network_subsystem,
@@ -67,7 +69,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
 
 fn call_rpc(ctx: &mut TestContext, command: RasRpcCommand) -> Result<serde_json::Value, String> {
     use rad::wasm::bindings::RadExtensionImports;
-    let wit_cmd = rad::wasm::bindings::radcomp::extension::types::RasRpcCommand::from(command);
+    let wit_cmd = rad::wasm::bindings::wit::RasRpcCommand::from(command);
     let res = ctx.runtime.store.data_mut().host_rpc(wit_cmd);
     match res {
         Ok(json_str) => {

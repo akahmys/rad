@@ -1,7 +1,45 @@
-wasmtime::component::bindgen!({
-    path: "wit/rad.wit",
-    world: "rad-extension",
-});
+pub mod rad_extension {
+    wasmtime::component::bindgen!({
+        path: "wit/rad.wit",
+        world: "rad-extension",
+    });
+}
+
+pub mod rad_orchestrator {
+    wasmtime::component::bindgen!({
+        path: "wit/rad.wit",
+        world: "rad-orchestrator",
+        with: {
+            "radcomp:extension/types": crate::wasm::bindings::rad_extension::radcomp::extension::types,
+        }
+    });
+}
+
+pub mod rad_security_guard {
+    wasmtime::component::bindgen!({
+        path: "wit/rad.wit",
+        world: "rad-security-guard",
+        with: {
+            "radcomp:extension/types": crate::wasm::bindings::rad_extension::radcomp::extension::types,
+        }
+    });
+}
+
+pub mod rad_tool_provider {
+    wasmtime::component::bindgen!({
+        path: "wit/rad.wit",
+        world: "rad-tool-provider",
+        with: {
+            "radcomp:extension/types": crate::wasm::bindings::rad_extension::radcomp::extension::types,
+        }
+    });
+}
+
+
+pub use rad_extension::radcomp::extension::types as wit;
+pub use rad_extension::RadExtension;
+pub use rad_extension::RadExtensionImports;
+
 
 use rad_models::{
     Target as CoreTarget,
@@ -10,7 +48,8 @@ use rad_models::{
     RasCoreEvent as CoreRasCoreEvent,
     RasRpcCommand as CoreRasRpcCommand,
 };
-use radcomp::extension::types as wit;
+
+
 
 impl From<wit::Target> for CoreTarget {
     fn from(t: wit::Target) -> Self {

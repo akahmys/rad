@@ -55,8 +55,10 @@ fn setup_runtime(
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         std::path::Path::new(wasm_path),
+        "orchestrator".to_string(),
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
+
         process_manager as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network,
@@ -100,7 +102,7 @@ fn test_get_repo_map_via_rpc() {
         id: Some("call_repomap".to_string()),
         command: RasRpcCommand::GetRepoMap,
     };
-    let wit_cmd = rad::wasm::bindings::radcomp::extension::types::RasRpcCommand::from(req.command);
+    let wit_cmd = rad::wasm::bindings::wit::RasRpcCommand::from(req.command);
     let state = runtime.store.data_mut();
     let res = rad::wasm::bindings::RadExtensionImports::host_rpc(state, wit_cmd);
 
