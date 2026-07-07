@@ -78,9 +78,10 @@ fn setup_runtime(
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         std::path::Path::new(wasm_path),
-        "legacy".to_string(),
+        "orchestrator".to_string(),
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
+
 
 
         process_manager as Arc<dyn rad::subsystems::ProcessSubsystem>,
@@ -144,7 +145,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
     config.extensions = vec![rad::config::ExtensionConfig {
         name: "openai-orchestrator".to_string(),
         enabled: true,
-        role: "legacy".to_string(),
+        role: "orchestrator".to_string(),
         source: wasm_path.to_string(),
         permissions: Some(perms),
         config: HashMap::new(),
@@ -307,7 +308,7 @@ fn test_core_auto_self_healing_integration() {
     config.extensions = vec![rad::config::ExtensionConfig {
         name: "openai-orchestrator".to_string(),
         enabled: true,
-        role: "legacy".to_string(),
+        role: "orchestrator".to_string(),
         source: wasm_path.to_string(),
         permissions: Some(perms),
         config: HashMap::new(),

@@ -41,7 +41,7 @@ fn test_async_task_cancellation_on_rollback() {
     config.extensions = vec![rad::config::ExtensionConfig {
         name: "openai-orchestrator".to_string(),
         enabled: true,
-        role: "legacy".to_string(),
+        role: "orchestrator".to_string(),
         source: wasm_path.to_string(),
         permissions: Some(perms),
         config: HashMap::new(),
