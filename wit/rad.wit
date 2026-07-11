@@ -96,6 +96,13 @@ interface types {
         spawn-mcp-server(spawn-mcp-server-payload),
         send-mcp-request(send-mcp-request-payload),
         get-repo-map,
+        get-tools,
+        execute-tool(execute-tool-payload),
+    }
+
+    record execute-tool-payload {
+        name: string,
+        arguments: string,
     }
 
     record spawn-mcp-server-payload {

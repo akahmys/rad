@@ -208,9 +208,7 @@ Last Updated: 2026-07-06
   - [x] Re-run all verification tests (`cargo test`) and check clippy
 
 ## Version 0.9.18 Common Library Extraction
-- [ ] AWU 84: Extract MCP Client and Tool Runner to Workspace Shared Crates
-  - [ ] Create workspace library crates (e.g., `crates/rad-mcp`, `crates/rad-tool-runner`)
-  - [ ] Relocate file resources and update `ext/openai-orchestrator/Cargo.toml`
+- [~] AWU 84: ~~Extract MCP Client and Tool Runner to Workspace Shared Crates~~ (Cancelled — superseded by AWU 91)
 
 ## Version 0.10.0 Multi-Extension Responsibility Isolation
 - [x] AWU 85: Define Role-Specific WIT Interfaces
@@ -227,3 +225,13 @@ Last Updated: 2026-07-06
   - [x] Remove security, tool schemas, and MCP execution logic from `ext/openai-orchestrator`
 - [x] AWU 90: Run E2E Multi-Extension Integration Verification
   - [x] Write integration test suites and verify E2E coordination
+
+## Version 0.10.1 Complete Tool Execution Delegation
+- [ ] AWU 91: Complete Tool Execution Delegation via Host Mediation (Current)
+  - [ ] Add `GetTools` and `ExecuteTool` RPC commands to `rad_models` and `rad.wit`
+  - [ ] Implement host-side routing of tool RPCs to Tool Provider extension
+  - [ ] Refactor Orchestrator to delegate all tool execution via `host_rpc`
+  - [ ] Delete `tool_runner.rs` and `mcp_client.rs` from `openai-orchestrator`
+  - [ ] Enhance `mcp-tool-provider` with MCP lifecycle management
+  - [ ] Update and verify all integration tests
+
