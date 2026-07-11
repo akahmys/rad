@@ -175,6 +175,11 @@ impl From<wit::RasRpcCommand> for CoreRasRpcCommand {
                 message: payload.message,
             },
             wit::RasRpcCommand::GetRepoMap => CoreRasRpcCommand::GetRepoMap,
+            wit::RasRpcCommand::GetTools => CoreRasRpcCommand::GetTools,
+            wit::RasRpcCommand::ExecuteTool(payload) => CoreRasRpcCommand::ExecuteTool {
+                name: payload.name,
+                arguments: payload.arguments,
+            },
         }
     }
 }
@@ -282,6 +287,11 @@ impl From<CoreRasRpcCommand> for wit::RasRpcCommand {
                 message,
             }),
             CoreRasRpcCommand::GetRepoMap => wit::RasRpcCommand::GetRepoMap,
+            CoreRasRpcCommand::GetTools => wit::RasRpcCommand::GetTools,
+            CoreRasRpcCommand::ExecuteTool { name, arguments } => wit::RasRpcCommand::ExecuteTool(wit::ExecuteToolPayload {
+                name,
+                arguments,
+            }),
         }
     }
 }

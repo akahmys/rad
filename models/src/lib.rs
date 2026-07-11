@@ -201,6 +201,13 @@ pub enum RasRpcCommand {
     },
     /// Fetch semantic repository map of the workspace.
     GetRepoMap,
+    /// Fetch combined tool definitions from the Tool Provider extension.
+    GetTools,
+    /// Delegate tool execution to the Tool Provider extension.
+    ExecuteTool {
+        name: String,
+        arguments: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

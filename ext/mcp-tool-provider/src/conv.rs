@@ -90,6 +90,11 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
                 message,
             }),
             CoreRpcCommand::GetRepoMap => wit::RasRpcCommand::GetRepoMap,
+            CoreRpcCommand::GetTools => wit::RasRpcCommand::GetTools,
+            CoreRpcCommand::ExecuteTool { name, arguments } => wit::RasRpcCommand::ExecuteTool(wit::ExecuteToolPayload {
+                name,
+                arguments,
+            }),
         }
     }
 }
