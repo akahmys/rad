@@ -1,29 +1,34 @@
 use rad::config::{Config, CoreConfig, ExecutionConfig, ExtensionConfig, PermissionConfig};
 use rad::dag::Dag;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-fn run_mock_http_server(addr: &str, responses: Arc<Mutex<Vec<String>>>) -> std::thread::JoinHandle<()> {
+fn run_mock_http_server(
+    addr: &str,
+    responses: Arc<Mutex<Vec<String>>>,
+) -> std::thread::JoinHandle<()> {
     let listener = std::net::TcpListener::bind(addr).unwrap();
     std::thread::spawn(move || {
         for mut stream in listener.incoming().flatten() {
             let mut buf = [0; 1024];
             let _ = std::io::Read::read(&mut stream, &mut buf);
 
-            let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n";
+            let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n";
             let _ = std::io::Write::write_all(&mut stream, headers.as_bytes());
 
             let resp = {
-                let mut guard = responses.lock().unwrap();
+                let mut guard = responses.lock();
                 guard.pop()
             };
             if let Some(chunks_str) = resp {
                 let _ = std::io::Write::write_all(&mut stream, chunks_str.as_bytes());
             }
             let _ = std::io::Write::flush(&mut stream);
+            let _ = stream.shutdown(std::net::Shutdown::Write);
             std::thread::sleep(Duration::from_millis(100));
         }
     })
@@ -39,9 +44,10 @@ fn test_security_verification_hook_rejection() {
 
     // Turn 2: LLM responds with a text message after rejection
     let turn2 = "data: {\"choices\":[{\"delta\":{\"content\":\"Task finished.\"}}]}\n\n\
-                 data: [DONE]\n\n".to_string();
+                 data: [DONE]\n\n"
+        .to_string();
     // Turn 1: LLM requests writing to a blocked file "blocked.txt"
-    let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"file_write\",\"arguments\":\"{\\\"path\\\":\\\"blocked.txt\\\",\\\"content\\\":\\\"dangerous data\\\"}\"}}]}}]}\n\n\
+    let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"write\",\"arguments\":\"{\\\"path\\\":\\\"blocked.txt\\\",\\\"content\\\":\\\"dangerous data\\\"}\"}}]}}]}\n\n\
                  data: [DONE]\n\n".to_string();
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -102,7 +108,7 @@ fn test_security_verification_hook_rejection() {
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {
-        let mut dag_guard = dag.lock().unwrap();
+        let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
         dag_guard.set_node_text(&n0, "Initial").unwrap();
         let snapshot_dir = snapshots.join(&n0);
@@ -137,11 +143,13 @@ fn test_security_verification_hook_rejection() {
     assert!(!path.exists(), "File blocked.txt should NOT exist");
 
     // The rejection errors must be saved in the DAG
-    let dag_guard = dag.lock().unwrap();
+    let dag_guard = dag.lock();
     let mut found_fs_rejection = false;
 
     for node in dag_guard.nodes.values() {
-        if node.text.contains("Operation rejected by security extension")
+        if node
+            .text
+            .contains("Operation rejected by security extension")
             && node.text.contains("call_1")
         {
             found_fs_rejection = true;

@@ -5,10 +5,11 @@ use rad::ipc::RasRpcCommand;
 use rad::process::{ProcessManager, RunningProcess};
 use rad::wasm::WasmRuntime;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -16,7 +17,7 @@ struct TestContext {
     _temp_dir: tempfile::TempDir,
     sandbox: Arc<FsSandbox>,
     process_manager: Arc<ProcessManager>,
-    active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
+    active_processes: Arc<Mutex<HashMap<String, RunningProcess>>>,
     runtime: WasmRuntime,
 }
 
@@ -47,7 +48,6 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
         "orchestrator".to_string(),
         perms,
         sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
-
         process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network_subsystem,
@@ -119,8 +119,8 @@ fn verify_pty_flow(ctx: &mut TestContext) {
     let start = Instant::now();
     loop {
         let is_running = {
-            let active = ctx.active_processes.lock().unwrap();
-            active.contains_key(&pgid)
+            let active = ctx.active_processes.lock();
+            active.contains_key(&pgid.to_string())
         };
         if !is_running {
             break;
@@ -212,8 +212,8 @@ fn verify_cleanup_flow(mut ctx: TestContext) {
     let sleep_pgid = sleep_res.as_i64().unwrap() as i32;
 
     {
-        let active = ctx.active_processes.lock().unwrap();
-        assert!(active.contains_key(&sleep_pgid));
+        let active = ctx.active_processes.lock();
+        assert!(active.contains_key(&sleep_pgid.to_string()));
     }
 
     let pm = ctx.process_manager.clone();

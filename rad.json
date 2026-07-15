@@ -11,13 +11,18 @@
       "enabled": true,
       "permissions": {
         "fs_read_allow": ["*"],
-        "fs_write_allow": ["*"]
+        "fs_write_allow": ["*"],
+        "network": {
+          "allow_network": true,
+          "allow_domains": ["*"]
+        }
       }
     },
     {
       "name": "rust-template-extension",
-      "source": "templates/rust/target/wasm32-wasip1/release/rad_extension_template.wasm",
+      "source": "target/wasm32-wasip2/release/rad_extension_template.wasm",
       "enabled": true,
+      "role": "extension",
       "permissions": {
         "fs_read_allow": ["*"],
         "fs_write_allow": ["*"],

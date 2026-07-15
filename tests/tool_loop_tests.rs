@@ -5,9 +5,10 @@ use rad::ipc::RasCoreEvent;
 use rad::process::ProcessManager;
 use rad::wasm::WasmRuntime;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 struct MockNetwork {
@@ -23,7 +24,7 @@ impl rad::subsystems::NetworkSubsystem for MockNetwork {
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
         _llm_timeout_policy: Arc<Mutex<rad::ipc::TimeoutPolicy>>,
     ) -> Result<String, String> {
-        let mut guard = self.responses.lock().unwrap();
+        let mut guard = self.responses.lock();
         if let Some(chunks) = guard.pop() {
             let tx = event_tx.clone();
             std::thread::spawn(move || {
@@ -72,11 +73,12 @@ fn test_tool_loop_autonomy() {
 
     // Define multi-turn responses (pop from the end, so order is reversed)
     let turn2 = vec![
-        "data: {\"choices\":[{\"delta\":{\"content\":\"I have written the file.\"}}]}\n".to_string(),
+        "data: {\"choices\":[{\"delta\":{\"content\":\"I have written the file.\"}}]}\n"
+            .to_string(),
         "data: [DONE]\n".to_string(),
     ];
     let turn1 = vec![
-        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_w\",\"type\":\"function\",\"function\":{\"name\":\"file_write\",\"arguments\":\"{\\\"path\\\":\\\"test_out.txt\\\",\\\"content\\\":\\\"hello from LLM\\\"}\"}}]}}]}\n".to_string(),
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_w\",\"type\":\"function\",\"function\":{\"name\":\"write\",\"arguments\":\"{\\\"path\\\":\\\"test_out.txt\\\",\\\"content\\\":\\\"hello from LLM\\\"}\"}}]}}]}\n".to_string(),
         "data: [DONE]\n".to_string(),
     ];
 
@@ -86,15 +88,13 @@ fn test_tool_loop_autonomy() {
     let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    
+
     let mut runtime = WasmRuntime::new(
         "test-extension".to_string(),
         std::path::Path::new(wasm_path),
         "orchestrator".to_string(),
         perms,
         sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
-
-
         process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network,
@@ -106,9 +106,11 @@ fn test_tool_loop_autonomy() {
     .unwrap();
 
     // 1. Send human input to start the loop
-    runtime.on_event(&RasCoreEvent::HumanInputReceived {
-        text: "start".to_string(),
-    }).unwrap();
+    runtime
+        .on_event(&RasCoreEvent::HumanInputReceived {
+            text: "start".to_string(),
+        })
+        .unwrap();
 
     // 2. Poll the events and forward them back to wasm to continue execution loop
     let start_time = Instant::now();
@@ -160,18 +162,20 @@ fn test_context_recovery_with_tool_execution() {
         perms.fs_write_allow.clone(),
     ));
     let process_manager = Arc::new(ProcessManager::new());
-    
+
     // Shared DAG to simulate context recovery
     let dag = Arc::new(Mutex::new(Dag::new()));
     let active_processes = Arc::new(Mutex::new(HashMap::new()));
 
     // Turn 1: request file write
     let turn1 = vec![
-        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_w1\",\"type\":\"function\",\"function\":{\"name\":\"file_write\",\"arguments\":\"{\\\"path\\\":\\\"test_rec.txt\\\",\\\"content\\\":\\\"first write\\\"}\"}}]}}]}\n".to_string(),
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_w1\",\"type\":\"function\",\"function\":{\"name\":\"write\",\"arguments\":\"{\\\"path\\\":\\\"test_rec.txt\\\",\\\"content\\\":\\\"first write\\\"}\"}}]}}]}\n".to_string(),
         "data: [DONE]\n".to_string(),
     ];
     let responses1 = Arc::new(Mutex::new(vec![turn1]));
-    let network1 = Arc::new(MockNetwork { responses: responses1 });
+    let network1 = Arc::new(MockNetwork {
+        responses: responses1,
+    });
     // 1. First execution session
     {
         let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
@@ -183,8 +187,6 @@ fn test_context_recovery_with_tool_execution() {
             "orchestrator".to_string(),
             perms.clone(),
             sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
-
-
             process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
             dag_subsystem,
             network1,
@@ -195,9 +197,11 @@ fn test_context_recovery_with_tool_execution() {
         )
         .unwrap();
 
-        runtime.on_event(&RasCoreEvent::HumanInputReceived {
-            text: "start session 1".to_string(),
-        }).unwrap();
+        runtime
+            .on_event(&RasCoreEvent::HumanInputReceived {
+                text: "start session 1".to_string(),
+            })
+            .unwrap();
 
         // Process events for 2 seconds to allow tool execution
         let start_time = Instant::now();
@@ -214,11 +218,14 @@ fn test_context_recovery_with_tool_execution() {
 
     // 2. Second session (context recovery from the same DAG instance)
     let turn2 = vec![
-        "data: {\"choices\":[{\"delta\":{\"content\":\"Completed task with context!\"}}]}\n".to_string(),
+        "data: {\"choices\":[{\"delta\":{\"content\":\"Completed task with context!\"}}]}\n"
+            .to_string(),
         "data: [DONE]\n".to_string(),
     ];
     let responses2 = Arc::new(Mutex::new(vec![turn2]));
-    let network2 = Arc::new(MockNetwork { responses: responses2 });
+    let network2 = Arc::new(MockNetwork {
+        responses: responses2,
+    });
 
     {
         let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
@@ -230,8 +237,6 @@ fn test_context_recovery_with_tool_execution() {
             "orchestrator".to_string(),
             perms,
             sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
-
-
             process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
             dag_subsystem,
             network2,
@@ -242,9 +247,11 @@ fn test_context_recovery_with_tool_execution() {
         )
         .unwrap();
 
-        runtime.on_event(&RasCoreEvent::HumanInputReceived {
-            text: "continue session 2".to_string(),
-        }).unwrap();
+        runtime
+            .on_event(&RasCoreEvent::HumanInputReceived {
+                text: "continue session 2".to_string(),
+            })
+            .unwrap();
 
         let start_time = Instant::now();
         let mut completed = false;
@@ -260,6 +267,11 @@ fn test_context_recovery_with_tool_execution() {
         assert!(completed, "Task did not complete in session 2");
     }
 
-    let dag_guard = dag.lock().unwrap();
-    assert!(dag_guard.nodes.values().any(|n| n.text.contains("first write")));
+    let dag_guard = dag.lock();
+    assert!(
+        dag_guard
+            .nodes
+            .values()
+            .any(|n| n.text.contains("first write"))
+    );
 }

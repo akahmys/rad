@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use crate::call_host;
 use rad_models::RasRpcCommand;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(serde::Deserialize)]
 struct ExtensionConfigInfo {
@@ -173,12 +173,16 @@ pub fn parse_mcp_call_response(json_str: &str) -> Result<(String, String), Strin
     let tool_call_id = id_str["mcp_call:".len()..].to_string();
 
     if let Some(err) = resp.error {
-        return Ok((tool_call_id, format!("Error from MCP server: {}", err.message)));
+        return Ok((
+            tool_call_id,
+            format!("Error from MCP server: {}", err.message),
+        ));
     }
 
     if let Some(res) = resp.result {
         if let Some(content) = res.content {
-            let texts: Vec<String> = content.into_iter()
+            let texts: Vec<String> = content
+                .into_iter()
                 .filter(|item| item.item_type == "text")
                 .filter_map(|item| item.text)
                 .collect();
@@ -186,7 +190,8 @@ pub fn parse_mcp_call_response(json_str: &str) -> Result<(String, String), Strin
         }
     }
 
-    Ok((tool_call_id, "No content returned from MCP server.".to_string()))
+    Ok((
+        tool_call_id,
+        "No content returned from MCP server.".to_string(),
+    ))
 }
-
-

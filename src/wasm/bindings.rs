@@ -2,6 +2,11 @@ pub mod rad_extension {
     wasmtime::component::bindgen!({
         path: "wit/rad.wit",
         world: "rad-extension",
+        with: {
+            "radcomp:extension/types/stream-handle": crate::wasm::HostStream,
+            "radcomp:extension/types/file-handle": crate::wasm::HostFile,
+            "radcomp:extension/types/execution-handle": crate::wasm::HostExecution,
+        }
     });
 }
 
@@ -35,27 +40,20 @@ pub mod rad_tool_provider {
     });
 }
 
-
-pub use rad_extension::radcomp::extension::types as wit;
 pub use rad_extension::RadExtension;
 pub use rad_extension::RadExtensionImports;
-
+pub use rad_extension::radcomp::extension::types as wit;
 
 use rad_models::{
-    Target as CoreTarget,
-    TimeoutPolicy as CoreTimeoutPolicy,
-    PendingToolCallInfo as CorePendingToolCallInfo,
-    RasCoreEvent as CoreRasCoreEvent,
-    RasRpcCommand as CoreRasRpcCommand,
+    PendingToolCallInfo as CorePendingToolCallInfo, RasCoreEvent as CoreRasCoreEvent,
+    RasRpcCommand as CoreRasRpcCommand, Target as CoreTarget, TimeoutPolicy as CoreTimeoutPolicy,
 };
-
-
 
 impl From<wit::Target> for CoreTarget {
     fn from(t: wit::Target) -> Self {
         match t {
             wit::Target::Llm => CoreTarget::Llm,
-            wit::Target::Process(p) => CoreTarget::Process(p),
+            wit::Target::Process(p) => CoreTarget::Process(p.to_string()),
         }
     }
 }
@@ -64,7 +62,7 @@ impl From<CoreTarget> for wit::Target {
     fn from(t: CoreTarget) -> Self {
         match t {
             CoreTarget::Llm => wit::Target::Llm,
-            CoreTarget::Process(p) => wit::Target::Process(p),
+            CoreTarget::Process(p) => wit::Target::Process(p.parse().unwrap_or(0)),
         }
     }
 }
@@ -84,12 +82,13 @@ impl From<wit::TimeoutPolicy> for CoreTimeoutPolicy {
 impl From<CoreTimeoutPolicy> for wit::TimeoutPolicy {
     fn from(tp: CoreTimeoutPolicy) -> Self {
         match tp {
-            CoreTimeoutPolicy::Dynamic { heartbeat_timeout_ms, max_silent_wait_ms } => {
-                wit::TimeoutPolicy::Dynamic(wit::DynamicPolicy {
-                    heartbeat_timeout_ms,
-                    max_silent_wait_ms,
-                })
-            }
+            CoreTimeoutPolicy::Dynamic {
+                heartbeat_timeout_ms,
+                max_silent_wait_ms,
+            } => wit::TimeoutPolicy::Dynamic(wit::DynamicPolicy {
+                heartbeat_timeout_ms,
+                max_silent_wait_ms,
+            }),
             CoreTimeoutPolicy::Infinite => wit::TimeoutPolicy::Infinite,
         }
     }
@@ -101,7 +100,7 @@ impl From<wit::PendingToolCallInfo> for CorePendingToolCallInfo {
             id: info.id,
             name: info.name,
             arguments: info.arguments,
-            pgid: info.pgid,
+            pgid: info.pgid.map(|p| p.to_string()),
         }
     }
 }
@@ -112,7 +111,7 @@ impl From<CorePendingToolCallInfo> for wit::PendingToolCallInfo {
             id: info.id,
             name: info.name,
             arguments: info.arguments,
-            pgid: info.pgid,
+            pgid: info.pgid.map(|p| p.parse().unwrap_or(0)),
         }
     }
 }
@@ -120,7 +119,9 @@ impl From<CorePendingToolCallInfo> for wit::PendingToolCallInfo {
 impl From<wit::RasRpcCommand> for CoreRasRpcCommand {
     fn from(cmd: wit::RasRpcCommand) -> Self {
         match cmd {
-            wit::RasRpcCommand::FileRead(path) => CoreRasRpcCommand::FileRead { path: std::path::PathBuf::from(path) },
+            wit::RasRpcCommand::FileRead(path) => CoreRasRpcCommand::FileRead {
+                path: std::path::PathBuf::from(path),
+            },
             wit::RasRpcCommand::FileWrite(payload) => CoreRasRpcCommand::FileWrite {
                 path: std::path::PathBuf::from(payload.path),
                 data: payload.data,
@@ -129,7 +130,9 @@ impl From<wit::RasRpcCommand> for CoreRasRpcCommand {
                 path: std::path::PathBuf::from(payload.path),
                 diff: payload.diff,
             },
-            wit::RasRpcCommand::SpawnBashProcess(cmd_str) => CoreRasRpcCommand::SpawnBashProcess { command: cmd_str },
+            wit::RasRpcCommand::SpawnBashProcess(cmd_str) => {
+                CoreRasRpcCommand::SpawnBashProcess { command: cmd_str }
+            }
             wit::RasRpcCommand::CreateNode(payload) => CoreRasRpcCommand::CreateNode {
                 parent_id: payload.parent_id,
                 node_type: payload.node_type,
@@ -145,22 +148,32 @@ impl From<wit::RasRpcCommand> for CoreRasRpcCommand {
             wit::RasRpcCommand::DeleteNode(node_id) => CoreRasRpcCommand::DeleteNode { node_id },
             wit::RasRpcCommand::TakeSnapshot(payload) => CoreRasRpcCommand::TakeSnapshot {
                 node_id: payload.node_id,
-                target_paths: payload.target_paths.into_iter().map(std::path::PathBuf::from).collect(),
+                target_paths: payload
+                    .target_paths
+                    .into_iter()
+                    .map(std::path::PathBuf::from)
+                    .collect(),
             },
-            wit::RasRpcCommand::CheckoutSnapshot(node_id) => CoreRasRpcCommand::CheckoutSnapshot { node_id },
+            wit::RasRpcCommand::CheckoutSnapshot(node_id) => {
+                CoreRasRpcCommand::CheckoutSnapshot { node_id }
+            }
             wit::RasRpcCommand::OpenHttpStream(payload) => CoreRasRpcCommand::OpenHttpStream {
                 url: payload.url,
                 headers: payload.headers.into_iter().collect(),
                 body: payload.body,
             },
-            wit::RasRpcCommand::SetStreamTimeoutPolicy(payload) => CoreRasRpcCommand::SetStreamTimeoutPolicy {
-                target: CoreTarget::from(payload.target),
-                policy: CoreTimeoutPolicy::from(payload.policy),
-            },
+            wit::RasRpcCommand::SetStreamTimeoutPolicy(payload) => {
+                CoreRasRpcCommand::SetStreamTimeoutPolicy {
+                    target: CoreTarget::from(payload.target),
+                    policy: CoreTimeoutPolicy::from(payload.policy),
+                }
+            }
             wit::RasRpcCommand::WriteStdout(text) => CoreRasRpcCommand::WriteStdout { text },
             wit::RasRpcCommand::CompleteTask => CoreRasRpcCommand::CompleteTask,
             wit::RasRpcCommand::GetDag => CoreRasRpcCommand::GetDag,
-            wit::RasRpcCommand::AskHumanApproval(prompt) => CoreRasRpcCommand::AskHumanApproval { prompt },
+            wit::RasRpcCommand::AskHumanApproval(prompt) => {
+                CoreRasRpcCommand::AskHumanApproval { prompt }
+            }
             wit::RasRpcCommand::ReportTokenUsage(payload) => CoreRasRpcCommand::ReportTokenUsage {
                 prompt_tokens: payload.prompt_tokens,
                 completion_tokens: payload.completion_tokens,
@@ -177,6 +190,7 @@ impl From<wit::RasRpcCommand> for CoreRasRpcCommand {
             wit::RasRpcCommand::GetRepoMap => CoreRasRpcCommand::GetRepoMap,
             wit::RasRpcCommand::GetTools => CoreRasRpcCommand::GetTools,
             wit::RasRpcCommand::ExecuteTool(payload) => CoreRasRpcCommand::ExecuteTool {
+                call_id: payload.call_id,
                 name: payload.name,
                 arguments: payload.arguments,
             },
@@ -187,26 +201,44 @@ impl From<wit::RasRpcCommand> for CoreRasRpcCommand {
 impl From<CoreRasCoreEvent> for wit::RasCoreEvent {
     fn from(event: CoreRasCoreEvent) -> Self {
         match event {
-            CoreRasCoreEvent::HttpChunkReceived { chunk } => wit::RasCoreEvent::HttpChunkReceived(chunk),
-            CoreRasCoreEvent::HttpErrorReceived { message } => wit::RasCoreEvent::HttpErrorReceived(message),
-            CoreRasCoreEvent::ToolCallRequested { call_id, name, args } => {
-                wit::RasCoreEvent::ToolCallRequested(wit::ToolCallRequest {
-                    call_id,
-                    name,
-                    args: args.to_string(),
+            CoreRasCoreEvent::HttpChunkReceived { chunk } => {
+                wit::RasCoreEvent::HttpChunkReceived(chunk)
+            }
+            CoreRasCoreEvent::HttpErrorReceived { message } => {
+                wit::RasCoreEvent::HttpErrorReceived(message)
+            }
+            CoreRasCoreEvent::ToolCallRequested {
+                call_id,
+                name,
+                args,
+            } => wit::RasCoreEvent::ToolCallRequested(wit::ToolCallRequest {
+                call_id,
+                name,
+                args: args.to_string(),
+            }),
+            CoreRasCoreEvent::ProcessSpawned { pgid, pid } => {
+                wit::RasCoreEvent::ProcessSpawned(wit::ProcessSpawnInfo {
+                    pgid: pgid.parse().unwrap_or(0),
+                    pid,
                 })
             }
-            CoreRasCoreEvent::ProcessSpawned { pgid, pid } => {
-                wit::RasCoreEvent::ProcessSpawned(wit::ProcessSpawnInfo { pgid, pid })
-            }
             CoreRasCoreEvent::ProcessStdout { pgid, data } => {
-                wit::RasCoreEvent::ProcessStdout(wit::ProcessOutput { pgid, data })
+                wit::RasCoreEvent::ProcessStdout(wit::ProcessOutput {
+                    pgid: pgid.parse().unwrap_or(0),
+                    data,
+                })
             }
             CoreRasCoreEvent::ProcessStderr { pgid, data } => {
-                wit::RasCoreEvent::ProcessStderr(wit::ProcessOutput { pgid, data })
+                wit::RasCoreEvent::ProcessStderr(wit::ProcessOutput {
+                    pgid: pgid.parse().unwrap_or(0),
+                    data,
+                })
             }
             CoreRasCoreEvent::ProcessExited { pgid, exit_code } => {
-                wit::RasCoreEvent::ProcessExited(wit::ProcessExitInfo { pgid, exit_code })
+                wit::RasCoreEvent::ProcessExited(wit::ProcessExitInfo {
+                    pgid: pgid.parse().unwrap_or(0),
+                    exit_code,
+                })
             }
             CoreRasCoreEvent::FileChanged { path, change_type } => {
                 wit::RasCoreEvent::FileChanged(wit::FileChangeInfo {
@@ -214,17 +246,32 @@ impl From<CoreRasCoreEvent> for wit::RasCoreEvent {
                     change_type,
                 })
             }
-            CoreRasCoreEvent::StreamTimeout { target, duration_ms } => {
-                wit::RasCoreEvent::StreamTimeout(wit::StreamTimeoutInfo { target, duration_ms })
+            CoreRasCoreEvent::StreamTimeout {
+                target,
+                duration_ms,
+            } => wit::RasCoreEvent::StreamTimeout(wit::StreamTimeoutInfo {
+                target,
+                duration_ms,
+            }),
+            CoreRasCoreEvent::HumanInputReceived { text } => {
+                wit::RasCoreEvent::HumanInputReceived(text)
             }
-            CoreRasCoreEvent::HumanInputReceived { text } => wit::RasCoreEvent::HumanInputReceived(text),
             CoreRasCoreEvent::TaskCompleted => wit::RasCoreEvent::TaskCompleted,
-            CoreRasCoreEvent::Rehydrate { active_calls } => {
-                wit::RasCoreEvent::Rehydrate(active_calls.into_iter().map(wit::PendingToolCallInfo::from).collect())
-            }
-            CoreRasCoreEvent::McpResponse { name, message } => {
-                wit::RasCoreEvent::McpResponse(wit::McpResponsePayload { name, message })
-            }
+            CoreRasCoreEvent::Rehydrate { active_calls } => wit::RasCoreEvent::Rehydrate(
+                active_calls
+                    .into_iter()
+                    .map(wit::PendingToolCallInfo::from)
+                    .collect(),
+            ),
+            CoreRasCoreEvent::McpResponse {
+                call_id,
+                name,
+                message,
+            } => wit::RasCoreEvent::McpResponse(wit::McpResponsePayload {
+                call_id,
+                name,
+                message,
+            }),
         }
     }
 }
@@ -232,66 +279,117 @@ impl From<CoreRasCoreEvent> for wit::RasCoreEvent {
 impl From<CoreRasRpcCommand> for wit::RasRpcCommand {
     fn from(cmd: CoreRasRpcCommand) -> Self {
         match cmd {
-            CoreRasRpcCommand::FileRead { path } => wit::RasRpcCommand::FileRead(path.to_string_lossy().into_owned()),
-            CoreRasRpcCommand::FileWrite { path, data } => wit::RasRpcCommand::FileWrite(wit::FileWritePayload {
-                path: path.to_string_lossy().into_owned(),
-                data,
-            }),
-            CoreRasRpcCommand::FileEditPatch { path, diff } => wit::RasRpcCommand::FileEditPatch(wit::FilePatchPayload {
-                path: path.to_string_lossy().into_owned(),
-                diff,
-            }),
-            CoreRasRpcCommand::SpawnBashProcess { command } => wit::RasRpcCommand::SpawnBashProcess(command),
-            CoreRasRpcCommand::CreateNode { parent_id, node_type } => wit::RasRpcCommand::CreateNode(wit::CreateNodePayload {
+            CoreRasRpcCommand::FileRead { path } => {
+                wit::RasRpcCommand::FileRead(path.to_string_lossy().into_owned())
+            }
+            CoreRasRpcCommand::FileWrite { path, data } => {
+                wit::RasRpcCommand::FileWrite(wit::FileWritePayload {
+                    path: path.to_string_lossy().into_owned(),
+                    data,
+                })
+            }
+            CoreRasRpcCommand::FileEditPatch { path, diff } => {
+                wit::RasRpcCommand::FileEditPatch(wit::FilePatchPayload {
+                    path: path.to_string_lossy().into_owned(),
+                    diff,
+                })
+            }
+            CoreRasRpcCommand::SpawnBashProcess { command } => {
+                wit::RasRpcCommand::SpawnBashProcess(command)
+            }
+            CoreRasRpcCommand::CreateNode {
+                parent_id,
+                node_type,
+            } => wit::RasRpcCommand::CreateNode(wit::CreateNodePayload {
                 parent_id,
                 node_type,
             }),
-            CoreRasRpcCommand::SetNodeText { node_id, text } => wit::RasRpcCommand::SetNodeText(wit::SetNodeTextPayload {
-                node_id,
-                text,
-            }),
-            CoreRasRpcCommand::MergeNodes { node_ids, summary_text } => wit::RasRpcCommand::MergeNodes(wit::MergeNodesPayload {
+            CoreRasRpcCommand::SetNodeText { node_id, text } => {
+                wit::RasRpcCommand::SetNodeText(wit::SetNodeTextPayload { node_id, text })
+            }
+            CoreRasRpcCommand::MergeNodes {
+                node_ids,
+                summary_text,
+            } => wit::RasRpcCommand::MergeNodes(wit::MergeNodesPayload {
                 node_ids,
                 summary_text,
             }),
             CoreRasRpcCommand::DeleteNode { node_id } => wit::RasRpcCommand::DeleteNode(node_id),
-            CoreRasRpcCommand::TakeSnapshot { node_id, target_paths } => wit::RasRpcCommand::TakeSnapshot(wit::TakeSnapshotPayload {
+            CoreRasRpcCommand::TakeSnapshot {
                 node_id,
-                target_paths: target_paths.into_iter().map(|p| p.to_string_lossy().into_owned()).collect(),
+                target_paths,
+            } => wit::RasRpcCommand::TakeSnapshot(wit::TakeSnapshotPayload {
+                node_id,
+                target_paths: target_paths
+                    .into_iter()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .collect(),
             }),
-            CoreRasRpcCommand::CheckoutSnapshot { node_id } => wit::RasRpcCommand::CheckoutSnapshot(node_id),
-            CoreRasRpcCommand::OpenHttpStream { url, headers, body } => wit::RasRpcCommand::OpenHttpStream(wit::OpenHttpStreamPayload {
-                url,
-                headers: headers.into_iter().collect(),
-                body,
-            }),
-            CoreRasRpcCommand::SetStreamTimeoutPolicy { target, policy } => wit::RasRpcCommand::SetStreamTimeoutPolicy(wit::SetStreamTimeoutPolicyPayload {
-                target: wit::Target::from(target),
-                policy: wit::TimeoutPolicy::from(policy),
-            }),
+            CoreRasRpcCommand::CheckoutSnapshot { node_id } => {
+                wit::RasRpcCommand::CheckoutSnapshot(node_id)
+            }
+            CoreRasRpcCommand::OpenHttpStream { url, headers, body } => {
+                wit::RasRpcCommand::OpenHttpStream(wit::OpenHttpStreamPayload {
+                    url,
+                    headers: headers.into_iter().collect(),
+                    body,
+                })
+            }
+            CoreRasRpcCommand::SetStreamTimeoutPolicy { target, policy } => {
+                wit::RasRpcCommand::SetStreamTimeoutPolicy(wit::SetStreamTimeoutPolicyPayload {
+                    target: wit::Target::from(target),
+                    policy: wit::TimeoutPolicy::from(policy),
+                })
+            }
             CoreRasRpcCommand::WriteStdout { text } => wit::RasRpcCommand::WriteStdout(text),
             CoreRasRpcCommand::CompleteTask => wit::RasRpcCommand::CompleteTask,
             CoreRasRpcCommand::GetDag => wit::RasRpcCommand::GetDag,
-            CoreRasRpcCommand::AskHumanApproval { prompt } => wit::RasRpcCommand::AskHumanApproval(prompt),
-            CoreRasRpcCommand::ReportTokenUsage { prompt_tokens, completion_tokens } => wit::RasRpcCommand::ReportTokenUsage(wit::ReportTokenUsagePayload {
+            CoreRasRpcCommand::AskHumanApproval { prompt } => {
+                wit::RasRpcCommand::AskHumanApproval(prompt)
+            }
+            CoreRasRpcCommand::ReportTokenUsage {
+                prompt_tokens,
+                completion_tokens,
+            } => wit::RasRpcCommand::ReportTokenUsage(wit::ReportTokenUsagePayload {
                 prompt_tokens,
                 completion_tokens,
             }),
-            CoreRasRpcCommand::SpawnMcpServer { name, command, args } => wit::RasRpcCommand::SpawnMcpServer(wit::SpawnMcpServerPayload {
+            CoreRasRpcCommand::SpawnMcpServer {
+                name,
+                command,
+                args,
+            } => wit::RasRpcCommand::SpawnMcpServer(wit::SpawnMcpServerPayload {
                 name,
                 command,
                 args,
             }),
-            CoreRasRpcCommand::SendMcpRequest { name, message } => wit::RasRpcCommand::SendMcpRequest(wit::SendMcpRequestPayload {
-                name,
-                message,
-            }),
+            CoreRasRpcCommand::SendMcpRequest { name, message } => {
+                wit::RasRpcCommand::SendMcpRequest(wit::SendMcpRequestPayload { name, message })
+            }
             CoreRasRpcCommand::GetRepoMap => wit::RasRpcCommand::GetRepoMap,
             CoreRasRpcCommand::GetTools => wit::RasRpcCommand::GetTools,
-            CoreRasRpcCommand::ExecuteTool { name, arguments } => wit::RasRpcCommand::ExecuteTool(wit::ExecuteToolPayload {
+            CoreRasRpcCommand::ExecuteTool {
+                call_id,
+                name,
+                arguments,
+            } => wit::RasRpcCommand::ExecuteTool(wit::ExecuteToolPayload {
+                call_id,
                 name,
                 arguments,
             }),
+            CoreRasRpcCommand::OpenFile { path, writeable } => {
+                if writeable {
+                    wit::RasRpcCommand::FileWrite(wit::FileWritePayload {
+                        path: path.to_string_lossy().into_owned(),
+                        data: vec![],
+                    })
+                } else {
+                    wit::RasRpcCommand::FileRead(path.to_string_lossy().into_owned())
+                }
+            }
+            CoreRasRpcCommand::OpenProcess { command } => {
+                wit::RasRpcCommand::SpawnBashProcess(command)
+            }
         }
     }
 }

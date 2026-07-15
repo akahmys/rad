@@ -5,15 +5,16 @@ use rad::ipc::RasRpcCommand;
 use rad::process::ProcessManager;
 use rad::wasm::WasmRuntime;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 struct TestContext {
     _temp_dir: tempfile::TempDir,
     _sandbox: Arc<FsSandbox>,
     _process_manager: Arc<ProcessManager>,
-    _active_processes: Arc<Mutex<HashMap<i32, rad::process::RunningProcess>>>,
+    _active_processes: Arc<Mutex<HashMap<String, rad::process::RunningProcess>>>,
     runtime: WasmRuntime,
 }
 
@@ -43,7 +44,6 @@ fn setup_test_context(perms: PermissionConfig, dag: Arc<Mutex<Dag>>) -> TestCont
         "orchestrator".to_string(),
         perms,
         sandbox.clone() as Arc<dyn rad::subsystems::FsSubsystem>,
-
         process_manager.clone() as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network_subsystem,
@@ -129,7 +129,10 @@ fn test_context_restoration() {
         let restored_dag: Dag = serde_json::from_value(dag_val).unwrap();
 
         assert!(restored_dag.current_node_id.is_some());
-        let current_node = restored_dag.nodes.get(restored_dag.current_node_id.as_ref().unwrap()).unwrap();
+        let current_node = restored_dag
+            .nodes
+            .get(restored_dag.current_node_id.as_ref().unwrap())
+            .unwrap();
         assert_eq!(current_node.node_type, "user");
         assert_eq!(current_node.text, "Hello from previous session");
     }

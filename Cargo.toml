@@ -3,10 +3,16 @@ name = "rad"
 version = "0.8.0"
 edition = "2024"
 
-[dependencies]
+[workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_bytes = "0.11"
+wit-bindgen = "0.36.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_bytes = { workspace = true }
 jsonc-parser = { version = "0.26", features = ["serde"] }
 dirs = "5.0"
 clap = { version = "4.4", features = ["derive"] }
@@ -17,6 +23,7 @@ wasmtime-wasi = "29.0.0"
 notify = "6.1.1"
 portable-pty = "0.8"
 reqwest = { version = "0.11", features = ["stream", "json", "rustls-tls"] }
+parking_lot = "0.12"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time", "sync", "macros"] }
 futures-util = "0.3"
 bytes = "1"
@@ -36,9 +43,5 @@ members = [
     "ext/security-guard",
     "ext/mcp-tool-provider",
     "models",
+    "templates/rust",
 ]
-
-
-
-
-

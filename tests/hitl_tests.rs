@@ -5,9 +5,10 @@ use rad::ipc::RasCoreEvent;
 use rad::process::ProcessManager;
 use rad::wasm::WasmRuntime;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 struct MockNetwork {
@@ -23,7 +24,7 @@ impl rad::subsystems::NetworkSubsystem for MockNetwork {
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
         _llm_timeout_policy: Arc<Mutex<rad::ipc::TimeoutPolicy>>,
     ) -> Result<String, String> {
-        let mut guard = self.responses.lock().unwrap();
+        let mut guard = self.responses.lock();
         if let Some(chunks) = guard.pop() {
             let tx = event_tx.clone();
             std::thread::spawn(move || {
@@ -42,7 +43,11 @@ fn setup_runtime(
     workspace: &std::path::Path,
     snapshots: &std::path::Path,
     hitl_enabled: bool,
-) -> (WasmRuntime, std::sync::mpsc::Receiver<RasCoreEvent>, Arc<Mutex<Dag>>) {
+) -> (
+    WasmRuntime,
+    std::sync::mpsc::Receiver<RasCoreEvent>,
+    Arc<Mutex<Dag>>,
+) {
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
         fs_write_allow: vec!["*".to_string()],
@@ -82,7 +87,6 @@ fn setup_runtime(
         "orchestrator".to_string(),
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
-
         process_manager as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network,
@@ -115,7 +119,7 @@ fn test_hitl_approval_flow() {
         "data: [DONE]\n".to_string(),
     ];
     let turn1_granted = vec![
-        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_x\",\"type\":\"function\",\"function\":{\"name\":\"spawn_bash_process\",\"arguments\":\"{\\\"command\\\":\\\"echo \\\\\\\"approved\\\\\\\" > test_hitl.txt\\\"}\"}}]}}]}\n".to_string(),
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_x\",\"type\":\"function\",\"function\":{\"name\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"echo \\\\\\\"approved\\\\\\\" > test_hitl.txt\\\"}\"}}]}}]}\n".to_string(),
         "data: [DONE]\n".to_string(),
     ];
 
@@ -126,9 +130,11 @@ fn test_hitl_approval_flow() {
         true,
     );
 
-    runtime_granted.on_event(&RasCoreEvent::HumanInputReceived {
-        text: "start".to_string(),
-    }).unwrap();
+    runtime_granted
+        .on_event(&RasCoreEvent::HumanInputReceived {
+            text: "start".to_string(),
+        })
+        .unwrap();
 
     let start_time = Instant::now();
     let mut completed = false;
@@ -145,7 +151,10 @@ fn test_hitl_approval_flow() {
     assert!(completed, "Task did not complete");
 
     let path_granted = workspace_granted.join("test_hitl.txt");
-    assert!(path_granted.exists(), "File should exist because tool execution was approved");
+    assert!(
+        path_granted.exists(),
+        "File should exist because tool execution was approved"
+    );
     let content = fs::read_to_string(path_granted).unwrap();
     assert_eq!(content.trim(), "approved");
 
@@ -162,11 +171,12 @@ fn test_hitl_approval_flow() {
     fs::create_dir_all(&snapshots_rejected).unwrap();
 
     let turn2_rejected = vec![
-        "data: {\"choices\":[{\"delta\":{\"content\":\"Understood, it was rejected.\"}}]}\n".to_string(),
+        "data: {\"choices\":[{\"delta\":{\"content\":\"Understood, it was rejected.\"}}]}\n"
+            .to_string(),
         "data: [DONE]\n".to_string(),
     ];
     let turn1_rejected = vec![
-        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_y\",\"type\":\"function\",\"function\":{\"name\":\"spawn_bash_process\",\"arguments\":\"{\\\"command\\\":\\\"echo \\\\\\\"rejected\\\\\\\" > test_hitl.txt\\\"}\"}}]}}]}\n".to_string(),
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_y\",\"type\":\"function\",\"function\":{\"name\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"echo \\\\\\\"rejected\\\\\\\" > test_hitl.txt\\\"}\"}}]}}]}\n".to_string(),
         "data: [DONE]\n".to_string(),
     ];
 
@@ -177,9 +187,11 @@ fn test_hitl_approval_flow() {
         true,
     );
 
-    runtime_rejected.on_event(&RasCoreEvent::HumanInputReceived {
-        text: "start".to_string(),
-    }).unwrap();
+    runtime_rejected
+        .on_event(&RasCoreEvent::HumanInputReceived {
+            text: "start".to_string(),
+        })
+        .unwrap();
 
     let start_time_rejected = Instant::now();
     let mut completed_rejected = false;
@@ -196,9 +208,12 @@ fn test_hitl_approval_flow() {
     assert!(completed_rejected, "Task did not complete");
 
     let path_rejected = workspace_rejected.join("test_hitl.txt");
-    assert!(!path_rejected.exists(), "File should NOT exist because tool execution was rejected");
+    assert!(
+        !path_rejected.exists(),
+        "File should NOT exist because tool execution was rejected"
+    );
 
-    let dag_guard = dag_rejected.lock().unwrap();
+    let dag_guard = dag_rejected.lock();
     let mut found_rejection = false;
     for node in dag_guard.nodes.values() {
         if node.text.contains("User rejected execution of tool") {
@@ -206,7 +221,10 @@ fn test_hitl_approval_flow() {
             break;
         }
     }
-    assert!(found_rejection, "Rejection message must be saved in the DAG history");
+    assert!(
+        found_rejection,
+        "Rejection message must be saved in the DAG history"
+    );
 
     // Clean up
     unsafe {
@@ -228,21 +246,19 @@ fn test_yolo_mode_auto_approval() {
         "data: [DONE]\n".to_string(),
     ];
     let turn1 = vec![
-        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_yolo\",\"type\":\"function\",\"function\":{\"name\":\"spawn_bash_process\",\"arguments\":\"{\\\"command\\\":\\\"echo \\\\\\\"yolo\\\\\\\" > test_yolo.txt\\\"}\"}}]}}]}\n".to_string(),
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_yolo\",\"type\":\"function\",\"function\":{\"name\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"echo \\\\\\\"yolo\\\\\\\" > test_yolo.txt\\\"}\"}}]}}]}\n".to_string(),
         "data: [DONE]\n".to_string(),
     ];
 
     // hitl_enabled = false (YOLO mode)
-    let (mut runtime, event_rx, _dag) = setup_runtime(
-        vec![turn2, turn1],
-        &workspace,
-        &snapshots,
-        false,
-    );
+    let (mut runtime, event_rx, _dag) =
+        setup_runtime(vec![turn2, turn1], &workspace, &snapshots, false);
 
-    runtime.on_event(&RasCoreEvent::HumanInputReceived {
-        text: "start".to_string(),
-    }).unwrap();
+    runtime
+        .on_event(&RasCoreEvent::HumanInputReceived {
+            text: "start".to_string(),
+        })
+        .unwrap();
 
     let start_time = Instant::now();
     let mut completed = false;
@@ -259,7 +275,10 @@ fn test_yolo_mode_auto_approval() {
     assert!(completed, "Task did not complete in YOLO mode");
 
     let path = workspace.join("test_yolo.txt");
-    assert!(path.exists(), "File should exist because tool execution was auto-approved in YOLO mode");
+    assert!(
+        path.exists(),
+        "File should exist because tool execution was auto-approved in YOLO mode"
+    );
     let content = fs::read_to_string(path).unwrap();
     assert_eq!(content.trim(), "yolo");
 }

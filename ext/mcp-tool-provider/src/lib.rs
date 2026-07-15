@@ -6,8 +6,8 @@ wit_bindgen::generate!({
     world: "rad-tool-provider",
 });
 
-use rad_models::RasRpcCommand as CoreRpcCommand;
 use self::radcomp::extension::types as wit;
+use rad_models::RasRpcCommand as CoreRpcCommand;
 
 mod conv;
 
@@ -19,67 +19,53 @@ impl Guest for ToolProviderImpl {
         serde_json::to_string(&tools).map_err(|e| format!("Failed to serialize tools: {e}"))
     }
 
-    fn execute_tool(name: String, arguments: String) -> Result<String, String> {
+    fn execute_tool(name: String, arguments: String) -> Result<wit::ExecutionHandle, String> {
         match name.as_str() {
-            "file_read" => {
+            "read" => {
                 #[derive(serde::Deserialize)]
                 struct Args {
                     path: std::path::PathBuf,
                 }
                 let args: Args = serde_json::from_str(&arguments)
-                    .map_err(|e| format!("Failed to parse file_read args: {e}"))?;
-                let val = call_host(CoreRpcCommand::FileRead { path: args.path })?;
-                
-                let result_str = if let Some(bytes_val) = val.as_array() {
-                    let bytes: Vec<u8> = bytes_val.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect();
-                    String::from_utf8(bytes).map_err(|e| format!("Invalid UTF-8 in file: {e}"))?
-                } else if let Some(s) = val.as_str() {
-                    s.to_string()
-                } else {
-                    val.to_string()
-                };
-                Ok(result_str)
+                    .map_err(|e| format!("Failed to parse read args: {e}"))?;
+                let path_str = args.path.to_string_lossy();
+                open_process(&format!("cat '{path_str}'"))
             }
-            "file_write" => {
+            "write" => {
                 #[derive(serde::Deserialize)]
                 struct Args {
                     path: std::path::PathBuf,
                     content: String,
                 }
                 let args: Args = serde_json::from_str(&arguments)
-                    .map_err(|e| format!("Failed to parse file_write args: {e}"))?;
-                let _ = call_host(CoreRpcCommand::FileWrite {
-                    path: args.path,
-                    data: args.content.into_bytes(),
-                })?;
-                Ok("File written successfully.".to_string())
+                    .map_err(|e| format!("Failed to parse write args: {e}"))?;
+                let path_str = args.path.to_string_lossy();
+                // Escape single quotes in content to prevent injection in shell
+                let escaped_content = args.content.replace('\'', "'\\''");
+                open_process(&format!("echo -n '{escaped_content}' > '{path_str}'"))
             }
-            "file_edit_patch" => {
+            "edit" => {
                 #[derive(serde::Deserialize)]
                 struct Args {
                     path: std::path::PathBuf,
                     diff: String,
                 }
                 let args: Args = serde_json::from_str(&arguments)
-                    .map_err(|e| format!("Failed to parse file_edit_patch args: {e}"))?;
+                    .map_err(|e| format!("Failed to parse edit args: {e}"))?;
                 let _ = call_host(CoreRpcCommand::FileEditPatch {
                     path: args.path,
                     diff: args.diff,
                 })?;
-                Ok("Patch applied successfully.".to_string())
+                open_process("echo 'Patch applied successfully.'")
             }
-            "spawn_bash_process" => {
+            "bash" => {
                 #[derive(serde::Deserialize)]
                 struct Args {
                     command: String,
                 }
                 let args: Args = serde_json::from_str(&arguments)
-                    .map_err(|e| format!("Failed to parse spawn_bash_process args: {e}"))?;
-                let val = call_host(CoreRpcCommand::SpawnBashProcess {
-                    command: args.command,
-                })?;
-                let pgid = val.as_i64().ok_or_else(|| format!("Expected process PGID integer, got: {val:?}"))?;
-                Ok(format!("Started background process group PGID: {pgid}"))
+                    .map_err(|e| format!("Failed to parse bash args: {e}"))?;
+                open_process(&args.command)
             }
             other => {
                 // If it is an MCP tool, we delegate it via SendMcpRequest
@@ -104,7 +90,7 @@ impl Guest for ToolProviderImpl {
                     name: "echo-mcp".to_string(), // Default mapping or fallback
                     message: req_str,
                 })?;
-                Ok("mcp_async".to_string())
+                open_process("echo 'mcp_async'")
             }
         }
     }
@@ -119,7 +105,8 @@ fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, String> {
             if json_str.is_empty() || json_str == "null" {
                 Ok(serde_json::Value::Null)
             } else {
-                serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error from host: {e}"))
+                serde_json::from_str(&json_str)
+                    .map_err(|e| format!("JSON parse error from host: {e}"))
             }
         }
         Err(err_msg) => Err(err_msg),
@@ -146,8 +133,10 @@ fn get_tool_definitions() -> Vec<Tool> {
         Tool {
             tool_type: "function".to_string(),
             function: FunctionDefinition {
-                name: "file_read".to_string(),
-                description: Some("Read the entire contents of a file at the specified path.".to_string()),
+                name: "read".to_string(),
+                description: Some(
+                    "Read the entire contents of a file at the specified path.".to_string(),
+                ),
                 parameters: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -163,7 +152,7 @@ fn get_tool_definitions() -> Vec<Tool> {
         Tool {
             tool_type: "function".to_string(),
             function: FunctionDefinition {
-                name: "file_write".to_string(),
+                name: "write".to_string(),
                 description: Some("Write content to a file at the specified path.".to_string()),
                 parameters: serde_json::json!({
                     "type": "object",
@@ -184,8 +173,11 @@ fn get_tool_definitions() -> Vec<Tool> {
         Tool {
             tool_type: "function".to_string(),
             function: FunctionDefinition {
-                name: "file_edit_patch".to_string(),
-                description: Some("Apply a unified diff patch to modify a file at the specified path.".to_string()),
+                name: "edit".to_string(),
+                description: Some(
+                    "Apply a unified diff patch to modify a file at the specified path."
+                        .to_string(),
+                ),
                 parameters: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -205,7 +197,7 @@ fn get_tool_definitions() -> Vec<Tool> {
         Tool {
             tool_type: "function".to_string(),
             function: FunctionDefinition {
-                name: "spawn_bash_process".to_string(),
+                name: "bash".to_string(),
                 description: Some("Spawn a command in a non-interactive bash shell.".to_string()),
                 parameters: serde_json::json!({
                     "type": "object",
@@ -221,6 +213,3 @@ fn get_tool_definitions() -> Vec<Tool> {
         },
     ]
 }
-
-
-

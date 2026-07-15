@@ -40,6 +40,7 @@ interface types {
     }
 
     record mcp-response-payload {
+        call-id: string,
         name: string,
         message: string,
     }
@@ -101,6 +102,7 @@ interface types {
     }
 
     record execute-tool-payload {
+        call-id: string,
         name: string,
         arguments: string,
     }
@@ -161,13 +163,38 @@ interface types {
         prompt-tokens: u32,
         completion-tokens: u32,
     }
+
+    resource stream-handle {
+        read: func(max-bytes: u32) -> result<list<u8>, string>;
+        write: func(data: list<u8>) -> result<_, string>;
+        close: func();
+    }
+
+    resource file-handle {
+        read-at: func(offset: u64, len: u32) -> result<list<u8>, string>;
+        write-at: func(offset: u64, data: list<u8>) -> result<_, string>;
+        get-stream: func() -> stream-handle;
+    }
+
+    resource execution-handle {
+        get-stdout: func() -> stream-handle;
+        get-stderr: func() -> stream-handle;
+        get-stdin: func() -> stream-handle;
+        wait: func() -> result<s32, string>;
+        kill: func();
+    }
 }
 
 world rad-extension {
-    use types.{ras-rpc-command, ras-core-event};
+    use types.{ras-rpc-command, ras-core-event, stream-handle, file-handle, execution-handle};
     
     // host functions that the extension can call
     import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
+    
+    import open-file: func(path: string, writeable: bool) -> result<file-handle, string>;
+    import open-process: func(command: string) -> result<execution-handle, string>;
+    import execute-tool: func(name: string, arguments: string) -> result<execution-handle, string>;
+    import open-http-stream: func(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>;
 
     // guest functions exported by the extension
     export on-event: func(event: ras-core-event) -> result<_, string>;
@@ -175,24 +202,35 @@ world rad-extension {
 }
 
 world rad-orchestrator {
-    use types.{ras-rpc-command, ras-core-event};
+    use types.{ras-rpc-command, ras-core-event, stream-handle, file-handle, execution-handle};
     
     import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
+    
+    import open-file: func(path: string, writeable: bool) -> result<file-handle, string>;
+    import open-process: func(command: string) -> result<execution-handle, string>;
+    import execute-tool: func(name: string, arguments: string) -> result<execution-handle, string>;
+    import open-http-stream: func(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>;
+
     export on-event: func(event: ras-core-event) -> result<_, string>;
 }
 
 world rad-security-guard {
-    use types.{ras-rpc-command};
+    use types.{ras-rpc-command, stream-handle, file-handle, execution-handle};
     
     import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
     export verify-rpc: func(command: ras-rpc-command) -> bool;
 }
 
 world rad-tool-provider {
-    use types.{ras-rpc-command};
+    use types.{ras-rpc-command, stream-handle, file-handle, execution-handle};
     
     import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
-    export get-tools: func() -> result<string, string>;
-    export execute-tool: func(name: string, arguments: string) -> result<string, string>;
-}
+    
+    import open-file: func(path: string, writeable: bool) -> result<file-handle, string>;
+    import open-process: func(command: string) -> result<execution-handle, string>;
+    import execute-tool: func(name: string, arguments: string) -> result<execution-handle, string>;
+    import open-http-stream: func(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>;
 
+    export get-tools: func() -> result<string, string>;
+    export execute-tool: func(name: string, arguments: string) -> result<execution-handle, string>;
+}

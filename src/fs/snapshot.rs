@@ -18,7 +18,8 @@ impl super::FsSandbox {
 
         for target in target_paths {
             let canonical_target = self.canonicalize_path(target)?;
-            let canonical_workspace = self.workspace_dir
+            let canonical_workspace = self
+                .workspace_dir
                 .canonicalize()
                 .map_err(|e| format!("Failed to canonicalize workspace dir: {e}"))?;
             let relative_target = canonical_target
@@ -51,7 +52,8 @@ impl super::FsSandbox {
             if file_type.is_dir() {
                 Self::copy_dir_all(&entry.path(), &dest_path)?;
             } else {
-                fs::copy(entry.path(), &dest_path).map_err(|e| format!("Failed to copy file: {e}"))?;
+                fs::copy(entry.path(), &dest_path)
+                    .map_err(|e| format!("Failed to copy file: {e}"))?;
             }
         }
         Ok(())
@@ -76,7 +78,9 @@ impl super::FsSandbox {
         current_dir: &Path,
         workspace_dir: &Path,
     ) -> Result<(), String> {
-        for entry in fs::read_dir(current_dir).map_err(|e| format!("Failed to read snapshot dir: {e}"))? {
+        for entry in
+            fs::read_dir(current_dir).map_err(|e| format!("Failed to read snapshot dir: {e}"))?
+        {
             let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
             let path = entry.path();
             let relative = path
@@ -93,7 +97,8 @@ impl super::FsSandbox {
                     fs::create_dir_all(parent)
                         .map_err(|e| format!("Failed to create parent directory: {e}"))?;
                 }
-                fs::copy(&path, &dest_path).map_err(|e| format!("Failed to restore file to workspace: {e}"))?;
+                fs::copy(&path, &dest_path)
+                    .map_err(|e| format!("Failed to restore file to workspace: {e}"))?;
             }
         }
         Ok(())

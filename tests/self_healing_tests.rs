@@ -5,9 +5,10 @@ use rad::ipc::RasCoreEvent;
 use rad::process::ProcessManager;
 use rad::wasm::WasmRuntime;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 struct MockNetwork {
@@ -23,7 +24,7 @@ impl rad::subsystems::NetworkSubsystem for MockNetwork {
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
         _llm_timeout_policy: Arc<Mutex<rad::ipc::TimeoutPolicy>>,
     ) -> Result<String, String> {
-        let mut guard = self.responses.lock().unwrap();
+        let mut guard = self.responses.lock();
         if let Some(chunks) = guard.pop() {
             let tx = event_tx.clone();
             std::thread::spawn(move || {
@@ -74,16 +75,13 @@ fn setup_runtime(
 
     let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
     let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
-    
+
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         std::path::Path::new(wasm_path),
         "orchestrator".to_string(),
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
-
-
-
         process_manager as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network,
@@ -112,7 +110,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
         "data: [DONE]\n".to_string(),
     ];
     let turn1 = vec![
-        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_panic\",\"type\":\"function\",\"function\":{\"name\":\"spawn_bash_process\",\"arguments\":\"{\\\"command\\\":\\\"echo CRASH_WASM; sleep 1\\\"}\"}}]}}]}\n".to_string(),
+        "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_panic\",\"type\":\"function\",\"function\":{\"name\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"echo CRASH_WASM; sleep 1\\\"}\"}}]}}]}\n".to_string(),
         "data: [DONE]\n".to_string(),
     ];
 
@@ -126,7 +124,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
         verification_command: None,
     };
     let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
-    
+
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
         fs_write_allow: vec!["*".to_string()],
@@ -152,19 +150,24 @@ fn test_wasm_panic_self_healing_and_rehydration() {
     }];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
-    
+
     // Create initial node to start task from
     let _initial_node = {
-        let mut dag_guard = dag.lock().unwrap();
+        let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
         dag_guard.set_node_text(&n0, "Initial").unwrap();
-        
+
         let snapshot_dir = snapshots.join(&n0);
         fs::create_dir_all(snapshot_dir).unwrap();
         n0
     };
 
-    let _orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(config, "test_session".to_string(), dag.clone(), None));
+    let _orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(
+        config,
+        "test_session".to_string(),
+        dag.clone(),
+        None,
+    ));
 
     // Setup network mocks using environment or custom server if needed.
     // However, to keep it self-contained without real network, we verify that the orchestrator's
@@ -176,12 +179,19 @@ fn test_wasm_panic_self_healing_and_rehydration() {
     // Let's test the recovery loop manually by spawning a panic in runtime.on_event
     // and ensuring Orchestrator reloads it.
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let (mut runtime, _dag_mock) = setup_runtime(vec![turn2.clone(), turn1], &workspace, &snapshots, event_tx.clone());
+    let (mut runtime, _dag_mock) = setup_runtime(
+        vec![turn2.clone(), turn1],
+        &workspace,
+        &snapshots,
+        event_tx.clone(),
+    );
 
     // Initial event
-    runtime.on_event(&RasCoreEvent::HumanInputReceived {
-        text: "start".to_string(),
-    }).unwrap();
+    runtime
+        .on_event(&RasCoreEvent::HumanInputReceived {
+            text: "start".to_string(),
+        })
+        .unwrap();
 
     let start_time = Instant::now();
     let mut completed = false;
@@ -192,8 +202,9 @@ fn test_wasm_panic_self_healing_and_rehydration() {
         if let Ok(event) = event_rx.recv_timeout(Duration::from_millis(50)) {
             println!("DEBUG TEST EVENT: {:?}", event);
             match event {
-                RasCoreEvent::ProcessStdout { pgid, .. } | RasCoreEvent::ProcessStderr { pgid, .. } => {
-                    actual_pgid = Some(pgid);
+                RasCoreEvent::ProcessStdout { ref pgid, .. }
+                | RasCoreEvent::ProcessStderr { ref pgid, .. } => {
+                    actual_pgid = Some(pgid.clone());
                     println!("DEBUG CAPTURED PGID: {:?}", actual_pgid);
                 }
                 _ => {}
@@ -210,45 +221,62 @@ fn test_wasm_panic_self_healing_and_rehydration() {
                     println!("Simulated crash caught in test driver: {e}. Re-hydrating...");
                     panic_occurred = true;
                     // Self-healing: recreate runtime with turn2 response
-                    let (new_runtime, _) = setup_runtime(vec![turn2.clone()], &workspace, &snapshots, event_tx.clone());
+                    let (new_runtime, _) = setup_runtime(
+                        vec![turn2.clone()],
+                        &workspace,
+                        &snapshots,
+                        event_tx.clone(),
+                    );
                     runtime = new_runtime;
 
                     // Rehydrate active process info using captured actual pgid
                     let active_calls = vec![rad_models::PendingToolCallInfo {
                         id: "call_panic".to_string(),
-                        name: "spawn_bash_process".to_string(),
+                        name: "bash".to_string(),
                         arguments: "{\"command\":\"echo CRASH_WASM; sleep 1\"}".to_string(),
-                        pgid: actual_pgid,
+                        pgid: actual_pgid.clone(),
                     }];
                     println!("DEBUG SEND REHYDRATE WITH: {:?}", active_calls);
-                    runtime.on_event(&RasCoreEvent::Rehydrate { active_calls }).unwrap();
+                    runtime
+                        .on_event(&RasCoreEvent::Rehydrate { active_calls })
+                        .unwrap();
                 }
             }
         }
     }
 
-    assert!(panic_occurred, "Wasm panic should have been triggered and caught");
-    assert!(completed, "Task should complete successfully after Wasm self-healing");
+    assert!(
+        panic_occurred,
+        "Wasm panic should have been triggered and caught"
+    );
+    assert!(
+        completed,
+        "Task should complete successfully after Wasm self-healing"
+    );
 }
 
-fn run_mock_http_server(addr: &str, responses: Arc<Mutex<Vec<String>>>) -> std::thread::JoinHandle<()> {
+fn run_mock_http_server(
+    addr: &str,
+    responses: Arc<Mutex<Vec<String>>>,
+) -> std::thread::JoinHandle<()> {
     let listener = std::net::TcpListener::bind(addr).unwrap();
     std::thread::spawn(move || {
         for mut stream in listener.incoming().flatten() {
             let mut buf = [0; 1024];
             let _ = std::io::Read::read(&mut stream, &mut buf);
 
-            let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n";
+            let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n";
             let _ = std::io::Write::write_all(&mut stream, headers.as_bytes());
 
             let resp = {
-                let mut guard = responses.lock().unwrap();
+                let mut guard = responses.lock();
                 guard.pop()
             };
             if let Some(chunks_str) = resp {
                 let _ = std::io::Write::write_all(&mut stream, chunks_str.as_bytes());
             }
             let _ = std::io::Write::flush(&mut stream);
+            let _ = stream.shutdown(std::net::Shutdown::Write);
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
     })
@@ -263,9 +291,10 @@ fn test_core_auto_self_healing_integration() {
     fs::create_dir_all(&snapshots).unwrap();
 
     let turn2 = "data: {\"choices\":[{\"delta\":{\"content\":\"Recovered and completed.\"}}]}\n\n\
-                 data: [DONE]\n\n".to_string();
+                 data: [DONE]\n\n"
+        .to_string();
     let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[\
-                 {\"index\":0,\"id\":\"call_panic\",\"type\":\"function\",\"function\":{\"name\":\"spawn_bash_process\",\"arguments\":\"{\\\"command\\\":\\\"echo CRASH_WASM; sleep 1\\\"}\"}}\
+                 {\"index\":0,\"id\":\"call_panic\",\"type\":\"function\",\"function\":{\"name\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"echo CRASH_WASM; sleep 1\\\"}\"}}\
                  ]}}]}\n\n\
                  data: [DONE]\n\n".to_string();
 
@@ -289,7 +318,7 @@ fn test_core_auto_self_healing_integration() {
         verification_command: None,
     };
     let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
-    
+
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
         fs_write_allow: vec!["*".to_string()],
@@ -314,19 +343,23 @@ fn test_core_auto_self_healing_integration() {
         config: HashMap::new(),
     }];
 
-
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {
-        let mut dag_guard = dag.lock().unwrap();
+        let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
         dag_guard.set_node_text(&n0, "Initial").unwrap();
-        
+
         let snapshot_dir = snapshots.join(&n0);
         fs::create_dir_all(snapshot_dir).unwrap();
         n0
     };
 
-    let orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(config, "test_session".to_string(), dag.clone(), None));
+    let orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(
+        config,
+        "test_session".to_string(),
+        dag.clone(),
+        None,
+    ));
 
     let run_res = orchestrator.run_task("start".to_string());
     assert!(run_res.is_ok(), "Task spawning failed");
@@ -341,14 +374,15 @@ fn test_core_auto_self_healing_integration() {
         std::thread::sleep(Duration::from_millis(50));
     }
 
-
-
     assert!(completed, "Core auto recovery task did not finish in time");
 
-    let dag_guard = dag.lock().unwrap();
+    let dag_guard = dag.lock();
     println!("DEBUG DAG NODES COUNT: {}", dag_guard.nodes.len());
     for (id, node) in &dag_guard.nodes {
-        println!("DEBUG NODE id={}, type={}, text='{}'", id, node.node_type, node.text);
+        println!(
+            "DEBUG NODE id={}, type={}, text='{}'",
+            id, node.node_type, node.text
+        );
     }
 
     let mut found_recovery_msg = false;
@@ -357,5 +391,8 @@ fn test_core_auto_self_healing_integration() {
             found_recovery_msg = true;
         }
     }
-    assert!(found_recovery_msg, "Rehydrated second turn message was not found in DAG");
+    assert!(
+        found_recovery_msg,
+        "Rehydrated second turn message was not found in DAG"
+    );
 }

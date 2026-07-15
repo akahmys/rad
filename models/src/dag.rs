@@ -1,5 +1,5 @@
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DagNode {
@@ -51,12 +51,19 @@ impl Dag {
     }
 
     pub fn set_node_text(&mut self, node_id: &str, text: &str) -> Result<(), String> {
-        let node = self.nodes.get_mut(node_id).ok_or_else(|| format!("Node '{node_id}' not found"))?;
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or_else(|| format!("Node '{node_id}' not found"))?;
         node.text = text.to_string();
         Ok(())
     }
 
-    pub fn merge_nodes(&mut self, node_ids: &[String], summary_text: &str) -> Result<String, String> {
+    pub fn merge_nodes(
+        &mut self,
+        node_ids: &[String],
+        summary_text: &str,
+    ) -> Result<String, String> {
         if node_ids.is_empty() {
             return Err("Cannot merge empty list of nodes".to_string());
         }
@@ -65,7 +72,10 @@ impl Dag {
         let target_set: HashSet<&String> = node_ids.iter().collect();
 
         for id in node_ids {
-            let node = self.nodes.get(id).ok_or_else(|| format!("Node '{id}' not found"))?;
+            let node = self
+                .nodes
+                .get(id)
+                .ok_or_else(|| format!("Node '{id}' not found"))?;
             for parent in &node.parent_ids {
                 if !target_set.contains(parent) {
                     collected_parents.insert(parent.clone());
@@ -130,8 +140,15 @@ impl Dag {
         Ok(())
     }
 
-    pub fn set_node_semantic_references(&mut self, node_id: &str, refs: Option<String>) -> Result<(), String> {
-        let node = self.nodes.get_mut(node_id).ok_or_else(|| format!("Node '{node_id}' not found"))?;
+    pub fn set_node_semantic_references(
+        &mut self,
+        node_id: &str,
+        refs: Option<String>,
+    ) -> Result<(), String> {
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or_else(|| format!("Node '{node_id}' not found"))?;
         node.semantic_references = refs;
         Ok(())
     }

@@ -5,9 +5,10 @@ use rad::ipc::{RasCoreEvent, RasRpcCommand};
 use rad::process::ProcessManager;
 use rad::wasm::WasmRuntime;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 struct MockNetwork;
 impl rad::subsystems::NetworkSubsystem for MockNetwork {
@@ -26,7 +27,11 @@ impl rad::subsystems::NetworkSubsystem for MockNetwork {
 fn setup_runtime(
     workspace: &std::path::Path,
     snapshots: &std::path::Path,
-) -> (WasmRuntime, std::sync::mpsc::Receiver<RasCoreEvent>, Arc<Mutex<Dag>>) {
+) -> (
+    WasmRuntime,
+    std::sync::mpsc::Receiver<RasCoreEvent>,
+    Arc<Mutex<Dag>>,
+) {
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
         fs_write_allow: vec!["*".to_string()],
@@ -58,7 +63,6 @@ fn setup_runtime(
         "orchestrator".to_string(),
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
-
         process_manager as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network,
@@ -128,7 +132,8 @@ fn test_dag_node_semantic_references() {
 
     // Set semantic references
     let mock_refs = "File: main.rs\n  pub struct User".to_string();
-    dag.set_node_semantic_references(&n0, Some(mock_refs.clone())).unwrap();
+    dag.set_node_semantic_references(&n0, Some(mock_refs.clone()))
+        .unwrap();
 
     // Verify it was saved
     {

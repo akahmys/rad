@@ -1,6 +1,6 @@
 #![deny(clippy::pedantic)]
 
-use std::fmt;
+use std::fmt::{self, Write as _};
 
 /// Represents the available slash commands in the REPL.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +21,10 @@ pub enum Command {
     Reload,
     /// Reset the current session (rotates session ID and clears DAG).
     Reset,
+    /// Show history DAG visually as a tree.
+    Tree,
+    /// List active permissions and registered tools.
+    Tools,
 }
 
 impl fmt::Display for Command {
@@ -34,6 +38,8 @@ impl fmt::Display for Command {
             Command::Rollback(id) => write!(f, "/rollback {id}"),
             Command::Reload => write!(f, "/reload"),
             Command::Reset => write!(f, "/reset"),
+            Command::Tree => write!(f, "/tree"),
+            Command::Tools => write!(f, "/tools"),
         }
     }
 }
@@ -77,6 +83,8 @@ impl CommandParser {
             }
             "/reload" => Some(Command::Reload),
             "/reset" => Some(Command::Reset),
+            "/tree" => Some(Command::Tree),
+            "/tools" => Some(Command::Tools),
             _ => None,
         }
     }
@@ -98,7 +106,10 @@ pub struct CommandManager;
 impl CommandManager {
     /// Executes the given command and returns the result.
     #[must_use]
-    pub fn execute(command: Command, orchestrator: &crate::orchestrator::Orchestrator) -> CommandResult {
+    pub fn execute(
+        command: Command,
+        orchestrator: &crate::orchestrator::Orchestrator,
+    ) -> CommandResult {
         match command {
             Command::Help => {
                 println!("Available Slash Commands:");
@@ -110,29 +121,35 @@ impl CommandManager {
                 println!("  /rollback <id>  - Roll back session to a specific DAG node");
                 println!("  /reload         - Reload configuration file dynamically");
                 println!("  /reset          - Save current session and start a new clean session");
+                println!("  /tree           - Show history DAG visually as a tree");
+                println!("  /tools          - List permissions and registered tools");
                 CommandResult::Continue
             }
             Command::Exit => CommandResult::Exit,
             Command::Status => {
-                let session_id = orchestrator.session_id.lock()
-                    .map_or_else(|_| "unknown".to_string(), |guard| guard.clone());
-                let (prompt, completion) = if let Ok(usage_guard) = orchestrator.token_usage.lock() {
-                    (usage_guard.prompt_tokens, usage_guard.completion_tokens)
-                } else {
-                    (0, 0)
-                };
+                let session_id = orchestrator.session_id.lock().clone();
+                let usage_guard = orchestrator.token_usage.lock();
+                let (prompt, completion) =
+                    (usage_guard.prompt_tokens, usage_guard.completion_tokens);
                 let total = prompt + completion;
-                if let Ok(dag_guard) = orchestrator.dag.lock() {
+                let mut status_msg = format!("Session ID: {session_id}\n");
+
+                {
+                    let dag_guard = orchestrator.dag.lock();
                     let total_nodes = dag_guard.nodes.len();
                     let current_node = dag_guard.current_node_id.as_deref().unwrap_or("None");
-                    CommandResult::StatusInfo(format!(
-                        "Session ID: {session_id}\nTotal DAG Nodes: {total_nodes}\nCurrent DAG Node: {current_node}\nToken Usage: Prompt: {prompt}, Completion: {completion}, Total: {total}"
-                    ))
-                } else {
-                    CommandResult::StatusInfo(format!(
-                        "Session ID: {session_id}\nToken Usage: Prompt: {prompt}, Completion: {completion}, Total: {total}"
-                    ))
+                    let _ = write!(
+                        status_msg,
+                        "Total DAG Nodes: {total_nodes}\nCurrent DAG Node: {current_node}\n"
+                    );
                 }
+
+                let _ = write!(
+                    status_msg,
+                    "Token Usage: Prompt: {prompt}, Completion: {completion}, Total: {total}"
+                );
+
+                CommandResult::StatusInfo(status_msg)
             }
             Command::Clear => {
                 // ANSI escape sequences to clear screen and reset cursor to top-left
@@ -151,19 +168,30 @@ impl CommandManager {
                 }
                 CommandResult::Continue
             }
-            Command::Reload => {
-                match orchestrator.reload() {
-                    Ok(()) => CommandResult::StatusInfo("\x1b[32mConfiguration reloaded successfully!\x1b[0m".to_string()),
-                    Err(e) => CommandResult::StatusInfo(format!("\x1b[1;31mFailed to reload configuration: {e}\x1b[0m")),
-                }
+            Command::Reload => match orchestrator.reload() {
+                Ok(()) => CommandResult::StatusInfo(
+                    "\x1b[32mConfiguration reloaded successfully!\x1b[0m".to_string(),
+                ),
+                Err(e) => CommandResult::StatusInfo(format!(
+                    "\x1b[1;31mFailed to reload configuration: {e}\x1b[0m"
+                )),
+            },
+            Command::Reset => match orchestrator.reset_session() {
+                Ok(new_id) => CommandResult::StatusInfo(format!(
+                    "\x1b[32mSession reset successfully. Started new session: \x1b[1;36m{new_id}\x1b[0m"
+                )),
+                Err(e) => CommandResult::StatusInfo(format!(
+                    "\x1b[1;31mFailed to reset session: {e}\x1b[0m"
+                )),
+            },
+            Command::Tree => {
+                let dag_guard = orchestrator.dag.lock();
+                let tree_str = tree::render_dag_tree(&dag_guard);
+                CommandResult::StatusInfo(tree_str)
             }
-            Command::Reset => {
-                match orchestrator.reset_session() {
-                    Ok(new_id) => CommandResult::StatusInfo(format!(
-                        "\x1b[32mSession reset successfully. Started new session: \x1b[1;36m{new_id}\x1b[0m"
-                    )),
-                    Err(e) => CommandResult::StatusInfo(format!("\x1b[1;31mFailed to reset session: {e}\x1b[0m")),
-                }
+            Command::Tools => {
+                let tools_str = tools::render_tools_and_permissions(orchestrator);
+                CommandResult::StatusInfo(tools_str)
             }
         }
     }
@@ -171,6 +199,8 @@ impl CommandManager {
 
 pub mod completion;
 pub use completion::CommandHelper;
+pub mod tools;
+pub mod tree;
 
 /// Executes a command directly on the host shell.
 pub fn execute_shell(cmd_str: &str) {
@@ -191,4 +221,3 @@ pub fn execute_shell(cmd_str: &str) {
         }
     }
 }
-

@@ -1,12 +1,13 @@
-use nix::sys::signal::{killpg, Signal};
+use nix::sys::signal::{Signal, killpg};
 use nix::unistd::Pid;
-use std::path::Path;
+use parking_lot::Mutex;
+use portable_pty::{Child, CommandBuilder, ExitStatus, PtySize, native_pty_system};
 use std::io::Read;
+use std::path::Path;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use portable_pty::{CommandBuilder, native_pty_system, PtySize, Child, ExitStatus};
 
 #[cfg(test)]
 mod tests;
@@ -33,7 +34,7 @@ impl ProcessManager {
     ///
     /// # Errors
     ///
-    /// Returns an error if the process fails to spawn or if lock is poisoned.
+    /// Returns an error if the process fails to spawn.
     pub fn spawn_bash_process(
         &self,
         command: &str,
@@ -72,7 +73,7 @@ impl ProcessManager {
         let pid = Pid::from_raw(pgid_raw);
 
         {
-            let mut pgids = self.active_pgids.lock().map_err(|e| format!("Lock error: {e}"))?;
+            let mut pgids = self.active_pgids.lock();
             pgids.push(pid);
         }
 
@@ -80,6 +81,11 @@ impl ProcessManager {
             .master
             .try_clone_reader()
             .map_err(|e| format!("Failed to clone master reader: {e}"))?;
+
+        let master_writer = pty_pair
+            .master
+            .take_writer()
+            .map_err(|e| format!("Failed to take master writer: {e}"))?;
 
         let (stdout_tx, stdout_rx) = mpsc::channel();
         let (_stderr_tx, stderr_rx) = mpsc::channel();
@@ -89,8 +95,9 @@ impl ProcessManager {
         Ok(RunningProcess {
             child,
             pgid: pid,
-            stdout_rx,
-            stderr_rx,
+            stdout_rx: Some(stdout_rx),
+            stderr_rx: Some(stderr_rx),
+            stdin_tx: Some(Mutex::new(master_writer)),
             last_activity: Instant::now(),
             active_pgids: self.active_pgids.clone(),
             timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Infinite)),
@@ -103,10 +110,9 @@ impl ProcessManager {
 
 impl Drop for ProcessManager {
     fn drop(&mut self) {
-        if let Ok(pgids) = self.active_pgids.lock() {
-            for pgid in pgids.iter() {
-                let _ = killpg(*pgid, Signal::SIGKILL);
-            }
+        let pgids = self.active_pgids.lock();
+        for pgid in pgids.iter() {
+            let _ = killpg(*pgid, Signal::SIGKILL);
         }
     }
 }
@@ -128,8 +134,9 @@ fn spawn_reader_thread<R: Read + Send + 'static>(mut reader: R, tx: mpsc::Sender
 pub struct RunningProcess {
     pub child: Box<dyn Child + Send + Sync>,
     pgid: Pid,
-    stdout_rx: Receiver<Vec<u8>>,
-    stderr_rx: Receiver<Vec<u8>>,
+    pub stdout_rx: Option<Receiver<Vec<u8>>>,
+    pub stderr_rx: Option<Receiver<Vec<u8>>>,
+    pub stdin_tx: Option<Mutex<Box<dyn std::io::Write + Send>>>,
     pub last_activity: Instant,
     active_pgids: Arc<Mutex<Vec<Pid>>>,
     pub timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
@@ -148,13 +155,17 @@ impl RunningProcess {
     /// Returns (stdout, stderr).
     pub fn read_available(&mut self) -> (Vec<u8>, Vec<u8>) {
         let mut stdout = Vec::new();
-        while let Ok(mut chunk) = self.stdout_rx.try_recv() {
-            stdout.append(&mut chunk);
+        if let Some(ref rx) = self.stdout_rx {
+            while let Ok(mut chunk) = rx.try_recv() {
+                stdout.append(&mut chunk);
+            }
         }
 
         let mut stderr = Vec::new();
-        while let Ok(mut chunk) = self.stderr_rx.try_recv() {
-            stderr.append(&mut chunk);
+        if let Some(ref rx) = self.stderr_rx {
+            while let Ok(mut chunk) = rx.try_recv() {
+                stderr.append(&mut chunk);
+            }
         }
 
         if !stdout.is_empty() || !stderr.is_empty() {
@@ -173,7 +184,11 @@ impl RunningProcess {
     pub fn wait_with_timeout(&mut self, timeout: Duration) -> Result<ExitStatus, String> {
         let start = Instant::now();
         loop {
-            if let Some(status) = self.child.try_wait().map_err(|e| format!("try_wait error: {e}"))? {
+            if let Some(status) = self
+                .child
+                .try_wait()
+                .map_err(|e| format!("try_wait error: {e}"))?
+            {
                 self.unregister_pgid();
                 return Ok(status);
             }
@@ -199,9 +214,8 @@ impl RunningProcess {
     }
 
     pub fn unregister_pgid(&mut self) {
-        if let Ok(mut pgids) = self.active_pgids.lock() {
-            pgids.retain(|&x| x != self.pgid);
-        }
+        let mut pgids = self.active_pgids.lock();
+        pgids.retain(|&x| x != self.pgid);
     }
 }
 

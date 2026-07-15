@@ -72,11 +72,14 @@ fn test_merge_json_value() {
     assert_eq!(config.core.workspace, ".");
     assert_eq!(config.core.log, "/custom/logs");
     assert_eq!(config.extensions.len(), 2);
-    
+
     let ext1 = config.extensions.iter().find(|e| e.name == "ext1").unwrap();
     assert!(ext1.enabled);
     assert_eq!(ext1.config.get("model").unwrap().as_str().unwrap(), "gpt-4");
-    assert_eq!(ext1.config.get("api_key").unwrap().as_str().unwrap(), "secret");
+    assert_eq!(
+        ext1.config.get("api_key").unwrap().as_str().unwrap(),
+        "secret"
+    );
 
     let ext2 = config.extensions.iter().find(|e| e.name == "ext2").unwrap();
     assert!(!ext2.enabled);
@@ -142,5 +145,8 @@ fn test_load_config_with_local_override() {
     assert_eq!(config.core.workspace, "/base/workspace");
     assert_eq!(config.core.snapshot, "/local/snapshots");
     let ext = config.extensions.iter().find(|e| e.name == "ext").unwrap();
-    assert_eq!(ext.config.get("api_key").unwrap().as_str().unwrap(), "local_key");
+    assert_eq!(
+        ext.config.get("api_key").unwrap().as_str().unwrap(),
+        "local_key"
+    );
 }

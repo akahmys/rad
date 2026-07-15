@@ -1937,6 +1937,7 @@ dependencies = [
  "jsonc-parser",
  "nix 0.29.0",
  "notify",
+ "parking_lot",
  "portable-pty",
  "rad-models",
  "reqwest",
@@ -1950,6 +1951,13 @@ dependencies = [
  "tree-sitter-rust",
  "wasmtime",
  "wasmtime-wasi",
+]
+
+[[package]]
+name = "rad-extension-template"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen 0.36.0",
 ]
 
 [[package]]

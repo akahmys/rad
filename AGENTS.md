@@ -39,7 +39,7 @@
 - **Action:**
   1. Read `ARCHITECTURE.md` (Structural design).
   2. Read `CODING.md` (Technical constraints).
-  3. Execute task using available tools (`bash`, `read`, `edit`, etc.).
+  3. Execute task using available physical primitives (`spawn_bash_process`, `file_read`, `file_write`, `file_edit_patch`, etc.).
 - **Goal:** Produce high-quality, "Clippy-clean" code.
 
 ### 3. Audit Phase
@@ -62,7 +62,7 @@
 - **On-Demand Loading**: Read **only** files required for the current phase. **Never** load the entire repository.
 - **Incremental Updates**: Use `edit` for precise changes. **Avoid** full file rewrites.
 - **Context Hygiene**: Prune unnecessary info (logs, redundant errors) from prompts as per `PLANNING.md`.
-- **Minimal Verbosity**: **Avoid** high-output commands (e.g., `ls -R`). Use targeted filters (e.g., `find . -maxdepth 2`).
+- **Minimal Verbosity**: **Avoid** high-output commands (e.g., `ls -R`, `grep -r`). Use targeted filters (e.g., `find . -maxdepth 2`).
 
 ---
 

@@ -1,12 +1,13 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender, Receiver};
-use std::path::Path;
-use std::sync::atomic::{Ordering};
+use super::Orchestrator;
+use crate::git;
 use crate::ipc::{RasCoreEvent, route_event_to_terminal};
 use crate::wasm::WasmRuntime;
-use crate::git;
-use super::Orchestrator;
+use parking_lot::Mutex;
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 impl Orchestrator {
     /// Spawns the autonomous execution loop in a background thread.
@@ -31,30 +32,29 @@ impl Orchestrator {
             }
         });
 
-        if let Ok(mut guard) = self.running_task.lock() {
-            *guard = Some(handle);
-        }
+        *self.running_task.lock() = Some(handle);
 
         Ok(())
     }
 
     fn run_task_internal(self: &Arc<Self>, instruction: &str) -> Result<(), String> {
-        let config = self.config.lock().unwrap().clone();
+        let config = self.config.lock().clone();
         let workspace_path = Path::new(&config.core.workspace);
-        let session_id = self.session_id.lock().unwrap().clone();
+        let session_id = self.session_id.lock().clone();
 
         // 1. Git Autopilot Setup
-        let (has_git, initial_sha) = crate::orchestrator::autopilot::setup_git_autopilot(workspace_path, &session_id);
+        let (has_git, initial_sha) =
+            crate::orchestrator::autopilot::setup_git_autopilot(workspace_path, &session_id);
 
         let mut attempts = 0;
         let max_attempts = 2;
 
         while attempts < max_attempts {
             let (event_tx, event_rx) = channel::<RasCoreEvent>();
-            
+
             let wasm_runtimes = self.get_or_init_runtimes(&event_tx)?;
-            for (name, runtime_arc) in &wasm_runtimes {
-                let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
+            for runtime_arc in wasm_runtimes.values() {
+                let mut runtime = runtime_arc.lock();
                 runtime.set_event_tx(event_tx.clone());
             }
 
@@ -62,20 +62,21 @@ impl Orchestrator {
 
             if attempts > 0 {
                 let active_calls = {
-                    let active_procs = self.active_processes.lock().map_err(|e| format!("Process lock error: {e}"))?;
-                    active_procs.values().map(|proc| {
-                        rad_models::PendingToolCallInfo {
+                    let active_procs = self.active_processes.lock();
+                    active_procs
+                        .values()
+                        .map(|proc| rad_models::PendingToolCallInfo {
                             id: proc.call_id.clone(),
                             name: proc.name.clone(),
                             arguments: proc.arguments.clone(),
-                            pgid: Some(proc.pgid().as_raw()),
-                        }
-                    }).collect::<Vec<_>>()
+                            pgid: Some(proc.pgid().as_raw().to_string()),
+                        })
+                        .collect::<Vec<_>>()
                 };
 
                 let rehydrate_event = RasCoreEvent::Rehydrate { active_calls };
                 for (name, runtime_arc) in &wasm_runtimes {
-                    let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
+                    let mut runtime = runtime_arc.lock();
                     if let Err(e) = runtime.on_event(&rehydrate_event) {
                         eprintln!("Failed to rehydrate runtime {name}: {e}");
                         success = false;
@@ -89,12 +90,14 @@ impl Orchestrator {
                 }
             }
 
-            let init_event = RasCoreEvent::HumanInputReceived { text: instruction.to_string() };
+            let init_event = RasCoreEvent::HumanInputReceived {
+                text: instruction.to_string(),
+            };
             if wasm_runtimes.is_empty() {
                 let _ = event_tx.send(init_event);
             } else {
                 for (name, runtime_arc) in &wasm_runtimes {
-                    let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
+                    let mut runtime = runtime_arc.lock();
                     if let Err(e) = runtime.on_event(&init_event) {
                         eprintln!("Wasm execution error on {name}: {e}. Recovering...");
                         success = false;
@@ -113,17 +116,26 @@ impl Orchestrator {
                     // Check verification command
                     if let Some(ref verify_cmd) = config.core.verification_command {
                         println!("Running autopilot verification: {verify_cmd}");
-                        if crate::orchestrator::autopilot::run_verification_cmd(workspace_path, verify_cmd) {
+                        if crate::orchestrator::autopilot::run_verification_cmd(
+                            workspace_path,
+                            verify_cmd,
+                        ) {
                             println!("Verification PASSED.");
                             if has_git {
-                                let _ = git::create_checkpoint(workspace_path, "verification_passed");
+                                let _ =
+                                    git::create_checkpoint(workspace_path, "verification_passed");
                             }
                         } else {
                             if let Some(ref sha) = initial_sha {
-                                println!("Verification FAILED. Rolling back codebase to stable SHA: {sha}");
+                                println!(
+                                    "Verification FAILED. Rolling back codebase to stable SHA: {sha}"
+                                );
                                 let _ = git::rollback_to_checkpoint(workspace_path, sha);
                             }
-                            return Err("Autopilot verification command failed. Codebase rolled back.".to_string());
+                            return Err(
+                                "Autopilot verification command failed. Codebase rolled back."
+                                    .to_string(),
+                            );
                         }
                     }
                     break;
@@ -148,8 +160,8 @@ impl Orchestrator {
         self: &Arc<Self>,
         event_tx: &Sender<RasCoreEvent>,
     ) -> Result<HashMap<String, Arc<Mutex<WasmRuntime>>>, String> {
-        let mut guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
-        let config_guard = self.config.lock().unwrap();
+        let mut guard = self.wasm_runtime.lock();
+        let config_guard = self.config.lock();
         for ext in &config_guard.extensions {
             if !ext.enabled {
                 continue;
@@ -160,7 +172,9 @@ impl Orchestrator {
             let permissions = ext.permissions.clone().unwrap_or_default();
             let wasm_path = Path::new(&ext.source);
             if wasm_path.exists() {
-                let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: self.dag.clone() });
+                let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl {
+                    dag: self.dag.clone(),
+                });
                 let network_subsystem = Arc::new(crate::http::HttpManager);
                 let runtime = WasmRuntime::new(
                     ext.name.clone(),
@@ -183,7 +197,7 @@ impl Orchestrator {
     }
 
     fn clear_runtimes(&self) -> Result<(), String> {
-        let mut guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
+        let mut guard = self.wasm_runtime.lock();
         guard.clear();
         Ok(())
     }
@@ -193,9 +207,14 @@ impl Orchestrator {
     /// # Errors
     ///
     /// Returns error if any extension rejects the operation.
-    pub fn verify_rpc_exclude(&self, exclude_name: &str, _request: &crate::ipc::RasRpcRequest, req_bytes: &[u8]) -> Result<(), String> {
+    pub fn verify_rpc_exclude(
+        &self,
+        exclude_name: &str,
+        _request: &crate::ipc::RasRpcRequest,
+        req_bytes: &[u8],
+    ) -> Result<(), String> {
         let runtimes = {
-            let guard = self.wasm_runtime.lock().map_err(|e| format!("Wasm lock error: {e}"))?;
+            let guard = self.wasm_runtime.lock();
             guard.clone()
         };
 
@@ -203,7 +222,7 @@ impl Orchestrator {
             if name == exclude_name {
                 continue;
             }
-            let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
+            let mut runtime = runtime_arc.lock();
             if let Err(e) = runtime.verify_rpc(req_bytes) {
                 return Err(format!("Operation rejected by extension '{name}': {e}"));
             }
@@ -223,56 +242,15 @@ impl Orchestrator {
 
             let _ = route_event_to_terminal(&event);
 
-            match event {
-                RasCoreEvent::HttpChunkReceived { chunk } => {
-                    for (name, runtime_arc) in wasm_runtimes {
-                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
-                        runtime.on_event(&RasCoreEvent::HttpChunkReceived { chunk: chunk.clone() })?;
-                    }
-                }
-                RasCoreEvent::HttpErrorReceived { message } => {
-                    for (name, runtime_arc) in wasm_runtimes {
-                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
-                        runtime.on_event(&RasCoreEvent::HttpErrorReceived { message: message.clone() })?;
-                    }
-                }
-                RasCoreEvent::ProcessExited { pgid, exit_code } => {
-                    for (name, runtime_arc) in wasm_runtimes {
-                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
-                        runtime.on_event(&RasCoreEvent::ProcessExited { pgid, exit_code })?;
-                    }
-                }
-                RasCoreEvent::ProcessStdout { pgid, data } => {
-                    for (name, runtime_arc) in wasm_runtimes {
-                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
-                        runtime.on_event(&RasCoreEvent::ProcessStdout { pgid, data: data.clone() })?;
-                    }
-                }
-                RasCoreEvent::ProcessStderr { pgid, data } => {
-                    for (name, runtime_arc) in wasm_runtimes {
-                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
-                        runtime.on_event(&RasCoreEvent::ProcessStderr { pgid, data: data.clone() })?;
-                    }
-                }
-                RasCoreEvent::FileChanged { path, change_type } => {
-                    for (name, runtime_arc) in wasm_runtimes {
-                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
-                        runtime.on_event(&RasCoreEvent::FileChanged { path: path.clone(), change_type: change_type.clone() })?;
-                    }
-                }
-                RasCoreEvent::StreamTimeout { target, duration_ms } => {
-                    for (name, runtime_arc) in wasm_runtimes {
-                        let mut runtime = runtime_arc.lock().map_err(|e| format!("Lock error on {name}: {e}"))?;
-                        runtime.on_event(&RasCoreEvent::StreamTimeout { target: target.clone(), duration_ms })?;
-                    }
-                }
-                RasCoreEvent::TaskCompleted => {
-                    break;
-                }
-                _ => {}
+            if let RasCoreEvent::TaskCompleted = event {
+                break;
+            }
+
+            for runtime_arc in wasm_runtimes.values() {
+                let mut runtime = runtime_arc.lock();
+                runtime.on_event(&event)?;
             }
         }
         Ok(())
     }
 }
-

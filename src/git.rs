@@ -18,7 +18,15 @@ fn run_git_cmd(workspace: &Path, args: &[&str]) -> Result<String, String> {
 pub fn create_autopilot_branch(workspace: &Path, task_id: &str) -> Result<String, String> {
     let branch_name = format!("rad-autopilot-{}", task_id);
     // Check if branch already exists
-    let exists = run_git_cmd(workspace, &["show-ref", "--verify", &format!("refs/heads/{}", branch_name)]).is_ok();
+    let exists = run_git_cmd(
+        workspace,
+        &[
+            "show-ref",
+            "--verify",
+            &format!("refs/heads/{}", branch_name),
+        ],
+    )
+    .is_ok();
     if exists {
         run_git_cmd(workspace, &["checkout", &branch_name])?;
     } else {
@@ -55,49 +63,55 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
-    fn init_git_repo(path: &Path) {
-        run_git_cmd(path, &["init"]).unwrap();
-        run_git_cmd(path, &["config", "user.name", "Test User"]).unwrap();
-        run_git_cmd(path, &["config", "user.email", "test@example.com"]).unwrap();
-        fs::write(path.join("initial.txt"), "hello").unwrap();
-        run_git_cmd(path, &["add", "."]).unwrap();
-        run_git_cmd(path, &["commit", "-m", "initial commit"]).unwrap();
+    fn init_git_repo(path: &Path) -> Result<(), String> {
+        run_git_cmd(path, &["init"])?;
+        run_git_cmd(path, &["config", "user.name", "Test User"])?;
+        run_git_cmd(path, &["config", "user.email", "test@example.com"])?;
+        fs::write(path.join("initial.txt"), "hello").map_err(|e| e.to_string())?;
+        run_git_cmd(path, &["add", "."])?;
+        run_git_cmd(path, &["commit", "-m", "initial commit", "--allow-empty"])?;
+        Ok(())
     }
 
     #[test]
-    fn test_git_autopilot_flow() {
-        let temp_dir = tempdir().unwrap();
+    fn test_git_autopilot_flow() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = tempdir()?;
         let repo_path = temp_dir.path();
-        init_git_repo(repo_path);
+        init_git_repo(repo_path)?;
 
-        let initial_sha = get_head_sha(repo_path).unwrap();
+        let initial_sha = get_head_sha(repo_path)?;
 
         // 1. Create autopilot branch
-        let branch = create_autopilot_branch(repo_path, "123").unwrap();
+        let branch = create_autopilot_branch(repo_path, "123")?;
         assert_eq!(branch, "rad-autopilot-123");
 
         // 2. Modify files and commit checkpoint
-        fs::write(repo_path.join("initial.txt"), "hello modified").unwrap();
-        fs::write(repo_path.join("new.txt"), "new file").unwrap();
+        fs::write(repo_path.join("initial.txt"), "hello modified")?;
+        fs::write(repo_path.join("new.txt"), "new file")?;
 
-        let checkpoint_sha = create_checkpoint(repo_path, "step_1").unwrap();
+        let checkpoint_sha = create_checkpoint(repo_path, "step_1")?;
         assert_ne!(initial_sha, checkpoint_sha);
 
         // Verify changes are in git history
-        let log = run_git_cmd(repo_path, &["log", "-1", "--pretty=%s"]).unwrap();
+        let log = run_git_cmd(repo_path, &["log", "-1", "--pretty=%s"])?;
         assert_eq!(log, "rad-autopilot: checkpoint step_1");
 
         // 3. Make breaking changes
-        fs::write(repo_path.join("initial.txt"), "breaking change").unwrap();
-        fs::write(repo_path.join("broken.txt"), "broken file").unwrap();
+        fs::write(repo_path.join("initial.txt"), "breaking change")?;
+        fs::write(repo_path.join("broken.txt"), "broken file")?;
 
         // 4. Rollback to checkpoint
-        rollback_to_checkpoint(repo_path, &checkpoint_sha).unwrap();
+        rollback_to_checkpoint(repo_path, &checkpoint_sha)?;
 
         // Verify state is restored to checkpoint
-        assert_eq!(fs::read_to_string(repo_path.join("initial.txt")).unwrap(), "hello modified");
-        assert_eq!(fs::read_to_string(repo_path.join("new.txt")).unwrap(), "new file");
+        assert_eq!(
+            fs::read_to_string(repo_path.join("initial.txt"))?,
+            "hello modified"
+        );
+        assert_eq!(fs::read_to_string(repo_path.join("new.txt"))?, "new file");
         assert!(!repo_path.join("broken.txt").exists());
-        assert_eq!(get_head_sha(repo_path).unwrap(), checkpoint_sha);
+        assert_eq!(get_head_sha(repo_path)?, checkpoint_sha);
+
+        Ok(())
     }
 }

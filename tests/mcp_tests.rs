@@ -5,9 +5,10 @@ use rad::ipc::{RasCoreEvent, RasRpcCommand};
 use rad::process::ProcessManager;
 use rad::wasm::WasmRuntime;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 struct MockNetwork;
@@ -61,7 +62,6 @@ fn setup_runtime(
         "orchestrator".to_string(),
         perms,
         sandbox as Arc<dyn rad::subsystems::FsSubsystem>,
-
         process_manager as Arc<dyn rad::subsystems::ProcessSubsystem>,
         dag_subsystem,
         network,
@@ -101,7 +101,10 @@ fn test_mcp_permission_denied() {
     let res = rad::wasm::bindings::RadExtensionImports::host_rpc(state, wit_cmd);
 
     assert!(res.is_err());
-    assert!(res.unwrap_err().contains("MCP permission denied: server 'unauthorized-mcp' is not whitelisted"));
+    assert!(
+        res.unwrap_err()
+            .contains("MCP permission denied: server 'unauthorized-mcp' is not whitelisted")
+    );
 }
 
 #[test]
@@ -113,7 +116,8 @@ fn test_mcp_echo_communication() {
     fs::create_dir_all(&snapshots).unwrap();
 
     // Whitelist "echo-mcp"
-    let (mut runtime, event_rx) = setup_runtime(vec!["echo-mcp".to_string()], &workspace, &snapshots);
+    let (mut runtime, event_rx) =
+        setup_runtime(vec!["echo-mcp".to_string()], &workspace, &snapshots);
 
     // 1. Spawn MCP Server (command: "cat" to act as echo server)
     let req_spawn = rad::ipc::RasRpcRequest {
@@ -156,13 +160,18 @@ fn test_mcp_echo_communication() {
     let start_time = Instant::now();
     let mut received_response = None;
     while start_time.elapsed() < Duration::from_secs(5) {
-        if let Ok(RasCoreEvent::McpResponse { name, message }) = event_rx.recv_timeout(Duration::from_millis(50)) {
+        if let Ok(RasCoreEvent::McpResponse { name, message, .. }) =
+            event_rx.recv_timeout(Duration::from_millis(50))
+        {
             assert_eq!(name, "echo-mcp");
             received_response = Some(message);
             break;
         }
     }
 
-    assert!(received_response.is_some(), "Should have received McpResponse");
+    assert!(
+        received_response.is_some(),
+        "Should have received McpResponse"
+    );
     assert_eq!(received_response.unwrap(), msg);
 }
