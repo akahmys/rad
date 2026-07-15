@@ -42,6 +42,7 @@ members = [
     "ext/openai-orchestrator",
     "ext/security-guard",
     "ext/mcp-tool-provider",
+    "ext/openai-connector",
     "models",
     "templates/rust",
 ]

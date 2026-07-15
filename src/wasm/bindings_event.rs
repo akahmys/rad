@@ -75,6 +75,9 @@ impl From<CoreRasCoreEvent> for wit::RasCoreEvent {
                 name,
                 message,
             }),
+            CoreRasCoreEvent::LlmConnectorEvent { event } => {
+                wit::RasCoreEvent::LlmConnectorEvent(event)
+            }
         }
     }
 }

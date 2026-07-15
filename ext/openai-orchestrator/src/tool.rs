@@ -29,21 +29,7 @@ pub struct Message {
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
-#[derive(Serialize, Clone)]
-pub struct StreamOptions {
-    pub include_usage: bool,
-}
 
-#[derive(Serialize)]
-pub struct ChatCompletionsRequest {
-    pub model: String,
-    pub messages: Vec<Message>,
-    pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stream_options: Option<StreamOptions>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<Tool>>,
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FunctionDefinition {

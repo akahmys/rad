@@ -146,6 +146,11 @@ impl From<wit::RasRpcCommand> for CoreRpcCommand {
                 name: payload.name,
                 arguments: payload.arguments,
             },
+            wit::RasRpcCommand::GenerateLlmStream(payload) => CoreRpcCommand::GenerateLlmStream {
+                model: payload.model,
+                messages_json: payload.messages_json,
+                tools_json: payload.tools_json,
+            },
         }
     }
 }
@@ -254,6 +259,13 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
             CoreRpcCommand::OpenFile { .. } | CoreRpcCommand::OpenProcess { .. } => {
                 panic!("OpenFile and OpenProcess are now directly imported capabilities")
             }
+            CoreRpcCommand::GenerateLlmStream { model, messages_json, tools_json } => {
+                wit::RasRpcCommand::GenerateLlmStream(wit::GenerateLlmStreamPayload {
+                    model,
+                    messages_json,
+                    tools_json,
+                })
+            }
         }
     }
 }
@@ -314,6 +326,9 @@ impl From<wit::RasCoreEvent> for CoreCoreEvent {
                 call_id: payload.call_id,
                 name: payload.name,
                 message: payload.message,
+            },
+            wit::RasCoreEvent::LlmConnectorEvent(event) => CoreCoreEvent::LlmConnectorEvent {
+                event,
             },
         }
     }

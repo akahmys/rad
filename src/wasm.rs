@@ -79,6 +79,7 @@ pub struct WasmRuntime {
     pub orchestrator: Option<bindings::rad_orchestrator::RadOrchestrator>,
     pub security_guard: Option<bindings::rad_security_guard::RadSecurityGuard>,
     pub tool_provider: Option<bindings::rad_tool_provider::RadToolProvider>,
+    pub llm_connector: Option<bindings::rad_llm_connector::LlmConnector>,
     pub instance: wasmtime::component::Instance,
     pub role: String,
 }
@@ -117,6 +118,8 @@ impl WasmRuntime {
                 .map_err(|e| format!("Linker error RadSecurityGuard: {e}"))?,
             "tool-provider" => bindings::rad_tool_provider::RadToolProvider::add_to_linker(&mut linker, |s| s)
                 .map_err(|e| format!("Linker error RadToolProvider: {e}"))?,
+            "llm-connector" => bindings::rad_llm_connector::LlmConnector::add_to_linker(&mut linker, |s| s)
+                .map_err(|e| format!("Linker error LlmConnector: {e}"))?,
             _ => bindings::RadExtension::add_to_linker(&mut linker, |s| s)
                 .map_err(|e| format!("Linker error RadExtension: {e}"))?,
         }
@@ -154,6 +157,7 @@ impl WasmRuntime {
         let mut orchestrator = None;
         let mut security_guard = None;
         let mut tool_provider = None;
+        let mut llm_connector = None;
 
         match role.as_str() {
             "orchestrator" => orchestrator = Some(bindings::rad_orchestrator::RadOrchestrator::new(&mut store, &instance)
@@ -162,6 +166,8 @@ impl WasmRuntime {
                 .map_err(|e| format!("Failed to create security bindings: {e}"))?),
             "tool-provider" => tool_provider = Some(bindings::rad_tool_provider::RadToolProvider::new(&mut store, &instance)
                 .map_err(|e| format!("Failed to create tool-provider bindings: {e}"))?),
+            "llm-connector" => llm_connector = Some(bindings::rad_llm_connector::LlmConnector::new(&mut store, &instance)
+                .map_err(|e| format!("Failed to create llm-connector bindings: {e}"))?),
             _ => extension = Some(bindings::RadExtension::new(&mut store, &instance)
                 .map_err(|e| format!("Failed to create legacy bindings: {e}"))?),
         }
@@ -172,6 +178,7 @@ impl WasmRuntime {
             orchestrator,
             security_guard,
             tool_provider,
+            llm_connector,
             instance,
             role,
         })
@@ -179,19 +186,19 @@ impl WasmRuntime {
 
     pub fn on_event(&mut self, event: &RasCoreEvent) -> Result<(), String> {
         let ext_name = self.store.data().name.clone();
-        println!("[HOST] Dispatching event to Wasm '{}': {:?}", ext_name, event);
+        crate::log_host!("[HOST] Dispatching event to Wasm '{}': {:?}", ext_name, event);
         let wit_event = bindings::wit::RasCoreEvent::from(event.clone());
 
         if self.role == "orchestrator" {
             if let Some(ref orch) = self.orchestrator {
                 let res = orch.call_on_event(&mut self.store, &wit_event)
                     .map_err(|e| format_wasm_error(&ext_name, "on_event", &e))?;
-                println!("[HOST] Wasm '{}' on_event returned: {:?}", ext_name, res);
+                crate::log_host!("[HOST] Wasm '{}' on_event returned: {:?}", ext_name, res);
                 res.map_err(|e| format!("Extension internal error: {e}"))
             } else {
                 Err("Orchestrator bindings missing".to_string())
             }
-        } else if self.role == "security" || self.role == "tool-provider" {
+        } else if self.role == "security" || self.role == "tool-provider" || self.role == "llm-connector" {
             Ok(())
         } else {
             if let Some(ref ext) = self.extension {
@@ -213,7 +220,7 @@ impl WasmRuntime {
         let request: crate::ipc::RasRpcRequest = serde_json::from_slice(req_bytes)
             .map_err(|e| format!("Failed to parse request bytes: {e}"))?;
         let bindings_cmd = bindings::wit::RasRpcCommand::from(request.command.clone());
-        println!("[HOST] verify_rpc for extension '{}': CoreCommand = {:?}, bindings::wit = {:?}", self.store.data().name, request.command, bindings_cmd);
+        crate::log_host!("[HOST] verify_rpc for extension '{}': CoreCommand = {:?}, bindings::wit = {:?}", self.store.data().name, request.command, bindings_cmd);
 
         let ext_name = self.store.data().name.clone();
 
@@ -228,8 +235,8 @@ impl WasmRuntime {
             } else {
                 return Err("Security guard bindings missing".to_string());
             }
-        } else if self.role == "orchestrator" || self.role == "tool-provider" {
-            // Orchestrator and tool-provider are auto-approved by host unless targeted by a security guard
+        } else if self.role == "orchestrator" || self.role == "tool-provider" || self.role == "llm-connector" {
+            // Orchestrator, tool-provider, and llm-connector are auto-approved by host unless targeted by a security guard
         } else {
             if let Some(ref ext) = self.extension {
                 let approved = ext

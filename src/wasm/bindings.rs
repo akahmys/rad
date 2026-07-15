@@ -40,6 +40,17 @@ pub mod rad_tool_provider {
     });
 }
 
+pub mod rad_llm_connector {
+    wasmtime::component::bindgen!({
+        path: "wit/llm-connector.wit",
+        world: "llm-connector",
+        additional_derives: [serde::Serialize, serde::Deserialize],
+        with: {
+            "radcomp:connector/types/stream-handle": crate::wasm::HostStream,
+        }
+    });
+}
+
 pub use rad_extension::RadExtension;
 pub use rad_extension::RadExtensionImports;
 pub use rad_extension::radcomp::extension::types as wit;
@@ -194,6 +205,11 @@ impl From<wit::RasRpcCommand> for CoreRasRpcCommand {
                 name: payload.name,
                 arguments: payload.arguments,
             },
+            wit::RasRpcCommand::GenerateLlmStream(payload) => CoreRasRpcCommand::GenerateLlmStream {
+                model: payload.model,
+                messages_json: payload.messages_json,
+                tools_json: payload.tools_json,
+            },
         }
     }
 }
@@ -312,6 +328,13 @@ impl From<CoreRasRpcCommand> for wit::RasRpcCommand {
             }
             CoreRasRpcCommand::OpenProcess { command } => {
                 wit::RasRpcCommand::SpawnBashProcess(command)
+            }
+            CoreRasRpcCommand::GenerateLlmStream { model, messages_json, tools_json } => {
+                wit::RasRpcCommand::GenerateLlmStream(wit::GenerateLlmStreamPayload {
+                    model,
+                    messages_json,
+                    tools_json,
+                })
             }
         }
     }

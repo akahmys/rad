@@ -83,6 +83,7 @@ pub fn execute_rpc_command(
         | RasRpcCommand::AskHumanApproval { .. }
         | RasRpcCommand::ReportTokenUsage { .. }
         | RasRpcCommand::GetTools
-        | RasRpcCommand::ExecuteTool { .. } => super::rpc_meta::handle_meta(cmd, &ctx),
+        | RasRpcCommand::ExecuteTool { .. }
+        | RasRpcCommand::GenerateLlmStream { .. } => super::rpc_meta::handle_meta(cmd, &ctx),
     }
 }

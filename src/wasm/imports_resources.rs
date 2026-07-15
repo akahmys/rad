@@ -302,3 +302,50 @@ impl bindings::wit::HostExecutionHandle for WasmState {
         Ok(())
     }
 }
+
+impl crate::wasm::bindings::rad_llm_connector::radcomp::connector::types::Host for WasmState {}
+
+
+
+impl crate::wasm::bindings::rad_llm_connector::radcomp::connector::types::HostStreamHandle for WasmState {
+    fn read(
+        &mut self,
+        self_: wasmtime::component::Resource<crate::wasm::HostStream>,
+        max_bytes: u32,
+    ) -> Result<Vec<u8>, String> {
+        bindings::wit::HostStreamHandle::read(self, self_, max_bytes)
+    }
+
+    fn write(
+        &mut self,
+        self_: wasmtime::component::Resource<crate::wasm::HostStream>,
+        data: Vec<u8>,
+    ) -> Result<(), String> {
+        bindings::wit::HostStreamHandle::write(self, self_, data)
+    }
+
+    fn close(
+        &mut self,
+        self_: wasmtime::component::Resource<crate::wasm::HostStream>,
+    ) {
+        bindings::wit::HostStreamHandle::close(self, self_);
+    }
+
+    fn drop(
+        &mut self,
+        rep: wasmtime::component::Resource<crate::wasm::HostStream>,
+    ) -> Result<(), wasmtime::Error> {
+        bindings::wit::HostStreamHandle::drop(self, rep)
+    }
+}
+
+impl crate::wasm::bindings::rad_llm_connector::LlmConnectorImports for WasmState {
+    fn open_http_stream(
+        &mut self,
+        url: String,
+        headers: Vec<(String, String)>,
+        body: String,
+    ) -> Result<wasmtime::component::Resource<crate::wasm::HostStream>, String> {
+        <WasmState as bindings::RadExtensionImports>::open_http_stream(self, url, headers, body)
+    }
+}

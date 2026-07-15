@@ -141,6 +141,13 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
             CoreRpcCommand::OpenFile { .. } | CoreRpcCommand::OpenProcess { .. } => {
                 panic!("OpenFile and OpenProcess are now directly imported capabilities")
             }
+            CoreRpcCommand::GenerateLlmStream { model, messages_json, tools_json } => {
+                wit::RasRpcCommand::GenerateLlmStream(wit::GenerateLlmStreamPayload {
+                    model,
+                    messages_json,
+                    tools_json,
+                })
+            }
         }
     }
 }

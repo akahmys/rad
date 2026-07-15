@@ -1,0 +1,81 @@
+package radcomp:connector;
+
+interface types {
+    record tool-call-function {
+        name: string,
+        arguments: string,
+    }
+
+    record tool-call {
+        id: string,
+        tool-type: string,
+        function: tool-call-function,
+    }
+
+    record message {
+        role: string,
+        content: option<string>,
+        name: option<string>,
+        tool-call-id: option<string>,
+        tool-calls: option<list<tool-call>>,
+    }
+
+    record function-definition {
+        name: string,
+        description: option<string>,
+        parameters: string, // JSON schema string
+    }
+
+    record tool {
+        tool-type: string,
+        function: function-definition,
+    }
+
+    record tool-call-chunk {
+        index: u32,
+        id: option<string>,
+        name: option<string>,
+        arguments-chunk: string,
+    }
+
+    record completion-usage {
+        prompt-tokens: u32,
+        completion-tokens: u32,
+    }
+
+    variant llm-event {
+        content-chunk(string),
+        reasoning-chunk(string),
+        tool-call-chunk(tool-call-chunk),
+        completion-complete(completion-usage),
+        error(string),
+    }
+
+    resource stream-handle {
+        read: func(max-bytes: u32) -> result<list<u8>, string>;
+        write: func(data: list<u8>) -> result<_, string>;
+        close: func();
+    }
+}
+
+interface producer {
+    use types.{llm-event, message, tool};
+
+    resource event-stream {
+        read: func() -> result<option<llm-event>, string>;
+    }
+
+    generate-stream: func(
+        model: string,
+        messages: list<message>,
+        tools: list<tool>,
+    ) -> result<event-stream, string>;
+}
+
+world llm-connector {
+    use types.{stream-handle};
+
+    import open-http-stream: func(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>;
+
+    export producer;
+}

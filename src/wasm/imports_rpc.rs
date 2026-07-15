@@ -180,7 +180,7 @@ impl bindings::RadExtensionImports for WasmState {
         name: String,
         arguments: String,
     ) -> Result<wasmtime::component::Resource<crate::wasm::HostExecution>, String> {
-        println!("[HOST] RadExtensionImports::execute_tool called: name = '{}', args = '{}'", name, arguments);
+        crate::log_host!("[HOST] RadExtensionImports::execute_tool called: name = '{}', args = '{}'", name, arguments);
         let mut provider_opt = None;
 
         if let Some(orchestrator) = self.orchestrator.as_ref().and_then(|w| w.upgrade()) {
@@ -429,10 +429,10 @@ impl WasmState {
         name: &str,
         arguments: &str,
     ) -> Result<wasmtime::component::Resource<crate::wasm::HostExecution>, String> {
-        println!("[HOST] WIT Core Tool Fallback: executing '{}' with args '{}'", name, arguments);
+        crate::log_host!("[HOST] WIT Core Tool Fallback: executing '{}' with args '{}'", name, arguments);
         
         // Reconstruct RasRpcCommand to perform security check
-        println!("[HOST] Fallback: parsing arguments and resolving path");
+        crate::log_host!("[HOST] Fallback: parsing arguments and resolving path");
         let rpc_cmd = match name {
             "read" => {
                 #[derive(serde::Deserialize)]
@@ -464,7 +464,7 @@ impl WasmState {
             other => return Err(format!("Unknown core tool: {other}")),
         };
 
-        println!("[HOST] Fallback: parsed command, fetching orchestrator");
+        crate::log_host!("[HOST] Fallback: parsed command, fetching orchestrator");
         let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
         if let Some(ref orch) = orchestrator {
             let req = RasRpcRequest {
@@ -473,12 +473,12 @@ impl WasmState {
             };
             let buf = serde_json::to_vec(&req)
                 .map_err(|e| format!("Failed to serialize request: {e}"))?;
-            println!("[HOST] Fallback: calling verify_rpc_exclude");
+            crate::log_host!("[HOST] Fallback: calling verify_rpc_exclude");
             if let Err(e) = orch.verify_rpc_exclude(&self.name, &req, &buf) {
-                println!("[HOST] Fallback: verify_rpc_exclude rejected request");
+                crate::log_host!("[HOST] Fallback: verify_rpc_exclude rejected request");
                 return Err(format!("Security verification failed: {e}"));
             }
-            println!("[HOST] Fallback: verify_rpc_exclude accepted request");
+            crate::log_host!("[HOST] Fallback: verify_rpc_exclude accepted request");
         }
 
         let command_to_run = match name {
