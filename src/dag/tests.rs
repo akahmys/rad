@@ -34,9 +34,15 @@ fn test_merge_nodes() {
 
     let grand_child = dag.create_node(&child1, "grand_child").unwrap();
     // Manually add child2 as a parent to grand_child to test multi-parent merge
-    dag.nodes.get_mut(&grand_child).unwrap().parent_ids.push(child2.clone());
+    dag.nodes
+        .get_mut(&grand_child)
+        .unwrap()
+        .parent_ids
+        .push(child2.clone());
 
-    let merge_id = dag.merge_nodes(&[child1.clone(), child2.clone()], "merged summary").unwrap();
+    let merge_id = dag
+        .merge_nodes(&[child1.clone(), child2.clone()], "merged summary")
+        .unwrap();
     assert_eq!(merge_id, "node_4"); // node_0: root, node_1: child1, node_2: child2, node_3: grand_child, node_4: merge
 
     assert!(!dag.nodes.contains_key(&child1));

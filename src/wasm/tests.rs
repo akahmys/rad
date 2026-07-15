@@ -4,16 +4,17 @@ use crate::dag::Dag;
 use crate::fs::FsSandbox;
 use crate::process::ProcessManager;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 struct TestContext {
     _temp_dir: tempfile::TempDir,
     _sandbox: Arc<FsSandbox>,
     _process_manager: Arc<ProcessManager>,
     _dag: Arc<Mutex<Dag>>,
-    _active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
+    _active_processes: Arc<Mutex<HashMap<String, RunningProcess>>>,
     runtime: WasmRuntime,
 }
 
@@ -39,13 +40,12 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: dag.clone() });
     let network_subsystem = Arc::new(crate::http::HttpManager);
     let (event_tx, _event_rx) = std::sync::mpsc::channel();
-    
+
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         wasm_path,
         "security".to_string(),
         perms,
-
         sandbox.clone() as Arc<dyn FsSubsystem>,
         process_manager.clone() as Arc<dyn ProcessSubsystem>,
         dag_subsystem,
@@ -54,8 +54,8 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
         event_tx,
         None,
         false,
-    ).unwrap();
-
+    )
+    .unwrap();
 
     TestContext {
         _temp_dir: temp_dir,
@@ -133,4 +133,22 @@ fn test_verify_rpc_allowed() {
     let req_bytes = serde_json::to_vec(&req).unwrap();
     let res = ctx.runtime.verify_rpc(&req_bytes);
     assert!(res.is_ok());
+}
+
+#[test]
+fn test_resolve_and_verify_path_helper() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let workspace = temp_dir.path().join("workspace");
+    fs::create_dir_all(&workspace).unwrap();
+    let workspace = workspace.canonicalize().unwrap();
+
+    let safe_file = "safe.txt";
+    let res = super::imports::resolve_and_verify_path(&workspace, safe_file);
+    assert!(res.is_ok());
+    assert_eq!(res.unwrap(), workspace.join("safe.txt"));
+
+    let unsafe_traversal = "../unsafe.txt";
+    let res = super::imports::resolve_and_verify_path(&workspace, unsafe_traversal);
+    assert!(res.is_err());
+    assert!(res.unwrap_err().contains("Access denied"));
 }

@@ -2,11 +2,12 @@ use rad::config::{ExecutionConfig, PermissionConfig};
 use rad::dag::Dag;
 use rad::orchestrator::Orchestrator;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::process::Command;
+use std::sync::Arc;
 
 fn run_mock_http_server(addr: &str) -> std::thread::JoinHandle<()> {
     let listener = std::net::TcpListener::bind(addr).unwrap();
@@ -15,20 +16,25 @@ fn run_mock_http_server(addr: &str) -> std::thread::JoinHandle<()> {
             let mut buf = [0; 1024];
             let _ = std::io::Read::read(&mut stream, &mut buf);
 
-            let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n";
+            let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n";
             let _ = std::io::Write::write_all(&mut stream, headers.as_bytes());
 
             // Send standard DONE event to complete task
             let resp = "data: {\"choices\":[{\"delta\":{\"content\":\"Task complete.\"}}]}\n\ndata: [DONE]\n\n";
             let _ = std::io::Write::write_all(&mut stream, resp.as_bytes());
             let _ = std::io::Write::flush(&mut stream);
+            let _ = stream.shutdown(std::net::Shutdown::Write);
         }
     })
 }
 
 fn init_git_repo(path: &Path) {
     let run = |args: &[&str]| {
-        Command::new("git").current_dir(path).args(args).output().unwrap();
+        Command::new("git")
+            .current_dir(path)
+            .args(args)
+            .output()
+            .unwrap();
     };
     run(&["init"]);
     run(&["config", "user.name", "Autopilot Test"]);
@@ -79,7 +85,7 @@ fn setup_autopilot_orchestrator(
     let dag = Arc::new(Mutex::new(Dag::new()));
     // Create initial node to start task from
     {
-        let mut dag_guard = dag.lock().unwrap();
+        let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
         dag_guard.set_node_text(&n0, "Initial").unwrap();
     }
@@ -89,7 +95,12 @@ fn setup_autopilot_orchestrator(
         std::env::set_var("RAD_YOLO", "true");
     }
 
-    Arc::new(Orchestrator::new(config, "test_autopilot_session".to_string(), dag, None))
+    Arc::new(Orchestrator::new(
+        config,
+        "test_autopilot_session".to_string(),
+        dag,
+        None,
+    ))
 }
 
 #[test]
@@ -108,7 +119,8 @@ fn test_autopilot_rollback_on_verification_failure() {
     let _server = run_mock_http_server(&format!("127.0.0.1:{port}"));
 
     // Setup orchestrator with a failing verification command
-    let orchestrator = setup_autopilot_orchestrator(&workspace, &snapshots, Some("exit 1".to_string()), port);
+    let orchestrator =
+        setup_autopilot_orchestrator(&workspace, &snapshots, Some("exit 1".to_string()), port);
 
     // Make some dirty modifications to the workspace before task starts
     fs::write(workspace.join("initial.txt"), "broken changes").unwrap();
@@ -149,7 +161,8 @@ fn test_autopilot_commit_on_verification_success() {
     let _server = run_mock_http_server(&format!("127.0.0.1:{port}"));
 
     // Setup orchestrator with a successful verification command (e.g. exit 0)
-    let orchestrator = setup_autopilot_orchestrator(&workspace, &snapshots, Some("exit 0".to_string()), port);
+    let orchestrator =
+        setup_autopilot_orchestrator(&workspace, &snapshots, Some("exit 0".to_string()), port);
 
     // Make some dirty modifications to the workspace (like what the agent would do)
     fs::write(workspace.join("initial.txt"), "new improved state").unwrap();

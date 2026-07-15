@@ -1,10 +1,10 @@
-use std::borrow::Cow;
-use rustyline::error::ReadlineError;
 use rustyline::completion::{Completer, FilenameCompleter};
-use rustyline::hint::Hinter;
+use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 use rustyline::{Context, Helper};
+use std::borrow::Cow;
 
 /// A helper that implements slash command completion, shell command completion, and file path completion.
 pub struct CommandHelper {
@@ -36,7 +36,18 @@ impl Completer for CommandHelper {
     ) -> Result<(usize, Vec<String>), ReadlineError> {
         if line.starts_with('/') {
             let mut candidates = Vec::new();
-            let commands = ["/help", "/exit", "/status", "/clear", "/session", "/rollback", "/reload", "/reset"];
+            let commands = [
+                "/help",
+                "/exit",
+                "/status",
+                "/clear",
+                "/session",
+                "/rollback",
+                "/reload",
+                "/reset",
+                "/tree",
+                "/tools",
+            ];
             for cmd in commands {
                 if cmd.starts_with(line) {
                     candidates.push(cmd.to_string());
@@ -46,13 +57,17 @@ impl Completer for CommandHelper {
         } else if line.starts_with('!') {
             let cur_line = &line[..pos];
             let words: Vec<&str> = cur_line.split_whitespace().collect();
-            let is_command_name = !cur_line.contains(' ') || (words.len() == 1 && !cur_line.ends_with(' '));
-            
+            let is_command_name =
+                !cur_line.contains(' ') || (words.len() == 1 && !cur_line.ends_with(' '));
+
             if is_command_name {
                 let current_word = words.first().copied().unwrap_or("");
                 if let Some(prefix) = current_word.strip_prefix('!') {
                     let candidates = complete_system_commands(prefix);
-                    let pairs = candidates.into_iter().map(|cmd| format!("!{cmd}")).collect();
+                    let pairs = candidates
+                        .into_iter()
+                        .map(|cmd| format!("!{cmd}"))
+                        .collect();
                     Ok((pos - current_word.len(), pairs))
                 } else {
                     Ok((pos, Vec::new()))
@@ -74,9 +89,13 @@ impl Completer for CommandHelper {
 
 fn complete_system_commands(prefix: &str) -> Vec<String> {
     let mut commands = Vec::new();
-    let Ok(path_var) = std::env::var("PATH") else { return commands; };
+    let Ok(path_var) = std::env::var("PATH") else {
+        return commands;
+    };
     for path_dir in std::env::split_paths(&path_var) {
-        let Ok(entries) = std::fs::read_dir(path_dir) else { continue; };
+        let Ok(entries) = std::fs::read_dir(path_dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let file_name = entry.file_name().to_string_lossy().into_owned();
             if file_name.starts_with(prefix) {
@@ -121,7 +140,10 @@ impl Highlighter for CommandHelper {
 }
 
 impl Validator for CommandHelper {
-    fn validate(&self, _ctx: &mut ValidationContext<'_>) -> Result<ValidationResult, ReadlineError> {
+    fn validate(
+        &self,
+        _ctx: &mut ValidationContext<'_>,
+    ) -> Result<ValidationResult, ReadlineError> {
         Ok(ValidationResult::Valid(None))
     }
 }

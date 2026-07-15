@@ -37,10 +37,14 @@ fn test_permissions() {
         vec!["allowed_write".to_string()],
     );
 
-    let read_err1 = sandbox.file_read(Path::new("forbidden/file.txt")).unwrap_err();
+    let read_err1 = sandbox
+        .file_read(Path::new("forbidden/file.txt"))
+        .unwrap_err();
     assert!(read_err1.contains("Read permission denied"));
 
-    let read_err2 = sandbox.file_read(Path::new("allowed_read/file.txt")).unwrap_err();
+    let read_err2 = sandbox
+        .file_read(Path::new("allowed_read/file.txt"))
+        .unwrap_err();
     assert!(!read_err2.contains("Read permission denied"));
 
     let write_err1 = sandbox
@@ -111,10 +115,7 @@ fn test_snapshot_backup_restore() {
     sandbox.file_write(file2, b"world").unwrap();
 
     sandbox
-        .take_snapshot(
-            "node_1",
-            &[file1.to_path_buf(), PathBuf::from("dir")],
-        )
+        .take_snapshot("node_1", &[file1.to_path_buf(), PathBuf::from("dir")])
         .unwrap();
 
     sandbox.file_write(file1, b"modified hello").unwrap();

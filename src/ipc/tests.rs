@@ -1,16 +1,20 @@
+use crate::ipc::{IpcBridge, RasCoreEvent, RasRpcCommand, RasRpcRequest, RasRpcResponse};
+use serde_json::json;
 use std::io::Cursor;
 use std::path::PathBuf;
-use serde_json::json;
-use crate::ipc::{IpcBridge, RasCoreEvent, RasRpcCommand, RasRpcRequest, RasRpcResponse};
 
 #[test]
 fn test_serialize_deserialize_request() {
-    let raw_json = r#"{"id":"req_1","method":"CreateNode","params":{"parent_id":"","node_type":"root"}}"#;
+    let raw_json =
+        r#"{"id":"req_1","method":"CreateNode","params":{"parent_id":"","node_type":"root"}}"#;
     let req: RasRpcRequest = serde_json::from_str(raw_json).unwrap();
 
     assert_eq!(req.id.as_deref(), Some("req_1"));
     match &req.command {
-        RasRpcCommand::CreateNode { parent_id, node_type } => {
+        RasRpcCommand::CreateNode {
+            parent_id,
+            node_type,
+        } => {
             assert_eq!(parent_id, "");
             assert_eq!(node_type, "root");
         }
@@ -24,7 +28,8 @@ fn test_serialize_deserialize_request() {
 
 #[test]
 fn test_ipc_bridge_read() {
-    let input_data = "{\"id\":\"1\",\"method\":\"FileRead\",\"params\":{\"path\":\"/tmp/test.txt\"}}\n";
+    let input_data =
+        "{\"id\":\"1\",\"method\":\"FileRead\",\"params\":{\"path\":\"/tmp/test.txt\"}}\n";
     let reader = Cursor::new(input_data);
     let writer = Vec::new();
 
@@ -85,15 +90,15 @@ fn test_route_event_to_terminal() {
         chunk: "hello".to_string(),
     };
     let ev2 = RasCoreEvent::ProcessStdout {
-        pgid: 1,
+        pgid: "1".to_string(),
         data: b"test_stdout".to_vec(),
     };
     let ev3 = RasCoreEvent::ProcessStderr {
-        pgid: 1,
+        pgid: "1".to_string(),
         data: b"test_stderr".to_vec(),
     };
     let ev4 = RasCoreEvent::ProcessSpawned {
-        pgid: 1,
+        pgid: "1".to_string(),
         pid: 123,
     };
 
@@ -102,4 +107,3 @@ fn test_route_event_to_terminal() {
     assert!(route_event_to_terminal(&ev3).is_ok());
     assert!(route_event_to_terminal(&ev4).is_ok());
 }
-

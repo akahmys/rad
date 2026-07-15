@@ -1,10 +1,11 @@
-use std::path::Path;
 use std::fs;
-use tree_sitter::{Parser, Node};
+use std::path::Path;
+use tree_sitter::{Node, Parser};
 
 pub fn extract_repo_map(workspace_path: &Path) -> Result<String, String> {
     let mut parser = Parser::new();
-    parser.set_language(tree_sitter_rust::language())
+    parser
+        .set_language(tree_sitter_rust::language())
         .map_err(|e| format!("Failed to set language: {e}"))?;
 
     let mut result = Vec::new();
@@ -58,7 +59,8 @@ fn process_rust_file(path: &Path, rel_path: &Path, parser: &mut Parser) -> Resul
     let code = fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file {}: {}", path.display(), e))?;
 
-    let tree = parser.parse(&code, None)
+    let tree = parser
+        .parse(&code, None)
         .ok_or_else(|| format!("Failed to parse code in {}", path.display()))?;
 
     let mut signatures = Vec::new();
@@ -73,13 +75,21 @@ fn process_rust_file(path: &Path, rel_path: &Path, parser: &mut Parser) -> Resul
     if signatures.is_empty() {
         Ok(String::new())
     } else {
-        Ok(format!("File: {}\n{}", rel_path.display(), signatures.join("\n")))
+        Ok(format!(
+            "File: {}\n{}",
+            rel_path.display(),
+            signatures.join("\n")
+        ))
     }
 }
 
 fn get_signature(node: &Node, code: &str) -> Option<String> {
     let kind = node.kind();
-    if kind != "struct_item" && kind != "impl_item" && kind != "function_item" && kind != "trait_item" {
+    if kind != "struct_item"
+        && kind != "impl_item"
+        && kind != "function_item"
+        && kind != "trait_item"
+    {
         return None;
     }
 
@@ -102,9 +112,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_signature_extraction() {
+    fn test_signature_extraction() -> Result<(), Box<dyn std::error::Error>> {
         let mut parser = Parser::new();
-        parser.set_language(tree_sitter_rust::language()).unwrap();
+        parser.set_language(tree_sitter_rust::language())?;
 
         let code = r#"
             pub struct MyStruct {
@@ -126,7 +136,7 @@ mod tests {
             }
         "#;
 
-        let tree = parser.parse(code, None).unwrap();
+        let tree = parser.parse(code, None).ok_or("Failed to parse code")?;
         let root = tree.root_node();
         let mut cursor = root.walk();
 
@@ -140,7 +150,12 @@ mod tests {
         assert_eq!(signatures.len(), 4);
         assert_eq!(signatures[0], "pub struct MyStruct");
         assert_eq!(signatures[1], "impl MyStruct");
-        assert_eq!(signatures[2], "fn my_private_function(a: String) -> Option<usize>");
+        assert_eq!(
+            signatures[2],
+            "fn my_private_function(a: String) -> Option<usize>"
+        );
         assert_eq!(signatures[3], "pub trait Run");
+
+        Ok(())
     }
 }

@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use crate::types::{RasRpcCommand, Dag};
 use crate::call_host;
-use crate::tool::{Message, ChatCompletionsRequest, get_tool_definitions, StreamOptions};
+use crate::tool::{ChatCompletionsRequest, Message, StreamOptions, get_tool_definitions};
+use crate::types::{Dag, RasRpcCommand};
+use std::collections::HashMap;
 
 fn load_local_agent_rules() -> String {
     let paths = [".agents/AGENTS.md", "AGENTS.md"];
@@ -37,7 +37,8 @@ fn get_system_prompt() -> String {
 
 pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
     let dag_val = call_host(RasRpcCommand::GetDag)?;
-    let dag: Dag = serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
+    let dag: Dag =
+        serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
     let mut messages = Vec::new();
     let mut current_id = dag.current_node_id;
 
@@ -55,7 +56,11 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
                 } else {
                     Message {
                         role: node.node_type.clone(),
-                        content: if node.text.is_empty() { None } else { Some(node.text.clone()) },
+                        content: if node.text.is_empty() {
+                            None
+                        } else {
+                            Some(node.text.clone())
+                        },
                         name: None,
                         tool_call_id: None,
                         tool_calls: None,
@@ -77,7 +82,8 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 
     messages.reverse();
 
-    let max_history = crate::orchestrator::STATE.lock()
+    let max_history = crate::orchestrator::STATE
+        .lock()
         .ok()
         .and_then(|guard| guard.as_ref().and_then(|s| s.max_history_messages))
         .unwrap_or(30);
@@ -148,7 +154,9 @@ pub fn trigger_llm_stream(messages: Vec<Message>) -> Result<(), String> {
         model: "qwen".to_string(),
         messages,
         stream: true,
-        stream_options: Some(StreamOptions { include_usage: true }),
+        stream_options: Some(StreamOptions {
+            include_usage: true,
+        }),
         tools: Some(tools),
     };
     let body = serde_json::to_string(&req).map_err(|e| format!("JSON serialize error: {e}"))?;

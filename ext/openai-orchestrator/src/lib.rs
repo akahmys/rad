@@ -1,13 +1,12 @@
 #![deny(clippy::pedantic)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
-
 wit_bindgen::generate!({
     path: "../../wit/rad.wit",
     world: "rad-orchestrator",
 });
 
-use rad_models::{RasRpcCommand as CoreRpcCommand, RasCoreEvent as CoreCoreEvent};
+use rad_models::{RasCoreEvent as CoreCoreEvent, RasRpcCommand as CoreRpcCommand};
 
 #[cfg(test)]
 use rad_models::Dag;
@@ -16,20 +15,18 @@ use std::collections::HashMap;
 
 use self::radcomp::extension::types as wit;
 
-mod types;
-mod orchestrator;
-mod tool;
-mod sse;
+mod conv;
 mod llm;
 pub mod mcp_client;
-pub mod tool_runner;
-mod conv;
+mod orchestrator;
+mod sse;
 #[cfg(test)]
 mod tests;
-
+mod tool;
+pub mod tool_runner;
+mod types;
 
 struct ExtensionImpl;
-
 
 impl Guest for ExtensionImpl {
     fn on_event(event: wit::RasCoreEvent) -> Result<(), String> {
@@ -37,7 +34,6 @@ impl Guest for ExtensionImpl {
         orchestrator::handle_event(core_event)
     }
 }
-
 
 export!(ExtensionImpl);
 
@@ -53,15 +49,10 @@ pub(crate) fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, St
             };
             serde_json::to_value(&dag).map_err(|e| e.to_string())
         }
-        CoreRpcCommand::CreateNode { .. } => {
-            Ok(serde_json::json!("node_0"))
-        }
-        CoreRpcCommand::SetNodeText { .. } => {
-            Ok(serde_json::Value::Null)
-        }
-        CoreRpcCommand::OpenHttpStream { .. } => {
-            Ok(serde_json::json!("http_stream_mock_id"))
-        }
+        CoreRpcCommand::CreateNode { .. } => Ok(serde_json::json!("node_0")),
+        CoreRpcCommand::SetNodeText { .. } => Ok(serde_json::Value::Null),
+        CoreRpcCommand::OpenHttpStream { .. } => Ok(serde_json::json!("http_stream_mock_id")),
+        CoreRpcCommand::ExecuteTool { .. } => Ok(serde_json::json!("mocked_tool_output")),
         _ => Ok(serde_json::Value::Null),
     }
 }
@@ -74,11 +65,10 @@ pub(crate) fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, St
             if json_str.is_empty() || json_str == "null" {
                 Ok(serde_json::Value::Null)
             } else {
-                serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error from host: {e}"))
+                serde_json::from_str(&json_str)
+                    .map_err(|e| format!("JSON parse error from host: {e}"))
             }
         }
         Err(err_msg) => Err(err_msg),
     }
 }
-
-

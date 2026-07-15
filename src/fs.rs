@@ -6,7 +6,7 @@ pub mod watcher;
 #[cfg(test)]
 mod tests;
 
-use std::sync::Mutex;
+use parking_lot::Mutex;
 
 pub struct FsSandbox {
     workspace_dir: PathBuf,
@@ -32,8 +32,8 @@ impl FsSandbox {
     }
 
     pub fn update_permissions(&self, read: Vec<String>, write: Vec<String>) {
-        *self.fs_read_allow.lock().unwrap() = read;
-        *self.fs_write_allow.lock().unwrap() = write;
+        *self.fs_read_allow.lock() = read;
+        *self.fs_write_allow.lock() = write;
     }
 
     #[must_use]
@@ -145,7 +145,7 @@ impl FsSandbox {
     ///
     /// Returns an error if the read permission check fails or file read fails.
     pub fn file_read(&self, path: &Path) -> Result<Vec<u8>, String> {
-        let read_allow = self.fs_read_allow.lock().unwrap();
+        let read_allow = self.fs_read_allow.lock();
         let allowed = self.has_permission(path, &read_allow)?;
         if !allowed {
             return Err("Read permission denied".to_string());
@@ -160,14 +160,15 @@ impl FsSandbox {
     ///
     /// Returns an error if the write permission check fails or file write fails.
     pub fn file_write(&self, path: &Path, data: &[u8]) -> Result<(), String> {
-        let write_allow = self.fs_write_allow.lock().unwrap();
+        let write_allow = self.fs_write_allow.lock();
         let allowed = self.has_permission(path, &write_allow)?;
         if !allowed {
             return Err("Write permission denied".to_string());
         }
         let canonical_path = self.canonicalize_path(path)?;
         if let Some(parent) = canonical_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent directory: {e}"))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create parent directory: {e}"))?;
         }
         fs::write(&canonical_path, data).map_err(|e| format!("Failed to write file: {e}"))
     }
@@ -178,7 +179,7 @@ impl FsSandbox {
     ///
     /// Returns an error if the write permission check fails, patch parsing fails, or patch application fails.
     pub fn file_edit_patch(&self, path: &Path, diff: &str) -> Result<(), String> {
-        let write_allow = self.fs_write_allow.lock().unwrap();
+        let write_allow = self.fs_write_allow.lock();
         let allowed = self.has_permission(path, &write_allow)?;
         if !allowed {
             return Err("Write permission denied".to_string());
@@ -192,17 +193,18 @@ impl FsSandbox {
             String::new()
         };
 
-        let diff_patch = diffy::Patch::from_str(diff)
-            .map_err(|e| format!("Failed to parse diff patch: {e}"))?;
+        let diff_patch =
+            diffy::Patch::from_str(diff).map_err(|e| format!("Failed to parse diff patch: {e}"))?;
         let modified = diffy::apply(&original, &diff_patch)
             .map_err(|e| format!("Failed to apply patch: {e}"))?;
 
         if let Some(parent) = canonical_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent directory: {e}"))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create parent directory: {e}"))?;
         }
-        fs::write(&canonical_path, modified).map_err(|e| format!("Failed to write patched file: {e}"))
+        fs::write(&canonical_path, modified)
+            .map_err(|e| format!("Failed to write patched file: {e}"))
     }
-
 }
 
 mod snapshot;

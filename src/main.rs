@@ -1,11 +1,11 @@
 #![deny(clippy::pedantic)]
 
-use rad::config;
-use rad::command::{CommandHelper, CommandManager, CommandParser, CommandResult};
 use clap::Parser;
-use rustyline::{error::ReadlineError, Editor};
+use rad::command::{CommandHelper, CommandManager, CommandParser, CommandResult};
+use rad::config;
 use rustyline::Config;
 use rustyline::history::{History, MemHistory};
+use rustyline::{Editor, error::ReadlineError};
 
 #[derive(Parser, Debug)]
 #[command(name = "rad", version, about = "Rust Agent Dispatcher")]
@@ -19,7 +19,14 @@ struct Args {
 
 fn load_config_and_session(
     args: &Args,
-) -> Result<(rad::config::Config, String, std::sync::Arc<std::sync::Mutex<rad::dag::Dag>>), String> {
+) -> Result<
+    (
+        rad::config::Config,
+        String,
+        std::sync::Arc<parking_lot::Mutex<rad::dag::Dag>>,
+    ),
+    String,
+> {
     let cfg = config::load_config(args.config.as_deref())
         .map_err(|e| format!("Error loading configuration: {e}"))?;
 
@@ -44,15 +51,19 @@ fn load_config_and_session(
         rad::dag::Dag::new()
     };
 
-    Ok((cfg, session_id, std::sync::Arc::new(std::sync::Mutex::new(dag))))
+    Ok((
+        cfg,
+        session_id,
+        std::sync::Arc::new(parking_lot::Mutex::new(dag)),
+    ))
 }
 
-fn init_editor(workspace: &str) -> Result<(Editor<CommandHelper, MemHistory>, std::path::PathBuf), String> {
-    let mut rl = Editor::<CommandHelper, MemHistory>::with_history(
-        Config::default(),
-        MemHistory::new(),
-    )
-    .map_err(|e| format!("Failed to initialize shell editor: {e}"))?;
+fn init_editor(
+    workspace: &str,
+) -> Result<(Editor<CommandHelper, MemHistory>, std::path::PathBuf), String> {
+    let mut rl =
+        Editor::<CommandHelper, MemHistory>::with_history(Config::default(), MemHistory::new())
+            .map_err(|e| format!("Failed to initialize shell editor: {e}"))?;
 
     rl.set_helper(Some(rad::command::CommandHelper::new()));
 
@@ -82,7 +93,9 @@ fn main() {
         args.config.clone(),
     ));
 
-    println!("\x1b[1;36mStarting rad agent shell. Type 'exit' or 'quit' to end the session.\x1b[0m");
+    println!(
+        "\x1b[1;36mStarting rad agent shell. Type 'exit' or 'quit' to end the session.\x1b[0m"
+    );
 
     let (rl, history_path) = match init_editor(&cfg.core.workspace) {
         Ok(val) => val,
@@ -92,7 +105,14 @@ fn main() {
         }
     };
 
-    run_repl(rl, &history_path, &orchestrator, &cfg, &session_id, &dag_arc);
+    run_repl(
+        rl,
+        &history_path,
+        &orchestrator,
+        &cfg,
+        &session_id,
+        &dag_arc,
+    );
 }
 
 #[cfg(unix)]
@@ -103,7 +123,7 @@ struct RawModeGuard {
 #[cfg(unix)]
 impl RawModeGuard {
     fn enable() -> Result<Self, String> {
-        use nix::sys::termios::{tcgetattr, tcsetattr, LocalFlags, SetArg};
+        use nix::sys::termios::{LocalFlags, SetArg, tcgetattr, tcsetattr};
 
         let fd = std::io::stdin();
         let orig_termios = tcgetattr(&fd).map_err(|e| format!("Failed to get termios: {e}"))?;
@@ -122,7 +142,7 @@ impl RawModeGuard {
 #[cfg(unix)]
 impl Drop for RawModeGuard {
     fn drop(&mut self) {
-        use nix::sys::termios::{tcsetattr, SetArg};
+        use nix::sys::termios::{SetArg, tcsetattr};
         let fd = std::io::stdin();
         let _ = tcsetattr(&fd, SetArg::TCSADRAIN, &self.orig_termios);
     }
@@ -138,7 +158,10 @@ impl RawModeGuard {
     }
 }
 
-fn run_agent_task(task: &str, orchestrator: &std::sync::Arc<rad::orchestrator::Orchestrator>) -> Result<(), String> {
+fn run_agent_task(
+    task: &str,
+    orchestrator: &std::sync::Arc<rad::orchestrator::Orchestrator>,
+) -> Result<(), String> {
     rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Thinking);
 
     if let Err(e) = orchestrator.run_task(task.to_string()) {
@@ -150,7 +173,11 @@ fn run_agent_task(task: &str, orchestrator: &std::sync::Arc<rad::orchestrator::O
     while orchestrator.is_running() {
         if let Ok(true) = crossterm::event::poll(std::time::Duration::from_millis(50)) {
             let ev = crossterm::event::read();
-            if let Ok(crossterm::event::Event::Key(crossterm::event::KeyEvent { code: crossterm::event::KeyCode::Esc, .. })) = ev {
+            if let Ok(crossterm::event::Event::Key(crossterm::event::KeyEvent {
+                code: crossterm::event::KeyCode::Esc,
+                ..
+            })) = ev
+            {
                 std::mem::drop(guard);
                 println!("\n\x1b[1;33mTask execution aborted by user (Esc).\x1b[0m");
                 orchestrator.abort();
@@ -168,7 +195,7 @@ fn process_input(
     orchestrator: &std::sync::Arc<rad::orchestrator::Orchestrator>,
     cfg: &rad::config::Config,
     session_id: &str,
-    dag_arc: &std::sync::Arc<std::sync::Mutex<rad::dag::Dag>>,
+    dag_arc: &std::sync::Arc<parking_lot::Mutex<rad::dag::Dag>>,
 ) -> Result<bool, String> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -208,11 +235,9 @@ fn process_input(
 
     run_agent_task(trimmed, orchestrator)?;
 
-    if let Ok(dag_guard) = dag_arc.lock() {
-        let res = rad::session::save_session(&cfg.core.workspace, session_id, &dag_guard);
-        if let Err(e) = res {
-            eprintln!("Failed to auto-save session: {e}");
-        }
+    let res = rad::session::save_session(&cfg.core.workspace, session_id, &dag_arc.lock());
+    if let Err(e) = res {
+        eprintln!("Failed to auto-save session: {e}");
     }
     Ok(true)
 }
@@ -223,7 +248,7 @@ fn run_repl(
     orchestrator: &std::sync::Arc<rad::orchestrator::Orchestrator>,
     cfg: &rad::config::Config,
     session_id: &str,
-    dag_arc: &std::sync::Arc<std::sync::Mutex<rad::dag::Dag>>,
+    dag_arc: &std::sync::Arc<parking_lot::Mutex<rad::dag::Dag>>,
 ) {
     loop {
         let readline = rl.readline("\x1b[1;32mrad > \x1b[0m");

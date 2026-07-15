@@ -8,7 +8,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Required for WASM component bindings generation
-wit-bindgen = "0.24.0"
-
-[workspace]
+wit-bindgen = { workspace = true }
 

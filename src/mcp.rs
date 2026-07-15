@@ -1,5 +1,5 @@
-use std::process::{Child, Stdio, ChildStdin};
-use std::io::{Write, BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, ChildStdin, Stdio};
 
 pub struct McpProcess {
     pub name: String,
@@ -22,9 +22,18 @@ impl McpProcess {
             .spawn()
             .map_err(|e| format!("Failed to spawn MCP server '{name}': {e}"))?;
 
-        let stdin = child.stdin.take().ok_or_else(|| "Failed to open MCP stdin".to_string())?;
-        let stdout = child.stdout.take().ok_or_else(|| "Failed to open MCP stdout".to_string())?;
-        let stderr = child.stderr.take().ok_or_else(|| "Failed to open MCP stderr".to_string())?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "Failed to open MCP stdin".to_string())?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "Failed to open MCP stdout".to_string())?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| "Failed to open MCP stderr".to_string())?;
 
         let name_clone = name.to_string();
         let event_tx_clone = event_tx.clone();
@@ -36,12 +45,19 @@ impl McpProcess {
                     break;
                 }
                 let msg = line.trim().to_string();
-                if !msg.is_empty() {
-                    let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::McpResponse {
-                        name: name_clone.clone(),
-                        message: msg,
-                    });
-                }
+                let call_id = serde_json::from_str::<serde_json::Value>(&msg)
+                    .ok()
+                    .and_then(|v| {
+                        v.get("id")
+                            .and_then(|id| id.as_str().map(|s| s.to_string()))
+                    })
+                    .unwrap_or_default();
+
+                let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::McpResponse {
+                    call_id,
+                    name: name_clone.clone(),
+                    message: msg,
+                });
                 line.clear();
             }
         });
@@ -69,7 +85,8 @@ impl McpProcess {
     pub fn send_message(&mut self, msg: &str) -> Result<(), String> {
         writeln!(self.stdin, "{}", msg)
             .map_err(|e| format!("Failed to write to MCP stdin: {e}"))?;
-        self.stdin.flush()
+        self.stdin
+            .flush()
             .map_err(|e| format!("Failed to flush MCP stdin: {e}"))?;
         Ok(())
     }

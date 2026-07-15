@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::sync::OnceLock;
 
 /// Represents the active phase of the REPL CLI.
@@ -32,7 +32,7 @@ impl TerminalController {
 
     /// Sets the terminal state and handles transition actions (e.g. erasing Thinking indicator).
     pub fn set_state(&self, new_state: TerminalState) {
-        let mut state_guard = self.state.lock().unwrap();
+        let mut state_guard = self.state.lock();
         let old_state = *state_guard;
         if old_state == new_state {
             return;
@@ -50,7 +50,7 @@ impl TerminalController {
                 }
 
                 // Flush deferred logs gathered during task execution
-                let mut buffer_guard = self.deferred_buffer.lock().unwrap();
+                let mut buffer_guard = self.deferred_buffer.lock();
                 for log in std::mem::take(&mut *buffer_guard) {
                     println!("{log}");
                 }
@@ -76,14 +76,14 @@ impl TerminalController {
     /// Outputs a system log/event.
     /// If LLM execution is active, defers output to memory buffer to avoid display pollution.
     pub fn write_log(&self, log: String) {
-        let state_guard = self.state.lock().unwrap();
+        let state_guard = self.state.lock();
         match *state_guard {
             TerminalState::Idle => {
                 println!("{log}");
                 let _ = std::io::Write::flush(&mut std::io::stdout());
             }
             TerminalState::Thinking | TerminalState::Streaming => {
-                let mut buffer_guard = self.deferred_buffer.lock().unwrap();
+                let mut buffer_guard = self.deferred_buffer.lock();
                 buffer_guard.push(log);
             }
         }
@@ -93,7 +93,7 @@ impl TerminalController {
     /// If LLM execution is active, defers output as a string to memory buffer.
     pub fn write_raw(&self, data: &[u8], is_stderr: bool) {
         use std::io::Write;
-        let state_guard = self.state.lock().unwrap();
+        let state_guard = self.state.lock();
         match *state_guard {
             TerminalState::Idle => {
                 if is_stderr {
@@ -106,7 +106,7 @@ impl TerminalController {
             }
             TerminalState::Thinking | TerminalState::Streaming => {
                 let log = String::from_utf8_lossy(data).into_owned();
-                let mut buffer_guard = self.deferred_buffer.lock().unwrap();
+                let mut buffer_guard = self.deferred_buffer.lock();
                 buffer_guard.push(log);
             }
         }

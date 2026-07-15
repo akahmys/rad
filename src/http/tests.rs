@@ -1,10 +1,10 @@
 use super::*;
-use std::net::TcpListener;
-use std::io::Write;
-use std::thread;
-use std::sync::mpsc;
-use std::time::Instant;
 use crate::ipc::TimeoutPolicy;
+use std::io::Write;
+use std::net::TcpListener;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Instant;
 
 #[test]
 fn test_http_streaming_success() {
@@ -37,8 +37,14 @@ fn test_http_streaming_success() {
     }
 
     let full_text = tokens.join("");
-    assert!(full_text.contains("hello"), "Expected 'hello' in full_text, but got: {full_text}");
-    assert!(full_text.contains("world"), "Expected 'world' in full_text, but got: {full_text}");
+    assert!(
+        full_text.contains("hello"),
+        "Expected 'hello' in full_text, but got: {full_text}"
+    );
+    assert!(
+        full_text.contains("world"),
+        "Expected 'world' in full_text, but got: {full_text}"
+    );
 }
 
 #[test]
@@ -50,7 +56,8 @@ fn test_http_streaming_timeout() {
         if let Ok((mut stream, _)) = listener.accept() {
             let mut buf = [0; 1024];
             let _ = std::io::Read::read(&mut stream, &mut buf);
-            let response_headers = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n";
+            let response_headers =
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n";
             let _ = stream.write_all(response_headers.as_bytes());
             let _ = stream.flush();
 
@@ -81,7 +88,10 @@ fn test_http_streaming_timeout() {
             }
         }
     }
-    assert!(timeout_occurred, "Timeout did not occur. Received events: {received_events:?}");
+    assert!(
+        timeout_occurred,
+        "Timeout did not occur. Received events: {received_events:?}"
+    );
 }
 
 #[test]
@@ -93,7 +103,8 @@ fn test_http_streaming_dynamic_policy_update() {
         if let Ok((mut stream, _)) = listener.accept() {
             let mut buf = [0; 1024];
             let _ = std::io::Read::read(&mut stream, &mut buf);
-            let response_headers = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n";
+            let response_headers =
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n";
             let _ = stream.write_all(response_headers.as_bytes());
             let _ = stream.flush();
 
@@ -121,7 +132,8 @@ fn test_http_streaming_dynamic_policy_update() {
     let mut hello_received = false;
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(1) {
-        if let Ok(RasCoreEvent::HttpChunkReceived { chunk }) = rx.recv_timeout(Duration::from_millis(100))
+        if let Ok(RasCoreEvent::HttpChunkReceived { chunk }) =
+            rx.recv_timeout(Duration::from_millis(100))
             && chunk.contains("hello")
         {
             hello_received = true;
@@ -131,7 +143,8 @@ fn test_http_streaming_dynamic_policy_update() {
     assert!(hello_received, "Failed to receive first chunk 'hello'");
 
     // Update the policy to be more strict
-    if let Ok(mut guard) = policy.lock() {
+    {
+        let mut guard = policy.lock();
         *guard = TimeoutPolicy::Dynamic {
             heartbeat_timeout_ms: 50,
             max_silent_wait_ms: 5000,
@@ -150,5 +163,8 @@ fn test_http_streaming_dynamic_policy_update() {
             }
         }
     }
-    assert!(timeout_occurred, "Timeout did not occur in dynamic update test. Received events: {received_events:?}");
+    assert!(
+        timeout_occurred,
+        "Timeout did not occur in dynamic update test. Received events: {received_events:?}"
+    );
 }

@@ -3,7 +3,9 @@ use std::io::{BufRead, Write};
 #[cfg(test)]
 mod tests;
 
-pub use rad_models::{Target, TimeoutPolicy, RasCoreEvent, RasRpcCommand, RasRpcRequest, RasRpcResponse};
+pub use rad_models::{
+    RasCoreEvent, RasRpcCommand, RasRpcRequest, RasRpcResponse, Target, TimeoutPolicy,
+};
 
 pub struct IpcBridge<R, W> {
     reader: R,
@@ -22,7 +24,10 @@ impl<R: BufRead, W: Write> IpcBridge<R, W> {
     /// Returns error if reading fails or JSON is invalid.
     pub fn read_request(&mut self) -> Result<Option<RasRpcRequest>, String> {
         let mut line = String::new();
-        let bytes_read = self.reader.read_line(&mut line).map_err(|e| format!("Failed to read line: {e}"))?;
+        let bytes_read = self
+            .reader
+            .read_line(&mut line)
+            .map_err(|e| format!("Failed to read line: {e}"))?;
         if bytes_read == 0 {
             return Ok(None);
         }
@@ -38,8 +43,12 @@ impl<R: BufRead, W: Write> IpcBridge<R, W> {
     pub fn write_response(&mut self, resp: &RasRpcResponse) -> Result<(), String> {
         let mut json = serde_json::to_vec(resp).map_err(|e| format!("Serialization error: {e}"))?;
         json.push(b'\n');
-        self.writer.write_all(&json).map_err(|e| format!("Write error: {e}"))?;
-        self.writer.flush().map_err(|e| format!("Flush error: {e}"))?;
+        self.writer
+            .write_all(&json)
+            .map_err(|e| format!("Write error: {e}"))?;
+        self.writer
+            .flush()
+            .map_err(|e| format!("Flush error: {e}"))?;
         Ok(())
     }
 
@@ -49,10 +58,15 @@ impl<R: BufRead, W: Write> IpcBridge<R, W> {
     ///
     /// Returns error if writing or flushing fails.
     pub fn write_event(&mut self, event: &RasCoreEvent) -> Result<(), String> {
-        let mut json = serde_json::to_vec(event).map_err(|e| format!("Serialization error: {e}"))?;
+        let mut json =
+            serde_json::to_vec(event).map_err(|e| format!("Serialization error: {e}"))?;
         json.push(b'\n');
-        self.writer.write_all(&json).map_err(|e| format!("Write error: {e}"))?;
-        self.writer.flush().map_err(|e| format!("Flush error: {e}"))?;
+        self.writer
+            .write_all(&json)
+            .map_err(|e| format!("Write error: {e}"))?;
+        self.writer
+            .flush()
+            .map_err(|e| format!("Flush error: {e}"))?;
         Ok(())
     }
 }
@@ -68,4 +82,3 @@ pub fn route_event_to_terminal(event: &RasCoreEvent) -> Result<(), String> {
     let _ = event;
     Ok(())
 }
-

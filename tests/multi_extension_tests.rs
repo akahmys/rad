@@ -1,29 +1,34 @@
-use rad::config::{Config, CoreConfig, ExtensionConfig, PermissionConfig, ExecutionConfig};
+use parking_lot::Mutex;
+use rad::config::{Config, CoreConfig, ExecutionConfig, ExtensionConfig, PermissionConfig};
 use rad::dag::Dag;
 use rad::orchestrator::Orchestrator;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-fn run_mock_http_server(addr: &str, responses: Arc<Mutex<Vec<String>>>) -> std::thread::JoinHandle<()> {
+fn run_mock_http_server(
+    addr: &str,
+    responses: Arc<Mutex<Vec<String>>>,
+) -> std::thread::JoinHandle<()> {
     let listener = std::net::TcpListener::bind(addr).unwrap();
     std::thread::spawn(move || {
         for mut stream in listener.incoming().flatten() {
             let mut buf = [0; 1024];
             let _ = std::io::Read::read(&mut stream, &mut buf);
 
-            let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n";
+            let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n";
             let _ = std::io::Write::write_all(&mut stream, headers.as_bytes());
 
             let resp = {
-                let mut guard = responses.lock().unwrap();
+                let mut guard = responses.lock();
                 guard.pop()
             };
             if let Some(chunks_str) = resp {
                 let _ = std::io::Write::write_all(&mut stream, chunks_str.as_bytes());
             }
             let _ = std::io::Write::flush(&mut stream);
+            let _ = stream.shutdown(std::net::Shutdown::Write);
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
     })
@@ -38,9 +43,10 @@ fn test_multi_extension_verification_chain() {
     fs::create_dir_all(&snapshots).unwrap();
 
     let turn2 = "data: {\"choices\":[{\"delta\":{\"content\":\"Task completed safely.\"}}]}\n\n\
-                 data: [DONE]\n\n".to_string();
+                 data: [DONE]\n\n"
+        .to_string();
     let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[\
-                 {\"index\":0,\"id\":\"call_write\",\"type\":\"function\",\"function\":{\"name\":\"file_write\",\"arguments\":\"{\\\"path\\\":\\\"blocked.txt\\\",\\\"content\\\":\\\"dangerous content\\\"}\"}}\
+                 {\"index\":0,\"id\":\"call_write\",\"type\":\"function\",\"function\":{\"name\":\"write\",\"arguments\":\"{\\\"path\\\":\\\"blocked.txt\\\",\\\"content\\\":\\\"dangerous content\\\"}\"}}\
                  ]}}]}\n\n\
                  data: [DONE]\n\n".to_string();
 
@@ -112,7 +118,7 @@ fn test_multi_extension_verification_chain() {
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {
-        let mut dag_guard = dag.lock().unwrap();
+        let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
         dag_guard.set_node_text(&n0, "Initial").unwrap();
         let snapshot_dir = snapshots.join(&n0);
@@ -120,7 +126,12 @@ fn test_multi_extension_verification_chain() {
         n0
     };
 
-    let orchestrator = Arc::new(Orchestrator::new(config, "test_multi_session".to_string(), dag.clone(), None));
+    let orchestrator = Arc::new(Orchestrator::new(
+        config,
+        "test_multi_session".to_string(),
+        dag.clone(),
+        None,
+    ));
 
     let run_res = orchestrator.run_task("start".to_string());
     assert!(run_res.is_ok(), "Task spawning failed");
@@ -142,15 +153,22 @@ fn test_multi_extension_verification_chain() {
     assert!(!path.exists(), "File blocked.txt should NOT exist");
 
     // The DAG should contain the rejection message
-    let dag_guard = dag.lock().unwrap();
+    let dag_guard = dag.lock();
+
     let mut found_rejection = false;
     for node in dag_guard.nodes.values() {
-        if node.text.contains("Operation rejected by security extension") {
+        if node
+            .text
+            .contains("Operation rejected by security extension")
+        {
             found_rejection = true;
             break;
         }
     }
-    assert!(found_rejection, "Verification chain rejection message not found in DAG");
+    assert!(
+        found_rejection,
+        "Verification chain rejection message not found in DAG"
+    );
 }
 
 #[test]
@@ -162,9 +180,10 @@ fn test_multi_extension_isolated_roles() {
     fs::create_dir_all(&snapshots).unwrap();
 
     let turn2 = "data: {\"choices\":[{\"delta\":{\"content\":\"Task completed safely.\"}}]}\n\n\
-                 data: [DONE]\n\n".to_string();
+                 data: [DONE]\n\n"
+        .to_string();
     let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[\
-                 {\"index\":0,\"id\":\"call_write\",\"type\":\"function\",\"function\":{\"name\":\"file_write\",\"arguments\":\"{\\\"path\\\":\\\"blocked.txt\\\",\\\"content\\\":\\\"dangerous content\\\"}\"}}\
+                 {\"index\":0,\"id\":\"call_write\",\"type\":\"function\",\"function\":{\"name\":\"write\",\"arguments\":\"{\\\"path\\\":\\\"blocked.txt\\\",\\\"content\\\":\\\"dangerous content\\\"}\"}}\
                  ]}}]}\n\n\
                  data: [DONE]\n\n".to_string();
 
@@ -235,7 +254,7 @@ fn test_multi_extension_isolated_roles() {
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {
-        let mut dag_guard = dag.lock().unwrap();
+        let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
         dag_guard.set_node_text(&n0, "Initial").unwrap();
         let snapshot_dir = snapshots.join(&n0);
@@ -243,7 +262,12 @@ fn test_multi_extension_isolated_roles() {
         n0
     };
 
-    let orchestrator = Arc::new(Orchestrator::new(config, "test_multi_role".to_string(), dag.clone(), None));
+    let orchestrator = Arc::new(Orchestrator::new(
+        config,
+        "test_multi_role".to_string(),
+        dag.clone(),
+        None,
+    ));
 
     let run_res = orchestrator.run_task("start".to_string());
     assert!(run_res.is_ok(), "Task spawning failed");
@@ -265,14 +289,20 @@ fn test_multi_extension_isolated_roles() {
     assert!(!path.exists(), "File blocked.txt should NOT exist");
 
     // The DAG should contain the rejection message
-    let dag_guard = dag.lock().unwrap();
+    let dag_guard = dag.lock();
+
     let mut found_rejection = false;
     for node in dag_guard.nodes.values() {
-        if node.text.contains("Operation rejected by security extension") {
+        if node
+            .text
+            .contains("Operation rejected by security extension")
+        {
             found_rejection = true;
             break;
         }
     }
-    assert!(found_rejection, "Security guard role rejection message not found in DAG");
+    assert!(
+        found_rejection,
+        "Security guard role rejection message not found in DAG"
+    );
 }
-

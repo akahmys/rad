@@ -1,13 +1,14 @@
-#![deny(clippy::pedantic)]
+// test edit]
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
 use crate::config::Config;
+use crate::dag::Dag;
 use crate::fs::FsSandbox;
 use crate::process::{ProcessManager, RunningProcess};
-use crate::dag::Dag;
 use crate::wasm::WasmRuntime;
+use parking_lot::Mutex;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Default, Debug, Clone)]
 pub struct TokenUsage {
@@ -16,14 +17,14 @@ pub struct TokenUsage {
 }
 
 pub struct Orchestrator {
-    config: Mutex<Config>,
+    pub(crate) config: Mutex<Config>,
     config_path: Option<String>,
     sandbox: Arc<FsSandbox>,
     process_manager: Arc<ProcessManager>,
     pub dag: Arc<Mutex<Dag>>,
-    active_processes: Arc<Mutex<HashMap<i32, RunningProcess>>>,
+    active_processes: Arc<Mutex<HashMap<String, RunningProcess>>>,
     pub session_id: Mutex<String>,
-    wasm_runtime: Mutex<HashMap<String, Arc<Mutex<WasmRuntime>>>>,
+    pub(crate) wasm_runtime: Mutex<HashMap<String, Arc<Mutex<WasmRuntime>>>>,
     running_task: Mutex<Option<std::thread::JoinHandle<Result<(), String>>>>,
     abort_flag: Arc<AtomicBool>,
     pub token_usage: Arc<Mutex<TokenUsage>>,
@@ -31,12 +32,35 @@ pub struct Orchestrator {
 
 impl Orchestrator {
     #[must_use]
-    pub fn new(config: Config, session_id: String, dag: Arc<Mutex<Dag>>, config_path: Option<String>) -> Self {
+    pub fn new(
+        config: Config,
+        session_id: String,
+        dag: Arc<Mutex<Dag>>,
+        config_path: Option<String>,
+    ) -> Self {
         let sandbox = Arc::new(FsSandbox::new(
             config.core.workspace.clone().into(),
             config.core.snapshot.clone().into(),
-            config.extensions.iter().flat_map(|e| e.permissions.as_ref().map(|p| p.fs_read_allow.clone()).unwrap_or_default()).collect(),
-            config.extensions.iter().flat_map(|e| e.permissions.as_ref().map(|p| p.fs_write_allow.clone()).unwrap_or_default()).collect(),
+            config
+                .extensions
+                .iter()
+                .flat_map(|e| {
+                    e.permissions
+                        .as_ref()
+                        .map(|p| p.fs_read_allow.clone())
+                        .unwrap_or_default()
+                })
+                .collect(),
+            config
+                .extensions
+                .iter()
+                .flat_map(|e| {
+                    e.permissions
+                        .as_ref()
+                        .map(|p| p.fs_write_allow.clone())
+                        .unwrap_or_default()
+                })
+                .collect(),
         ));
         let process_manager = Arc::new(ProcessManager::new());
         let active_processes = Arc::new(Mutex::new(HashMap::new()));
@@ -60,19 +84,14 @@ impl Orchestrator {
     ///
     /// # Errors
     ///
-    /// Returns error if saving session fails or mutex locking fails.
+    /// Returns error if saving session fails.
     pub fn reset_session(&self) -> Result<String, String> {
-        let old_id = self.session_id.lock()
-            .map_err(|e| format!("Failed to lock session_id Mutex: {e}"))?
-            .clone();
-
-        let config_guard = self.config.lock()
-            .map_err(|e| format!("Failed to lock config Mutex: {e}"))?;
+        let old_id = self.session_id.lock().clone();
+        let config_guard = self.config.lock();
 
         // 1. Save the current DAG
         {
-            let dag_guard = self.dag.lock()
-                .map_err(|e| format!("Failed to lock dag Mutex: {e}"))?;
+            let dag_guard = self.dag.lock();
             crate::session::save_session(&config_guard.core.workspace, &old_id, &dag_guard)?;
         }
 
@@ -84,33 +103,26 @@ impl Orchestrator {
 
         // 3. Update session_id and DAG
         {
-            let mut session_guard = self.session_id.lock()
-                .map_err(|e| format!("Failed to lock session_id Mutex: {e}"))?;
-            (*session_guard).clone_from(&new_id);
+            let mut session_guard = self.session_id.lock();
+            *session_guard = new_id.clone();
         }
 
         {
-            let mut dag_guard = self.dag.lock()
-                .map_err(|e| format!("Failed to lock dag Mutex: {e}"))?;
+            let mut dag_guard = self.dag.lock();
             *dag_guard = crate::dag::Dag::new();
         }
 
         // 4. Save the new empty DAG
         {
-            let dag_guard = self.dag.lock()
-                .map_err(|e| format!("Failed to lock dag Mutex: {e}"))?;
+            let dag_guard = self.dag.lock();
             crate::session::save_session(&config_guard.core.workspace, &new_id, &dag_guard)?;
         }
 
         // 5. Reset Wasm runtime state
-        let mut wasm_guard = self.wasm_runtime.lock()
-            .map_err(|e| format!("Failed to lock wasm_runtime Mutex: {e}"))?;
-        wasm_guard.clear();
+        self.wasm_runtime.lock().clear();
 
         // 6. Reset token usage
-        if let Ok(mut token_guard) = self.token_usage.lock() {
-            *token_guard = TokenUsage::default();
-        }
+        *self.token_usage.lock() = TokenUsage::default();
 
         Ok(new_id)
     }
@@ -125,27 +137,44 @@ impl Orchestrator {
             .map_err(|e| format!("Failed to load configuration: {e}"))?;
 
         // 1. Overwrite config
-        let mut config_guard = self.config.lock()
-            .map_err(|e| format!("Failed to lock config Mutex: {e}"))?;
-        *config_guard = new_cfg.clone();
+        {
+            let mut config_guard = self.config.lock();
+            *config_guard = new_cfg.clone();
+        }
 
         // 2. Update sandbox file system permissions
         self.sandbox.update_permissions(
-            new_cfg.extensions.iter().flat_map(|e| e.permissions.as_ref().map(|p| p.fs_read_allow.clone()).unwrap_or_default()).collect(),
-            new_cfg.extensions.iter().flat_map(|e| e.permissions.as_ref().map(|p| p.fs_write_allow.clone()).unwrap_or_default()).collect(),
+            new_cfg
+                .extensions
+                .iter()
+                .flat_map(|e| {
+                    e.permissions
+                        .as_ref()
+                        .map(|p| p.fs_read_allow.clone())
+                        .unwrap_or_default()
+                })
+                .collect(),
+            new_cfg
+                .extensions
+                .iter()
+                .flat_map(|e| {
+                    e.permissions
+                        .as_ref()
+                        .map(|p| p.fs_write_allow.clone())
+                        .unwrap_or_default()
+                })
+                .collect(),
         );
 
         // 3. Reset Wasm runtime state so it gets re-initialized with new configs on next run
-        let mut wasm_guard = self.wasm_runtime.lock()
-            .map_err(|e| format!("Failed to lock wasm_runtime Mutex: {e}"))?;
-        wasm_guard.clear();
+        self.wasm_runtime.lock().clear();
 
         Ok(())
     }
 
     /// Checks if a task is currently executing.
     pub fn is_running(&self) -> bool {
-        let Ok(mut guard) = self.running_task.lock() else { return false; };
+        let mut guard = self.running_task.lock();
         if let Some(ref handle) = *guard {
             if handle.is_finished() {
                 *guard = None;
@@ -164,18 +193,19 @@ impl Orchestrator {
     pub fn rollback(&self, node_id: &str) -> Result<(), String> {
         self.abort_flag.store(true, Ordering::SeqCst);
 
-        if let Ok(mut wasm_guard) = self.wasm_runtime.lock() {
+        {
+            let mut wasm_guard = self.wasm_runtime.lock();
             wasm_guard.clear();
         }
 
-        let Ok(mut guard) = self.running_task.lock() else {
-            return Err("Failed to lock running_task".to_string());
-        };
-        if let Some(handle) = guard.take() {
-            let _ = handle.join();
+        {
+            let mut guard = self.running_task.lock();
+            if let Some(handle) = guard.take() {
+                let _ = handle.join();
+            }
         }
 
-        let mut dag_guard = self.dag.lock().map_err(|e| format!("DAG lock error: {e}"))?;
+        let mut dag_guard = self.dag.lock();
         if !dag_guard.nodes.contains_key(node_id) {
             return Err(format!("Node '{node_id}' not found in DAG"));
         }
@@ -189,16 +219,15 @@ impl Orchestrator {
     /// Aborts the currently running task.
     pub fn abort(&self) {
         self.abort_flag.store(true, Ordering::SeqCst);
-        let Ok(mut guard) = self.running_task.lock() else { return; };
+        let mut guard = self.running_task.lock();
         if let Some(handle) = guard.take() {
             let _ = handle.join();
         }
     }
 }
 
-pub mod runner;
 pub mod autopilot;
+pub mod runner;
 
 #[cfg(test)]
 mod tests;
-

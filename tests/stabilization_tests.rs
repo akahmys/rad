@@ -2,9 +2,10 @@ use rad::config::{ExecutionConfig, PermissionConfig};
 use rad::dag::Dag;
 use rad::orchestrator::Orchestrator;
 
-use std::fs;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::fs;
+use std::sync::Arc;
 
 #[test]
 fn test_async_task_cancellation_on_rollback() {
@@ -49,26 +50,34 @@ fn test_async_task_cancellation_on_rollback() {
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let initial_node = {
-        let mut dag_guard = dag.lock().unwrap();
+        let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
         dag_guard.set_node_text(&n0, "Initial").unwrap();
-        
+
         // Setup a dummy snapshot directory for the node to satisfy rollback
         let snapshot_dir = snapshots.join(&n0);
         fs::create_dir_all(snapshot_dir).unwrap();
-        
+
         n0
     };
 
-    let orchestrator = Arc::new(Orchestrator::new(config, "test_session".to_string(), dag.clone(), None));
+    let orchestrator = Arc::new(Orchestrator::new(
+        config,
+        "test_session".to_string(),
+        dag.clone(),
+        None,
+    ));
 
     // Trigger run_task (it will run asynchronously in background thread)
     let _ = orchestrator.run_task("hello".to_string());
-    
+
     // Trigger rollback to cancel and abort the background thread
     let rollback_res = orchestrator.rollback(&initial_node);
     assert!(rollback_res.is_ok(), "Rollback should succeed");
-    
+
     // Ensure task is no longer running after rollback completes
-    assert!(!orchestrator.is_running(), "Task should be stopped and joined after rollback");
+    assert!(
+        !orchestrator.is_running(),
+        "Task should be stopped and joined after rollback"
+    );
 }

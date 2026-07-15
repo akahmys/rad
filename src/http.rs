@@ -1,10 +1,11 @@
+use crate::ipc::{RasCoreEvent, TimeoutPolicy};
+use futures_util::StreamExt;
+use parking_lot::Mutex;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
-use futures_util::StreamExt;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use crate::ipc::{RasCoreEvent, TimeoutPolicy};
 
 #[cfg(test)]
 mod tests;
@@ -29,8 +30,7 @@ pub fn open_http_stream<S: ::std::hash::BuildHasher>(
     for (k, v) in headers {
         let name = HeaderName::from_bytes(k.as_bytes())
             .map_err(|e| format!("Invalid header name: {e}"))?;
-        let value = HeaderValue::from_str(&v)
-            .map_err(|e| format!("Invalid header value: {e}"))?;
+        let value = HeaderValue::from_str(&v).map_err(|e| format!("Invalid header value: {e}"))?;
         header_map.insert(name, value);
     }
 
@@ -49,7 +49,15 @@ pub fn open_http_stream<S: ::std::hash::BuildHasher>(
         };
 
         rt.block_on(async {
-            if let Err(e) = run_http_stream_async(&url_owned, header_map, &body_owned, &event_tx, &timeout_policy).await {
+            if let Err(e) = run_http_stream_async(
+                &url_owned,
+                header_map,
+                &body_owned,
+                &event_tx,
+                &timeout_policy,
+            )
+            .await
+            {
                 let _ = event_tx.send(RasCoreEvent::HttpErrorReceived {
                     message: format!("HTTP error: {e}"),
                 });
@@ -76,8 +84,12 @@ async fn run_http_stream_async(
 ) -> Result<(), String> {
     let client = reqwest::Client::new();
     let (max_silent_wait, _) = get_timeout_values(timeout_policy);
-    
-    let req_future = client.post(url).headers(headers).body(body.to_string()).send();
+
+    let req_future = client
+        .post(url)
+        .headers(headers)
+        .body(body.to_string())
+        .send();
     let response = connect_with_timeout(req_future, max_silent_wait, event_tx).await?;
 
     if !response.status().is_success() {
@@ -105,7 +117,9 @@ async fn connect_with_timeout(
             Err("Initial connection timed out".to_string())
         }
     } else {
-        req_future.await.map_err(|e| format!("HTTP request failed: {e}"))
+        req_future
+            .await
+            .map_err(|e| format!("HTTP request failed: {e}"))
     }
 }
 
@@ -117,7 +131,7 @@ async fn read_stream_loop(
     loop {
         let (_, heartbeat) = get_timeout_values(timeout_policy);
         let next_chunk = read_next_chunk(&mut stream, heartbeat, event_tx).await?;
-        
+
         let Some(chunk) = next_chunk else {
             break;
         };
@@ -156,16 +170,16 @@ async fn read_next_chunk(
 }
 
 fn get_timeout_values(policy: &Arc<Mutex<TimeoutPolicy>>) -> (Option<Duration>, Option<Duration>) {
-    if let Ok(guard) = policy.lock() {
-        match *guard {
-            TimeoutPolicy::Dynamic { heartbeat_timeout_ms, max_silent_wait_ms } => (
-                Some(Duration::from_millis(max_silent_wait_ms)),
-                Some(Duration::from_millis(heartbeat_timeout_ms)),
-            ),
-            TimeoutPolicy::Infinite => (None, None),
-        }
-    } else {
-        (None, None)
+    let guard = policy.lock();
+    match *guard {
+        TimeoutPolicy::Dynamic {
+            heartbeat_timeout_ms,
+            max_silent_wait_ms,
+        } => (
+            Some(Duration::from_millis(max_silent_wait_ms)),
+            Some(Duration::from_millis(heartbeat_timeout_ms)),
+        ),
+        TimeoutPolicy::Infinite => (None, None),
     }
 }
 

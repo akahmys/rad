@@ -1,8 +1,9 @@
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use rad::command::{Command, CommandManager, CommandParser, CommandResult};
 use rad::config::{Config, CoreConfig};
 use rad::dag::Dag;
 use rad::orchestrator::Orchestrator;
-use rad::command::{CommandParser, Command, CommandManager, CommandResult};
+use std::sync::Arc;
 use tempfile::tempdir;
 
 #[test]
@@ -19,6 +20,8 @@ fn test_slash_command_parsing() {
         CommandParser::parse("/rollback node_0"),
         Some(Command::Rollback("node_0".to_string()))
     );
+    assert_eq!(CommandParser::parse("/tree"), Some(Command::Tree));
+    assert_eq!(CommandParser::parse("/tools"), Some(Command::Tools));
     assert_eq!(CommandParser::parse("regular text"), None);
 }
 
@@ -58,7 +61,7 @@ fn test_command_execution() {
 
     // 2. Add nodes and test Status Command again
     {
-        let mut dag_guard = dag.lock().unwrap();
+        let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
         dag_guard.set_node_text(&n0, "Hello").unwrap();
         let _n1 = dag_guard.create_node(&n0, "assistant").unwrap();
@@ -73,6 +76,24 @@ fn test_command_execution() {
         panic!("Expected StatusInfo");
     }
 
+    // 2.5 Test Tree Command
+    let res = CommandManager::execute(Command::Tree, &orchestrator);
+    if let CommandResult::StatusInfo(info) = res {
+        assert!(info.contains("node_0"));
+        assert!(info.contains("node_1"));
+    } else {
+        panic!("Expected StatusInfo");
+    }
+
+    // 2.6 Test Tools Command
+    let res = CommandManager::execute(Command::Tools, &orchestrator);
+    if let CommandResult::StatusInfo(info) = res {
+        assert!(info.contains("Active Permissions:"));
+        assert!(info.contains("Available Tools (from Wasm tool-provider):"));
+    } else {
+        panic!("Expected StatusInfo");
+    }
+
     // 3. Rollback to node_0 (which exists)
     let snapshot_node_path = snapshot.join("node_0");
     std::fs::create_dir_all(&snapshot_node_path).unwrap();
@@ -80,7 +101,7 @@ fn test_command_execution() {
     let res = CommandManager::execute(Command::Rollback("node_0".to_string()), &orchestrator);
     match res {
         CommandResult::Continue => {
-            let dag_guard = dag.lock().unwrap();
+            let dag_guard = dag.lock();
             assert_eq!(dag_guard.current_node_id.as_deref(), Some("node_0"));
         }
         _ => panic!("Expected CommandResult::Continue"),
@@ -91,7 +112,7 @@ fn test_command_execution() {
     match res {
         CommandResult::Continue => {
             // current node should still be node_0
-            let dag_guard = dag.lock().unwrap();
+            let dag_guard = dag.lock();
             assert_eq!(dag_guard.current_node_id.as_deref(), Some("node_0"));
         }
         _ => panic!("Expected CommandResult::Continue"),
@@ -112,10 +133,10 @@ fn test_command_execution() {
         CommandResult::StatusInfo(info) => {
             assert!(info.contains("Session reset successfully"));
             // Verify session ID has changed from "test_session"
-            let final_id = orchestrator.session_id.lock().unwrap().clone();
+            let final_id = orchestrator.session_id.lock().clone();
             assert_ne!(final_id, "test_session");
             // Verify DAG was cleared
-            let dag_guard = orchestrator.dag.lock().unwrap();
+            let dag_guard = orchestrator.dag.lock();
             assert_eq!(dag_guard.nodes.len(), 0);
         }
         _ => panic!("Expected CommandResult::StatusInfo"),
@@ -134,6 +155,8 @@ fn test_command_completion() {
     assert_eq!(res.0, 0);
     assert!(res.1.contains(&"/help".to_string()));
     assert!(res.1.contains(&"/exit".to_string()));
+    assert!(res.1.contains(&"/tree".to_string()));
+    assert!(res.1.contains(&"/tools".to_string()));
 
     // 2. "/he" input
     let res = helper.complete("/he", 3, &ctx).unwrap();

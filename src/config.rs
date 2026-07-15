@@ -122,7 +122,6 @@ fn default_role() -> String {
     "orchestrator".to_string()
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Config {
     #[serde(default)]
@@ -224,8 +223,8 @@ pub fn load_config(explicit_path: Option<&str>) -> Result<Config, String> {
     let config_path = discover_config_path(explicit_path);
 
     let base_val = if let Some(path) = config_path {
-        let content = fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read base config: {e}"))?;
+        let content =
+            fs::read_to_string(&path).map_err(|e| format!("Failed to read base config: {e}"))?;
         let mut base_val = parse_jsonc(&content)?;
 
         // Try loading rad.local.json in the same directory

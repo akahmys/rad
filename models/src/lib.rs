@@ -6,9 +6,9 @@
 //!
 //! Any modifications here affect the ABI compatibility.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 
 /// Timeout targets for connection/read timeouts.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -17,7 +17,7 @@ pub enum Target {
     /// Applies timeout to LLM connections.
     Llm,
     /// Applies timeout to process execution with specified pgid.
-    Process(i32),
+    Process(String),
 }
 
 /// Dynamic or Infinite timeout configuration policies.
@@ -38,13 +38,9 @@ pub enum TimeoutPolicy {
 #[serde(tag = "type", content = "payload")]
 pub enum RasCoreEvent {
     /// Received a chunk of text from LLM SSE stream.
-    HttpChunkReceived {
-        chunk: String,
-    },
+    HttpChunkReceived { chunk: String },
     /// Received an HTTP/connection error during LLM streaming.
-    HttpErrorReceived {
-        message: String,
-    },
+    HttpErrorReceived { message: String },
     /// An extension requested a tool call.
     ToolCallRequested {
         call_id: String,
@@ -52,41 +48,30 @@ pub enum RasCoreEvent {
         args: serde_json::Value,
     },
     /// A bash process was successfully spawned.
-    ProcessSpawned {
-        pgid: i32,
-        pid: i32,
-    },
+    ProcessSpawned { pgid: String, pid: i32 },
     /// Standard output data received from spawned process.
     ProcessStdout {
-        pgid: i32,
+        pgid: String,
         #[serde(with = "serde_bytes")]
         data: Vec<u8>,
     },
     /// Standard error data received from spawned process.
     ProcessStderr {
-        pgid: i32,
+        pgid: String,
         #[serde(with = "serde_bytes")]
         data: Vec<u8>,
     },
     /// Spawend process group has exited.
     ProcessExited {
-        pgid: i32,
+        pgid: String,
         exit_code: Option<i32>,
     },
     /// File changes detected in the sandbox workspace.
-    FileChanged {
-        path: PathBuf,
-        change_type: String,
-    },
+    FileChanged { path: PathBuf, change_type: String },
     /// Connection/stream read timed out.
-    StreamTimeout {
-        target: String,
-        duration_ms: u64,
-    },
+    StreamTimeout { target: String, duration_ms: u64 },
     /// Received human user prompt input.
-    HumanInputReceived {
-        text: String,
-    },
+    HumanInputReceived { text: String },
     /// The autonomous execution loop has completed.
     TaskCompleted,
     /// Recovery event containing active processes to rehydrate Wasm guest state.
@@ -95,6 +80,7 @@ pub enum RasCoreEvent {
     },
     /// Message response received from external MCP server.
     McpResponse {
+        call_id: String,
         name: String,
         message: String,
     },
@@ -106,7 +92,7 @@ pub struct PendingToolCallInfo {
     pub id: String,
     pub name: String,
     pub arguments: String,
-    pub pgid: Option<i32>,
+    pub pgid: Option<String>,
 }
 
 /// JSON-RPC Command list dispatched from Wasm Extension to Rad Core.
@@ -114,9 +100,7 @@ pub struct PendingToolCallInfo {
 #[serde(tag = "method", content = "params")]
 pub enum RasRpcCommand {
     /// Read binary data from a file in the workspace.
-    FileRead {
-        path: PathBuf,
-    },
+    FileRead { path: PathBuf },
     /// Write binary data to a file in the workspace.
     FileWrite {
         path: PathBuf,
@@ -124,42 +108,30 @@ pub enum RasRpcCommand {
         data: Vec<u8>,
     },
     /// Apply unified diff patch to a file in the workspace.
-    FileEditPatch {
-        path: PathBuf,
-        diff: String,
-    },
+    FileEditPatch { path: PathBuf, diff: String },
     /// Spawn an isolated background bash shell process.
-    SpawnBashProcess {
-        command: String,
-    },
+    SpawnBashProcess { command: String },
     /// Create a new node in the execution history DAG.
     CreateNode {
         parent_id: String,
         node_type: String,
     },
     /// Update the text content of a DAG node.
-    SetNodeText {
-        node_id: String,
-        text: String,
-    },
+    SetNodeText { node_id: String, text: String },
     /// Merge multiple DAG nodes into a single summary node.
     MergeNodes {
         node_ids: Vec<String>,
         summary_text: String,
     },
     /// Delete a node from the history DAG.
-    DeleteNode {
-        node_id: String,
-    },
+    DeleteNode { node_id: String },
     /// Snapshot the workspace files for recovery/rollback.
     TakeSnapshot {
         node_id: String,
         target_paths: Vec<PathBuf>,
     },
     /// Revert workspace files back to a snapshot node state.
-    CheckoutSnapshot {
-        node_id: String,
-    },
+    CheckoutSnapshot { node_id: String },
     /// Establish a streaming outbound HTTP connection (SSE).
     OpenHttpStream {
         url: String,
@@ -172,42 +144,40 @@ pub enum RasRpcCommand {
         policy: TimeoutPolicy,
     },
     /// Print a message to the human terminal output.
-    WriteStdout {
-        text: String,
-    },
+    WriteStdout { text: String },
     /// Conclude the current task and await new instructions.
     CompleteTask,
-    /// Fetch the current workspace history DAG.
-    GetDag,
-    /// Interactively prompt the human user for approval.
-    AskHumanApproval {
-        prompt: String,
-    },
-    /// Report prompt and completion tokens used.
-    ReportTokenUsage {
-        prompt_tokens: u32,
-        completion_tokens: u32,
-    },
-    /// Spawn an external MCP server process.
-    SpawnMcpServer {
-        name: String,
-        command: String,
-        args: Vec<String>,
-    },
-    /// Send JSON-RPC message to external MCP server.
-    SendMcpRequest {
-        name: String,
-        message: String,
-    },
-    /// Fetch semantic repository map of the workspace.
+    /// Fetch the semantic repository map of the workspace.
     GetRepoMap,
     /// Fetch combined tool definitions from the Tool Provider extension.
     GetTools,
     /// Delegate tool execution to the Tool Provider extension.
     ExecuteTool {
+        call_id: String,
         name: String,
         arguments: String,
     },
+    /// Open a file inside the workspace sandboxed environment.
+    OpenFile { path: PathBuf, writeable: bool },
+    /// Spawn a bash process inside the sandbox environment.
+    OpenProcess { command: String },
+    /// Retrieve the current execution DAG.
+    GetDag,
+    /// Ask for human approval via the terminal.
+    AskHumanApproval { prompt: String },
+    /// Report token usage for the LLM.
+    ReportTokenUsage {
+        prompt_tokens: u32,
+        completion_tokens: u32,
+    },
+    /// Spawn an MCP server process.
+    SpawnMcpServer {
+        name: String,
+        command: String,
+        args: Vec<String>,
+    },
+    /// Send a request to an MCP server.
+    SendMcpRequest { name: String, message: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

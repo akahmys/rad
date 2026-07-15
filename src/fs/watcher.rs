@@ -1,7 +1,7 @@
-use notify::{RecommendedWatcher, RecursiveMode, Watcher, EventKind};
+use crate::ipc::RasCoreEvent;
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver};
-use crate::ipc::RasCoreEvent;
 
 #[cfg(test)]
 mod tests;
@@ -20,26 +20,28 @@ impl FsWatcher {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let (tx, rx) = mpsc::channel();
 
-        let mut watcher = notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-            if let Ok(event) = res {
-                let change_type = match event.kind {
-                    EventKind::Create(_) => Some("create".to_string()),
-                    EventKind::Modify(_) => Some("modify".to_string()),
-                    EventKind::Remove(_) => Some("remove".to_string()),
-                    _ => None,
-                };
+        let mut watcher =
+            notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
+                if let Ok(event) = res {
+                    let change_type = match event.kind {
+                        EventKind::Create(_) => Some("create".to_string()),
+                        EventKind::Modify(_) => Some("modify".to_string()),
+                        EventKind::Remove(_) => Some("remove".to_string()),
+                        _ => None,
+                    };
 
-                if let Some(ct) = change_type {
-                    for p in event.paths {
-                        let ev = RasCoreEvent::FileChanged {
-                            path: p,
-                            change_type: ct.clone(),
-                        };
-                        let _ = tx.send(ev);
+                    if let Some(ct) = change_type {
+                        for p in event.paths {
+                            let ev = RasCoreEvent::FileChanged {
+                                path: p,
+                                change_type: ct.clone(),
+                            };
+                            let _ = tx.send(ev);
+                        }
                     }
                 }
-            }
-        }).map_err(|e| format!("Failed to create watcher: {e}"))?;
+            })
+            .map_err(|e| format!("Failed to create watcher: {e}"))?;
 
         watcher
             .watch(path.as_ref(), RecursiveMode::Recursive)

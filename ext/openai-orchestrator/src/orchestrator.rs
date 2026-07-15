@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use std::sync::{Mutex, MutexGuard};
-use crate::types::{RasRpcCommand, RasCoreEvent, Dag, PendingToolCall, OrchestratorState};
 use crate::call_host;
 use crate::tool::Message;
+use crate::types::{Dag, OrchestratorState, PendingToolCall, RasCoreEvent, RasRpcCommand};
+use std::collections::HashMap;
+use std::sync::{Mutex, MutexGuard};
 
 pub static STATE: Mutex<Option<OrchestratorState>> = Mutex::new(None);
 
@@ -27,11 +27,20 @@ fn handle_human_input(text: String) -> Result<(), String> {
         });
     }
     let dag_val = call_host(RasRpcCommand::GetDag)?;
-    let dag: Dag = serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
+    let dag: Dag =
+        serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
     let parent_id = dag.current_node_id.unwrap_or_default();
-    let user_node_id_val = call_host(RasRpcCommand::CreateNode { parent_id, node_type: "user".to_string() })?;
-    let user_node_id = user_node_id_val.as_str().ok_or("Failed to get node id as string")?;
-    call_host(RasRpcCommand::SetNodeText { node_id: user_node_id.to_string(), text })?;
+    let user_node_id_val = call_host(RasRpcCommand::CreateNode {
+        parent_id,
+        node_type: "user".to_string(),
+    })?;
+    let user_node_id = user_node_id_val
+        .as_str()
+        .ok_or("Failed to get node id as string")?;
+    call_host(RasRpcCommand::SetNodeText {
+        node_id: user_node_id.to_string(),
+        text,
+    })?;
 
     if mcp_names.is_empty() {
         let messages = crate::llm::load_messages_from_dag()?;
@@ -83,11 +92,18 @@ fn handle_process_exited(pgid: i32, exit_code: Option<i32>) -> Result<(), String
             if tc.pgid == Some(pgid) {
                 let out_str = String::from_utf8_lossy(&tc.stdout).to_string();
                 let err_str = String::from_utf8_lossy(&tc.stderr).to_string();
-                tc.result = Some(format!("Command exited with code {exit_code:?}.\nStdout:\n{out_str}\nStderr:\n{err_str}"));
+                tc.result = Some(format!(
+                    "Command exited with code {exit_code:?}.\nStdout:\n{out_str}\nStderr:\n{err_str}"
+                ));
                 found = true;
             }
         }
-        if found && state.pending_tool_calls.iter().all(|tc| tc.result.is_some()) {
+        if found
+            && state
+                .pending_tool_calls
+                .iter()
+                .all(|tc| tc.result.is_some())
+        {
             let pending = std::mem::take(&mut state.pending_tool_calls);
             drop(state_guard);
             crate::tool_runner::process_completed_tool_calls(pending)?;
@@ -117,17 +133,33 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
             let _ = call_host(RasRpcCommand::CompleteTask)?;
             Ok(())
         }
-        RasCoreEvent::ProcessStdout { pgid, data } => append_process_output(pgid, &data, false),
-        RasCoreEvent::ProcessStderr { pgid, data } => append_process_output(pgid, &data, true),
-        RasCoreEvent::ProcessExited { pgid, exit_code } => handle_process_exited(pgid, exit_code),
-        RasCoreEvent::McpResponse { name, message } => {
-            let is_list_tools = message.contains("\"id\":\"list_tools\"") || message.contains("\"id\": \"list_tools\"");
+        RasCoreEvent::ProcessStdout { pgid, data } => {
+            let pgid_i32 = pgid.parse::<i32>().unwrap_or(0);
+            append_process_output(pgid_i32, &data, false)
+        }
+        RasCoreEvent::ProcessStderr { pgid, data } => {
+            let pgid_i32 = pgid.parse::<i32>().unwrap_or(0);
+            append_process_output(pgid_i32, &data, true)
+        }
+        RasCoreEvent::ProcessExited { pgid, exit_code } => {
+            let pgid_i32 = pgid.parse::<i32>().unwrap_or(0);
+            handle_process_exited(pgid_i32, exit_code)
+        }
+        RasCoreEvent::McpResponse {
+            call_id: _,
+            name,
+            message,
+        } => {
+            let is_list_tools = message.contains("\"id\":\"list_tools\"")
+                || message.contains("\"id\": \"list_tools\"");
             if is_list_tools {
                 let mcp_tools = crate::mcp_client::parse_mcp_tools(&message)?;
                 let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
                 if let Some(state) = state_guard.as_mut() {
                     for t in &mcp_tools {
-                        state.mcp_tool_providers.insert(t.function.name.clone(), name.clone());
+                        state
+                            .mcp_tool_providers
+                            .insert(t.function.name.clone(), name.clone());
                     }
                     state.mcp_tools.extend(mcp_tools);
                     state.expected_mcp_servers.retain(|s| s != &name);
@@ -138,7 +170,8 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
                     }
                 }
             } else {
-                let (tool_call_id, result_str) = crate::mcp_client::parse_mcp_call_response(&message)?;
+                let (tool_call_id, result_str) =
+                    crate::mcp_client::parse_mcp_call_response(&message)?;
                 let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
                 if let Some(state) = state_guard.as_mut() {
                     let mut found = false;
@@ -148,7 +181,12 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
                             found = true;
                         }
                     }
-                    if found && state.pending_tool_calls.iter().all(|tc| tc.result.is_some()) {
+                    if found
+                        && state
+                            .pending_tool_calls
+                            .iter()
+                            .all(|tc| tc.result.is_some())
+                    {
                         let pending = std::mem::take(&mut state.pending_tool_calls);
                         drop(state_guard);
                         crate::tool_runner::process_completed_tool_calls(pending)?;
@@ -178,7 +216,7 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
                     id: call.id,
                     name: call.name,
                     arguments: call.arguments,
-                    pgid: call.pgid,
+                    pgid: call.pgid.and_then(|s| s.parse::<i32>().ok()),
                     stdout: Vec::new(),
                     stderr: Vec::new(),
                     result: None,
@@ -193,35 +231,57 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
 fn handle_done(mut state_guard: MutexGuard<'_, Option<OrchestratorState>>) -> Result<(), String> {
     let state = state_guard.as_mut().ok_or("State is None in handle_done")?;
     if state.is_reasoning {
-        let _ = call_host(RasRpcCommand::WriteStdout { text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string() });
+        let _ = call_host(RasRpcCommand::WriteStdout {
+            text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
+        });
         state.is_reasoning = false;
     }
 
     let (assistant_tool_calls, pending_calls) = crate::tool_runner::extract_tool_calls(state);
 
-    let assistant_content = if state.assistant.is_empty() { None } else { Some(state.assistant.clone()) };
+    let assistant_content = if state.assistant.is_empty() {
+        None
+    } else {
+        Some(state.assistant.clone())
+    };
     state.assistant.clear();
     state.reasoning_buffered.clear();
 
     drop(state_guard);
 
-    let _ = call_host(RasRpcCommand::WriteStdout { text: "\n".to_string() })?;
+    let _ = call_host(RasRpcCommand::WriteStdout {
+        text: "\n".to_string(),
+    })?;
 
     let assistant_msg = Message {
         role: "assistant".to_string(),
         content: assistant_content,
         name: None,
         tool_call_id: None,
-        tool_calls: if assistant_tool_calls.is_empty() { None } else { Some(assistant_tool_calls) },
+        tool_calls: if assistant_tool_calls.is_empty() {
+            None
+        } else {
+            Some(assistant_tool_calls)
+        },
     };
-    let assistant_text = serde_json::to_string(&assistant_msg).map_err(|e| format!("Failed to serialize assistant message: {e}"))?;
+    let assistant_text = serde_json::to_string(&assistant_msg)
+        .map_err(|e| format!("Failed to serialize assistant message: {e}"))?;
     let dag_val = call_host(RasRpcCommand::GetDag)?;
-    let dag: Dag = serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
+    let dag: Dag =
+        serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
     let parent_id = dag.current_node_id.unwrap_or_default();
 
-    let assistant_node_id_val = call_host(RasRpcCommand::CreateNode { parent_id, node_type: "assistant".to_string() })?;
-    let assistant_node_id = assistant_node_id_val.as_str().ok_or("Failed to get node id as string")?;
-    call_host(RasRpcCommand::SetNodeText { node_id: assistant_node_id.to_string(), text: assistant_text })?;
+    let assistant_node_id_val = call_host(RasRpcCommand::CreateNode {
+        parent_id,
+        node_type: "assistant".to_string(),
+    })?;
+    let assistant_node_id = assistant_node_id_val
+        .as_str()
+        .ok_or("Failed to get node id as string")?;
+    call_host(RasRpcCommand::SetNodeText {
+        node_id: assistant_node_id.to_string(),
+        text: assistant_text,
+    })?;
 
     if pending_calls.is_empty() {
         let _ = call_host(RasRpcCommand::CompleteTask)?;

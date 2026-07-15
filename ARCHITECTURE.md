@@ -37,11 +37,12 @@ graph TD
 The Core focuses on executing low-level physical operations (primitives) on the OS, filesystem, and network streams, as well as detecting and dispatching physical events from each subsystem.
 * **Statelessness**: The Core does not maintain or interpret any logical state related to semantics, such as prompts or conversation history. However, it manages the physical `DAG` representing history nodes to allow context preservation.
 * **Trait-based Subsystem Isolation**: To keep the implementation clean and modular, all physical operations are encapsulated under internal Rust Traits (e.g., `FsSubsystem`, `ProcessSubsystem`).
-* **API Gateway & Capability Check**: Wasm RPC requests pass through a single gateway that enforces the whitelists/blocklists configured in `rad.json` before delegating to the subsystems.
+* **API Gateway & Capability Check**: Wasm resource handle instantiation requests (like `open-file`, `open-process`, `execute-tool`) pass through a single gateway that enforces the whitelists/blocklists configured in `rad.json` before returning resource handles to Wasm guests.
 
 ### 1.2 Extension Responsibility: Policy Layer
 The Extension subscribes to the event stream from the Core and makes all logical control decisions.
 * **WIT (Wasm Interface Type) & WASI (v0.7.0+)**: To enable multi-language extension development (Rust, Go, TypeScript, etc.), RPC contracts and events are defined in WIT IDL files. Low-level bindings are automatically compiled via `wit-bindgen`.
+* **Unified Capability-Centric Architecture (UCCA)**: The Wasm guest interacts with the host through strongly-typed resource handles (`stream-handle`, `file-handle`, `execution-handle`) instead of generic JSON messages. For example, reading logs or process stdout is done by pulling bytes through a `stream-handle`, preventing unwanted side-effects.
 * **Statelessness (v0.2.2+)**: Instead of holding chat history in memory-based state arrays, the Extension fetches history dynamically from Core's DAG (`GetDag`) to ensure robustness across restarts.
 * **Conversation/Thought Context Construction**: Manages the history (context) sent to the LLM.
 * **Compaction**: Summarizes or truncates history to stay within token limits.
@@ -53,14 +54,13 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
    - **Responsibility**: Manages the prompt logic, calls the LLM, and orchestrates the steps of the agent loop.
    - **Isolation**: Focuses strictly on token completion and reasoning, calling tools abstractly via Core APIs.
 2. **Security Guard (Validation / verify-rpc)**
-   - **Responsibility**: Implements deep inspect rules to approve or deny physical RPC commands before the host executes them.
+   - **Responsibility**: Implements deep inspect rules to approve or deny resource instantiation requests (such as opening path `blocked.txt`) before the host returns the handle.
    - **Isolation**: Even if the Orchestrator is hijacked via prompt injection, the independent Security Guard Wasm prevents damage (sandboxed verification).
 3. **Tool/MCP Provider (Capability Bridging)**
    - **Responsibility**: Discovers, parses, and resolves dynamic schemas for external tools (e.g., via MCP servers) and marshals tool calls/replies.
 
-
-
 ---
+
 
 ## 2. State & Subsystem Specifications
 
@@ -110,11 +110,26 @@ pub enum RasCoreEvent {
     HttpChunkReceived {
         chunk: String,
     },
+    /// Received an error from the HTTP connection
+    HttpErrorReceived {
+        error: String,
+    },
     /// A tool execution request occurred from the LLM
     ToolCallRequested {
         call_id: String,
         name: String,
         args: serde_json::Value,
+    },
+    /// Indicates a task was successfully completed
+    TaskCompleted,
+    /// Provides history of pending tool calls to rehydrate extension state
+    Rehydrate {
+        pending_tool_calls: Vec<PendingToolCallInfo>,
+    },
+    /// A response from an external MCP server
+    McpResponse {
+        name: String,
+        message: String,
     },
 
     // === Process Monitoring (PTY / Bash) ===
@@ -159,76 +174,81 @@ pub enum RasCoreEvent {
 }
 ```
 
-### 3.2 Extension to Core Control RPC (`RasExtensionFacingApi`)
+### 3.2 Extension to Core Resource & RPC Interface (`rad.wit`)
 
-The interface definition for the Extension to command physical operations to the Core:
+The extension communicates with the host core using strongly-typed resource handles and host-rpc functions defined in `wit/rad.wit`.
 
-```rust
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+#### 3.2.1 Core Resources
 
-pub type StreamId = String;
+1. **`stream-handle`** (Pull-based I/O stream):
+   ```wit
+   resource stream-handle {
+       read: func(max-bytes: u32) -> result<list<u8>, string>;
+       write: func(data: list<u8>) -> result<_, string>;
+       close: func();
+   }
+   ```
+2. **`file-handle`** (Random-access file operations):
+   ```wit
+   resource file-handle {
+       read-at: func(offset: u64, len: u32) -> result<list<u8>, string>;
+       write-at: func(offset: u64, data: list<u8>) -> result<_, string>;
+       get-stream: func() -> stream-handle;
+   }
+   ```
+3. **`execution-handle`** (Supervised subprocess execution):
+   ```wit
+   resource execution-handle {
+       get-stdout: func() -> stream-handle;
+       get-stderr: func() -> stream-handle;
+       get-stdin: func() -> stream-handle;
+       wait: func() -> result<s32, string>;
+       kill: func();
+   }
+   ```
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Target {
-    Llm,
-    Process(i32),
-}
+#### 3.2.2 Host Resource Openers
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TimeoutPolicy {
-    Dynamic {
-        heartbeat_timeout_ms: u64,
-        max_silent_wait_ms: u64,
-    },
-    Infinite,
-}
+* **`open-file(path: string, writeable: bool) -> result<file-handle, string>`**:
+  Resolves and canonicalizes `path` against the workspace root sandbox. If authorized, returns an opaque file handle resource.
+* **`open-process(command: string) -> result<execution-handle, string>`**:
+  Spawns a bash process in a new PGID, returning a supervised execution handle resource.
+* **`execute-tool(name: string, arguments: string) -> result<execution-handle, string>`**:
+  Delegates the tool execution to the appropriate tool provider extension or MCP server, returning a streamable execution handle resource.
+* **`open-http-stream(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>`**:
+  Starts an asynchronous network stream and returns a `stream-handle` to read LLM stream tokens.
 
-pub trait RasExtensionFacingApi {
-    // === Execution of the 4 Physical Primitives ===
-    /// Reads a file
-    fn file_read(&self, path: &Path) -> Result<Vec<u8>, String>;
-    
-    /// Writes or overwrites a file
-    fn file_write(&self, path: &Path, data: &[u8]) -> Result<(), String>;
-    
-    /// Edits a file partially by applying a unified diff/patch
-    fn file_edit_patch(&self, path: &Path, diff: &str) -> Result<(), String>;
-    
-    /// Executes a bash command under a newly assigned isolated process group (PGID)
-    fn spawn_bash_process(&self, command: &str) -> Result<i32, String>;
+#### 3.2.3 Generic Host RPC commands (`host-rpc`)
 
-    // === DAG (History Graph) Operations ===
-    /// Creates a new DAG node and returns its generated node ID
-    fn create_node(&self, parent_id: &str, node_type: &str) -> String;
-    
-    /// Sets or updates the content (text) of a specified node
-    fn set_node_text(&self, node_id: &str, text: &str) -> Result<(), String>;
-    
-    /// Merges multiple nodes into one and sets a summary text
-    fn merge_nodes(&self, node_ids: Vec<String>, summary_text: &str) -> Result<(), String>;
-    
-    /// Deletes a DAG node
-    fn delete_node(&self, node_id: &str) -> Result<(), String>;
+Functions that do not require continuous byte streaming or handles are mapped through a single `host-rpc` command router:
 
-    // === Snapshots (State Backup & Restoration) ===
-    /// Saves the current workspace state (for target paths) and associates it with a node
-    fn take_snapshot(&self, node_id: &str, target_paths: Vec<PathBuf>) -> Result<(), String>;
-    
-    /// Checks out the snapshot associated with the node, restoring physical files
-    fn checkout_snapshot(&self, node_id: &str) -> Result<(), String>;
-
-    // === Network & Timer Control ===
-    /// Starts an HTTP(S) stream connection and streams response data via events
-    fn open_http_stream(&self, url: &str, headers: HashMap<String, String>, body: &str) -> Result<StreamId, String>;
-    
-    /// Dynamically updates the timeout monitoring policy for a target (LLM connection or process)
-    fn set_stream_timeout_policy(&self, target: Target, policy: TimeoutPolicy) -> Result<(), String>;
-
-    /// Prints a string directly to the human terminal standard output
-    fn write_stdout(&self, text: &str) -> Result<(), String>;
+```wit
+variant ras-rpc-command {
+    file-read(string),
+    file-write(file-write-payload),
+    file-edit-patch(file-patch-payload),
+    spawn-bash-process(string),
+    create-node(create-node-payload),
+    set-node-text(set-node-text-payload),
+    merge-nodes(merge-nodes-payload),
+    delete-node(string),
+    take-snapshot(take-snapshot-payload),
+    checkout-snapshot(string),
+    open-http-stream(open-http-stream-payload),
+    set-stream-timeout-policy(set-stream-timeout-policy-payload),
+    write-stdout(string),
+    complete-task,
+    get-dag,
+    ask-human-approval(string),
+    report-token-usage(report-token-usage-payload),
+    spawn-mcp-server(spawn-mcp-server-payload),
+    send-mcp-request(send-mcp-request-payload),
+    get-repo-map,
+    get-tools,
+    execute-tool(execute-tool-payload),
 }
 ```
+
 
 ---
 
@@ -249,43 +269,29 @@ For a simple and robust security policy, configuration is restricted to a single
 
 ```json
 {
-  "hitl_enabled": false,
+  "core": {
+    "workspace_dir": ".",
+    "snapshot_dir": ".rad/snapshots",
+    "log_dir": ".rad/logs"
+  },
   "extensions": [
     {
-      "name": "standard-orchestrator",
+      "name": "openai-orchestrator",
+      "source": "target/wasm32-wasip2/release/openai_orchestrator.wasm",
+      "enabled": true,
       "permissions": {
-        "fs_read_allow": [
-          "/path/to/rad"
-        ],
-        "fs_write_allow": [
-          "/path/to/rad"
-        ],
-        "execution": {
-          "allow_bash": true,
-          "allow_commands": [
-            "cargo check",
-            "cargo clippy",
-            "cargo test",
-            "git"
-          ],
-          "block_commands": [
-            "curl",
-            "wget",
-            "rm -rf /"
-          ]
-        },
-        "network": {
-          "allow_network": true,
-          "allow_domains": [
-            "api.openai.com",
-            "api.anthropic.com",
-            "github.com"
-          ]
-        },
-        "allowed_mcp_servers": [
-          "mcp-server-postgres",
-          "mcp-server-git"
-        ]
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"]
+      }
+    },
+    {
+      "name": "rust-template-extension",
+      "source": "templates/rust/target/wasm32-wasip1/release/rad_extension_template.wasm",
+      "enabled": true,
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"],
+        "rpc_allow": ["WriteStdout"]
       }
     }
   ]
@@ -293,10 +299,8 @@ For a simple and robust security policy, configuration is restricted to a single
 ```
 
 * **Local Verification**: The Core matches every RPC call (`file_read`, `file_write`, `spawn_bash_process`, `spawn_mcp_server`) against the Extension's `permissions` mask.
-* **HITL Toggle**: The global `"hitl_enabled"` key dictates whether `request_human_approval` pauses execution for terminal authorization. If false (default), the Core operates in YOLO mode and instantly accepts the action.
-* **Isolation Checks**:
-  * For filesystem I/O, target paths are canonicalized (`canonicalize`) to detect and reject attempts to access files outside the whitelist via symlinks.
-  * For command executions and MCP server requests, target executables are evaluated against whitelists.
+* **Core Configuration**: The `core` block defines the workspace, snapshot, and log directories used by the runtime.
+* **Extension Configuration**: Each entry in `extensions` defines the Wasm module source, its enabled status, and its specific capability mask.
 
 ---
 
@@ -383,9 +387,9 @@ sequenceDiagram
 ### 5.4.1 Tool Abstraction & Discovery
 
 1. **Basic OS Primitives (Core)**:
-   * Low-level primitives like `file_read`, `file_write`, `file_edit_patch`, and `spawn_bash_process` are exposed by the Core through the API Gateway.
+   * Low-level primitives like `file_read`, `file_write`, `file_edit_patch`, and `spawn_bash_process` are exposed by the Core through the API Gateway, and are presented to the LLM as shorter, clean tool names: `read`, `write`, `edit`, and `bash`.
 2. **Skills (Local Scripts)**:
-   * Executable scripts are placed in `.rad/skills/`. The Extension collects these scripts' specifications at startup and registers them to the LLM's tool pool. The LLM executes them by calling the script paths via `spawn_bash_process`.
+   * Executable scripts are placed in `.rad/skills/`. The Extension collects these scripts' specifications at startup and registers them to the LLM's tool pool. The LLM executes them by calling the script paths via the `bash` tool.
 3. **External Model Context Protocol (MCP)**:
    * Connection and schema mapping for external MCP servers are handled on the Extension side. The Extension fetches tool schemas from MCP servers, merges them with local schemas, and forwards tool invocations to the respective MCP servers.
 4. **Workflows (State Management)**:

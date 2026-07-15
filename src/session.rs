@@ -1,6 +1,6 @@
+use crate::dag::Dag;
 use std::fs;
 use std::path::Path;
-use crate::dag::Dag;
 
 /// Saves the session DAG state to the .rad/sessions/<session_id>.json file.
 ///
@@ -14,10 +14,9 @@ pub fn save_session(workspace: &str, session_id: &str, dag: &Dag) -> Result<(), 
             .map_err(|e| format!("Failed to create sessions directory: {e}"))?;
     }
     let session_file = sessions_dir.join(format!("{session_id}.json"));
-    let json = serde_json::to_string_pretty(dag)
-        .map_err(|e| format!("Failed to serialize DAG: {e}"))?;
-    fs::write(&session_file, json)
-        .map_err(|e| format!("Failed to write session file: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(dag).map_err(|e| format!("Failed to serialize DAG: {e}"))?;
+    fs::write(&session_file, json).map_err(|e| format!("Failed to write session file: {e}"))?;
     Ok(())
 }
 
@@ -32,12 +31,14 @@ pub fn load_session(workspace: &str, session_id: &str) -> Result<Dag, String> {
         .join("sessions")
         .join(format!("{session_id}.json"));
     if !session_file.exists() {
-        return Err(format!("Session file '{}' not found", session_file.display()));
+        return Err(format!(
+            "Session file '{}' not found",
+            session_file.display()
+        ));
     }
     let json = fs::read_to_string(&session_file)
         .map_err(|e| format!("Failed to read session file: {e}"))?;
-    let dag = serde_json::from_str(&json)
-        .map_err(|e| format!("Failed to deserialize DAG: {e}"))?;
+    let dag = serde_json::from_str(&json).map_err(|e| format!("Failed to deserialize DAG: {e}"))?;
     Ok(dag)
 }
 

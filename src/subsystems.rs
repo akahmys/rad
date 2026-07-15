@@ -1,7 +1,8 @@
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 pub trait FsSubsystem: Send + Sync {
     /// Reads a file.

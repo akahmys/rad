@@ -1,5 +1,5 @@
-use std::path::Path;
 use crate::git;
+use std::path::Path;
 
 pub(crate) fn run_verification_cmd(workspace: &Path, command_str: &str) -> bool {
     let output = if cfg!(target_os = "windows") {
@@ -30,7 +30,10 @@ pub(crate) fn run_verification_cmd(workspace: &Path, command_str: &str) -> bool 
     }
 }
 
-pub(crate) fn setup_git_autopilot(workspace_path: &Path, session_id: &str) -> (bool, Option<String>) {
+pub(crate) fn setup_git_autopilot(
+    workspace_path: &Path,
+    session_id: &str,
+) -> (bool, Option<String>) {
     let has_git = workspace_path.join(".git").exists();
     let mut initial_sha = None;
     if has_git {
