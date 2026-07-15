@@ -48,10 +48,9 @@ impl bindings::wit::HostStreamHandle for WasmState {
             }
             crate::wasm::HostStream::PipeReader(rx_mutex) => {
                 let rx = rx_mutex.lock();
-                match rx.try_recv() {
+                match rx.recv() {
                     Ok(data) => Ok(data),
-                    Err(std::sync::mpsc::TryRecvError::Empty) => Ok(vec![]),
-                    Err(std::sync::mpsc::TryRecvError::Disconnected) => Ok(vec![]),
+                    Err(_) => Ok(vec![]),
                 }
             }
             crate::wasm::HostStream::PipeWriter(_) => {
