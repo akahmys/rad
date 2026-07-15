@@ -38,7 +38,7 @@ impl Completer for CommandHelper {
             let mut candidates = Vec::new();
             let commands = [
                 "/help",
-                "/exit",
+                "/quit",
                 "/status",
                 "/clear",
                 "/session",
