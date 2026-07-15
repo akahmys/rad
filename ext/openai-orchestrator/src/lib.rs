@@ -17,13 +17,11 @@ use self::radcomp::extension::types as wit;
 
 mod conv;
 mod llm;
-pub mod mcp_client;
 mod orchestrator;
 mod sse;
 #[cfg(test)]
 mod tests;
 mod tool;
-pub mod tool_runner;
 mod types;
 
 struct ExtensionImpl;

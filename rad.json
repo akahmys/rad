@@ -28,6 +28,25 @@
         "fs_write_allow": ["*"],
         "rpc_allow": ["WriteStdout"]
       }
+    },
+    {
+      "name": "security-guard",
+      "source": "target/wasm32-wasip2/release/security_guard.wasm",
+      "enabled": true,
+      "role": "security",
+      "permissions": {
+        "fs_read_allow": ["*"]
+      }
+    },
+    {
+      "name": "mcp-tool-provider",
+      "source": "target/wasm32-wasip2/release/mcp_tool_provider.wasm",
+      "enabled": true,
+      "role": "tool-provider",
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"]
+      }
     }
   ]
 }

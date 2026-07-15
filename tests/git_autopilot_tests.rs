@@ -10,20 +10,24 @@ use std::process::Command;
 use std::sync::Arc;
 
 fn run_mock_http_server(addr: &str) -> std::thread::JoinHandle<()> {
+    let addr_str = addr.to_string();
     let listener = std::net::TcpListener::bind(addr).unwrap();
     std::thread::spawn(move || {
+        println!("[MOCK SERVER] Listening on {addr_str}");
         if let Ok((mut stream, _)) = listener.accept() {
-            let mut buf = [0; 1024];
-            let _ = std::io::Read::read(&mut stream, &mut buf);
+            println!("[MOCK SERVER] Accepted connection!");
+            let mut buf = [0; 4096];
+            let n = std::io::Read::read(&mut stream, &mut buf).unwrap_or(0);
+            println!("[MOCK SERVER] Request content:\n{}", String::from_utf8_lossy(&buf[..n]));
 
             let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n";
             let _ = std::io::Write::write_all(&mut stream, headers.as_bytes());
 
-            // Send standard DONE event to complete task
             let resp = "data: {\"choices\":[{\"delta\":{\"content\":\"Task complete.\"}}]}\n\ndata: [DONE]\n\n";
             let _ = std::io::Write::write_all(&mut stream, resp.as_bytes());
             let _ = std::io::Write::flush(&mut stream);
             let _ = stream.shutdown(std::net::Shutdown::Write);
+            println!("[MOCK SERVER] Finished sending mock stream.");
         }
     })
 }

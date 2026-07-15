@@ -143,12 +143,12 @@ fn test_resolve_and_verify_path_helper() {
     let workspace = workspace.canonicalize().unwrap();
 
     let safe_file = "safe.txt";
-    let res = super::imports::resolve_and_verify_path(&workspace, safe_file);
+    let res = super::imports_rpc::resolve_and_verify_path(&workspace, safe_file);
     assert!(res.is_ok());
     assert_eq!(res.unwrap(), workspace.join("safe.txt"));
 
     let unsafe_traversal = "../unsafe.txt";
-    let res = super::imports::resolve_and_verify_path(&workspace, unsafe_traversal);
+    let res = super::imports_rpc::resolve_and_verify_path(&workspace, unsafe_traversal);
     assert!(res.is_err());
     assert!(res.unwrap_err().contains("Access denied"));
 }
