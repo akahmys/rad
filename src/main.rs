@@ -94,7 +94,7 @@ fn main() {
     ));
 
     println!(
-        "\x1b[1;36mStarting rad agent shell. Type 'exit' or 'quit' to end the session.\x1b[0m"
+        "\x1b[1;36mStarting rad agent shell. Type '/quit' to end the session.\x1b[0m"
     );
 
     let (rl, history_path) = match init_editor(&cfg.core.workspace) {
@@ -215,7 +215,7 @@ fn process_input(
     if let Some(command) = CommandParser::parse(trimmed) {
         match CommandManager::execute(command, orchestrator) {
             CommandResult::Continue => {}
-            CommandResult::Exit => {
+            CommandResult::Quit => {
                 println!("\x1b[32mGoodbye!\x1b[0m");
                 return Ok(false);
             }
@@ -224,11 +224,6 @@ fn process_input(
             }
         }
         return Ok(true);
-    }
-
-    if trimmed == "exit" || trimmed == "quit" {
-        println!("\x1b[32mGoodbye!\x1b[0m");
-        return Ok(false);
     }
 
     println!("\x1b[36mTask received: \x1b[1m{trimmed}\x1b[0m");

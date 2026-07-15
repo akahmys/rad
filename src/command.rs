@@ -8,7 +8,7 @@ pub enum Command {
     /// Show the help menu.
     Help,
     /// Exit the session.
-    Exit,
+    Quit,
     /// Show current session status.
     Status,
     /// Clear the terminal screen.
@@ -31,7 +31,7 @@ impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Command::Help => write!(f, "/help"),
-            Command::Exit => write!(f, "/exit"),
+            Command::Quit => write!(f, "/quit"),
             Command::Status => write!(f, "/status"),
             Command::Clear => write!(f, "/clear"),
             Command::Session(id) => write!(f, "/session {id}"),
@@ -64,7 +64,7 @@ impl CommandParser {
 
         match parts[0] {
             "/help" => Some(Command::Help),
-            "/exit" => Some(Command::Exit),
+            "/quit" => Some(Command::Quit),
             "/status" => Some(Command::Status),
             "/clear" => Some(Command::Clear),
             "/session" => {
@@ -95,7 +95,7 @@ pub enum CommandResult {
     /// The command was executed, continue the loop.
     Continue,
     /// The command requested exiting the application.
-    Exit,
+    Quit,
     /// The command produced status information to be printed.
     StatusInfo(String),
 }
@@ -114,7 +114,7 @@ impl CommandManager {
             Command::Help => {
                 println!("Available Slash Commands:");
                 println!("  /help           - Show this help message");
-                println!("  /exit           - Exit the session");
+                println!("  /quit           - Exit the session");
                 println!("  /status         - Show current session status and DAG info");
                 println!("  /clear          - Clear the terminal screen");
                 println!("  /session <id>   - Show the current session ID");
@@ -125,7 +125,7 @@ impl CommandManager {
                 println!("  /tools          - List permissions and registered tools");
                 CommandResult::Continue
             }
-            Command::Exit => CommandResult::Exit,
+            Command::Quit => CommandResult::Quit,
             Command::Status => {
                 let session_id = orchestrator.session_id.lock().clone();
                 let usage_guard = orchestrator.token_usage.lock();

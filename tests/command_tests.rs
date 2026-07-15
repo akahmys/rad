@@ -9,7 +9,7 @@ use tempfile::tempdir;
 #[test]
 fn test_slash_command_parsing() {
     assert_eq!(CommandParser::parse("/help"), Some(Command::Help));
-    assert_eq!(CommandParser::parse("/exit"), Some(Command::Exit));
+    assert_eq!(CommandParser::parse("/quit"), Some(Command::Quit));
     assert_eq!(CommandParser::parse("/status"), Some(Command::Status));
     assert_eq!(CommandParser::parse("/clear"), Some(Command::Clear));
     assert_eq!(
@@ -154,7 +154,7 @@ fn test_command_completion() {
     let res = helper.complete("/", 1, &ctx).unwrap();
     assert_eq!(res.0, 0);
     assert!(res.1.contains(&"/help".to_string()));
-    assert!(res.1.contains(&"/exit".to_string()));
+    assert!(res.1.contains(&"/quit".to_string()));
     assert!(res.1.contains(&"/tree".to_string()));
     assert!(res.1.contains(&"/tools".to_string()));
 
