@@ -25,7 +25,7 @@ impl Orchestrator {
         let self_clone = self.clone();
         let handle = std::thread::spawn(move || {
             if let Err(e) = self_clone.run_task_internal(&instruction) {
-                eprintln!("\x1b[1;31mOrchestrator task failed: {e}\x1b[0m");
+                println!("\x1b[1;31mOrchestrator task failed: {e}\x1b[0m");
                 Err(e)
             } else {
                 Ok(())
@@ -99,7 +99,7 @@ impl Orchestrator {
                 for (name, runtime_arc) in &wasm_runtimes {
                     let mut runtime = runtime_arc.lock();
                     if let Err(e) = runtime.on_event(&init_event) {
-                        eprintln!("Wasm execution error on {name}: {e}. Recovering...");
+                        println!("Wasm execution error on {name}: {e}. Recovering...");
                         success = false;
                         break;
                     }
@@ -141,7 +141,7 @@ impl Orchestrator {
                     break;
                 }
                 Err(e) => {
-                    eprintln!("Wasm runtime crashed: {e}. Recovering...");
+                    println!("Wasm runtime crashed: {e}. Recovering...");
                     self.clear_runtimes()?;
                     attempts += 1;
                 }
@@ -213,6 +213,7 @@ impl Orchestrator {
         _request: &crate::ipc::RasRpcRequest,
         req_bytes: &[u8],
     ) -> Result<(), String> {
+        println!("[HOST] verify_rpc_exclude started (exclude: {})", exclude_name);
         let runtimes = {
             let guard = self.wasm_runtime.lock();
             guard.clone()
@@ -220,13 +221,22 @@ impl Orchestrator {
 
         for (name, runtime_arc) in runtimes {
             if name == exclude_name {
+                println!("[HOST] verify_rpc_exclude: skipping excluded extension '{}'", name);
                 continue;
             }
-            let mut runtime = runtime_arc.lock();
-            if let Err(e) = runtime.verify_rpc(req_bytes) {
+            println!("[HOST] verify_rpc_exclude: trying lock on '{}'", name);
+            let Some(mut runtime) = runtime_arc.try_lock() else {
+                println!("[HOST] verify_rpc_exclude: failed to lock '{}', skipping", name);
+                continue;
+            };
+            println!("[HOST] verify_rpc_exclude: locked '{}', calling verify_rpc", name);
+            let res = runtime.verify_rpc(req_bytes);
+            println!("[HOST] verify_rpc_exclude: verify_rpc for '{}' returned: {:?}", name, res);
+            if let Err(e) = res {
                 return Err(format!("Operation rejected by extension '{name}': {e}"));
             }
         }
+        println!("[HOST] verify_rpc_exclude completed successfully");
         Ok(())
     }
 

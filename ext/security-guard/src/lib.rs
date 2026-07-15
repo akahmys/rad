@@ -21,7 +21,7 @@ impl Guest for SecurityGuardImpl {
                 }
             }
             CoreRpcCommand::SpawnBashProcess { command } => {
-                if command.contains("blocked_command") {
+                if command.contains("blocked_command") || command.contains("blocked.txt") {
                     return false;
                 }
             }

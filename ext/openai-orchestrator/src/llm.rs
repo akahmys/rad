@@ -1,5 +1,5 @@
 use crate::call_host;
-use crate::tool::{ChatCompletionsRequest, Message, StreamOptions, get_tool_definitions};
+use crate::tool::{ChatCompletionsRequest, Message, StreamOptions, get_available_tools};
 use crate::types::{Dag, RasRpcCommand};
 use std::collections::HashMap;
 
@@ -116,6 +116,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
                             false
                         }
                     } else {
+                        // Correct type type
                         false
                     }
                 })
@@ -142,13 +143,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 }
 
 pub fn trigger_llm_stream(messages: Vec<Message>) -> Result<(), String> {
-    let mut tools = get_tool_definitions();
-
-    if let Ok(state_guard) = crate::orchestrator::STATE.lock() {
-        if let Some(state) = state_guard.as_ref() {
-            tools.extend(state.mcp_tools.clone());
-        }
-    }
+    let tools = get_available_tools().unwrap_or_default();
 
     let req = ChatCompletionsRequest {
         model: "qwen".to_string(),

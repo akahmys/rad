@@ -14,9 +14,6 @@ fn test_sse_parsing() {
         reasoning_buffered: String::new(),
         tool_calls: HashMap::new(),
         pending_tool_calls: Vec::new(),
-        expected_mcp_servers: Vec::new(),
-        mcp_tools: Vec::new(),
-        mcp_tool_providers: HashMap::new(),
         max_history_messages: None,
         max_tool_output_chars: None,
     };
@@ -36,9 +33,6 @@ fn test_sse_parsing_tool_call() {
         reasoning_buffered: String::new(),
         tool_calls: HashMap::new(),
         pending_tool_calls: Vec::new(),
-        expected_mcp_servers: Vec::new(),
-        mcp_tools: Vec::new(),
-        mcp_tool_providers: HashMap::new(),
         max_history_messages: None,
         max_tool_output_chars: None,
     };
@@ -58,9 +52,6 @@ fn test_sse_parsing_reasoning() {
         reasoning_buffered: String::new(),
         tool_calls: HashMap::new(),
         pending_tool_calls: Vec::new(),
-        expected_mcp_servers: Vec::new(),
-        mcp_tools: Vec::new(),
-        mcp_tool_providers: HashMap::new(),
         max_history_messages: None,
         max_tool_output_chars: None,
     };
@@ -80,9 +71,6 @@ fn test_sse_parsing_reasoning() {
         reasoning_buffered: String::new(),
         tool_calls: HashMap::new(),
         pending_tool_calls: Vec::new(),
-        expected_mcp_servers: Vec::new(),
-        mcp_tools: Vec::new(),
-        mcp_tool_providers: HashMap::new(),
         max_history_messages: None,
         max_tool_output_chars: None,
     };

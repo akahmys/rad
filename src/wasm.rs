@@ -12,7 +12,10 @@ use crate::process::RunningProcess;
 use crate::subsystems::{DagSubsystem, FsSubsystem, NetworkSubsystem, ProcessSubsystem};
 
 pub mod bindings;
+pub mod bindings_event;
 pub mod imports;
+mod imports_resources;
+mod imports_rpc;
 pub mod permissions;
 pub mod rpc;
 pub mod rpc_dag;
@@ -108,31 +111,14 @@ impl WasmRuntime {
             .map_err(|e| format!("Linker error WASI: {e}"))?;
 
         match role.as_str() {
-            "orchestrator" => {
-                bindings::rad_orchestrator::RadOrchestrator::add_to_linker(
-                    &mut linker,
-                    |state: &mut WasmState| state,
-                )
-                .map_err(|e| format!("Linker error RadOrchestrator: {e}"))?;
-            }
-            "security" => {
-                bindings::rad_security_guard::RadSecurityGuard::add_to_linker(
-                    &mut linker,
-                    |state: &mut WasmState| state,
-                )
-                .map_err(|e| format!("Linker error RadSecurityGuard: {e}"))?;
-            }
-            "tool-provider" => {
-                bindings::rad_tool_provider::RadToolProvider::add_to_linker(
-                    &mut linker,
-                    |state: &mut WasmState| state,
-                )
-                .map_err(|e| format!("Linker error RadToolProvider: {e}"))?;
-            }
-            _ => {
-                bindings::RadExtension::add_to_linker(&mut linker, |state: &mut WasmState| state)
-                    .map_err(|e| format!("Linker error RadExtension: {e}"))?;
-            }
+            "orchestrator" => bindings::rad_orchestrator::RadOrchestrator::add_to_linker(&mut linker, |s| s)
+                .map_err(|e| format!("Linker error RadOrchestrator: {e}"))?,
+            "security" => bindings::rad_security_guard::RadSecurityGuard::add_to_linker(&mut linker, |s| s)
+                .map_err(|e| format!("Linker error RadSecurityGuard: {e}"))?,
+            "tool-provider" => bindings::rad_tool_provider::RadToolProvider::add_to_linker(&mut linker, |s| s)
+                .map_err(|e| format!("Linker error RadToolProvider: {e}"))?,
+            _ => bindings::RadExtension::add_to_linker(&mut linker, |s| s)
+                .map_err(|e| format!("Linker error RadExtension: {e}"))?,
         }
 
         let wasi = WasiCtxBuilder::new()
@@ -170,30 +156,14 @@ impl WasmRuntime {
         let mut tool_provider = None;
 
         match role.as_str() {
-            "orchestrator" => {
-                orchestrator = Some(
-                    bindings::rad_orchestrator::RadOrchestrator::new(&mut store, &instance)
-                        .map_err(|e| format!("Failed to create orchestrator bindings: {e}"))?,
-                );
-            }
-            "security" => {
-                security_guard = Some(
-                    bindings::rad_security_guard::RadSecurityGuard::new(&mut store, &instance)
-                        .map_err(|e| format!("Failed to create security bindings: {e}"))?,
-                );
-            }
-            "tool-provider" => {
-                tool_provider = Some(
-                    bindings::rad_tool_provider::RadToolProvider::new(&mut store, &instance)
-                        .map_err(|e| format!("Failed to create tool-provider bindings: {e}"))?,
-                );
-            }
-            _ => {
-                extension = Some(
-                    bindings::RadExtension::new(&mut store, &instance)
-                        .map_err(|e| format!("Failed to create legacy bindings: {e}"))?,
-                );
-            }
+            "orchestrator" => orchestrator = Some(bindings::rad_orchestrator::RadOrchestrator::new(&mut store, &instance)
+                .map_err(|e| format!("Failed to create orchestrator bindings: {e}"))?),
+            "security" => security_guard = Some(bindings::rad_security_guard::RadSecurityGuard::new(&mut store, &instance)
+                .map_err(|e| format!("Failed to create security bindings: {e}"))?),
+            "tool-provider" => tool_provider = Some(bindings::rad_tool_provider::RadToolProvider::new(&mut store, &instance)
+                .map_err(|e| format!("Failed to create tool-provider bindings: {e}"))?),
+            _ => extension = Some(bindings::RadExtension::new(&mut store, &instance)
+                .map_err(|e| format!("Failed to create legacy bindings: {e}"))?),
         }
 
         Ok(Self {
@@ -209,13 +179,15 @@ impl WasmRuntime {
 
     pub fn on_event(&mut self, event: &RasCoreEvent) -> Result<(), String> {
         let ext_name = self.store.data().name.clone();
+        println!("[HOST] Dispatching event to Wasm '{}': {:?}", ext_name, event);
         let wit_event = bindings::wit::RasCoreEvent::from(event.clone());
 
         if self.role == "orchestrator" {
             if let Some(ref orch) = self.orchestrator {
-                orch.call_on_event(&mut self.store, &wit_event)
-                    .map_err(|e| format_wasm_error(&ext_name, "on_event", &e))?
-                    .map_err(|e| format!("Extension internal error: {e}"))
+                let res = orch.call_on_event(&mut self.store, &wit_event)
+                    .map_err(|e| format_wasm_error(&ext_name, "on_event", &e))?;
+                println!("[HOST] Wasm '{}' on_event returned: {:?}", ext_name, res);
+                res.map_err(|e| format!("Extension internal error: {e}"))
             } else {
                 Err("Orchestrator bindings missing".to_string())
             }
@@ -240,7 +212,8 @@ impl WasmRuntime {
     pub fn verify_rpc(&mut self, req_bytes: &[u8]) -> Result<(), String> {
         let request: crate::ipc::RasRpcRequest = serde_json::from_slice(req_bytes)
             .map_err(|e| format!("Failed to parse request bytes: {e}"))?;
-        let bindings_cmd = bindings::wit::RasRpcCommand::from(request.command);
+        let bindings_cmd = bindings::wit::RasRpcCommand::from(request.command.clone());
+        println!("[HOST] verify_rpc for extension '{}': CoreCommand = {:?}, bindings::wit = {:?}", self.store.data().name, request.command, bindings_cmd);
 
         let ext_name = self.store.data().name.clone();
 
@@ -299,7 +272,7 @@ impl WasmRuntime {
 
 fn format_wasm_error(ext_name: &str, action: &str, err: &wasmtime::Error) -> String {
     let err_str = err.to_string();
-    eprintln!(
+    println!(
         "[WASM Runtime Error] Extension '{ext_name}' failed during {action}. Details: {err_str}"
     );
     format!("Extension '{ext_name}' failed during {action}: {err_str}")

@@ -227,11 +227,18 @@ Last Updated: 2026-07-06
   - [x] Write integration test suites and verify E2E coordination
 
 ## Version 0.10.1 Complete Tool Execution Delegation
-- [ ] AWU 91: Complete Tool Execution Delegation via Host Mediation (Current)
-  - [ ] Add `GetTools` and `ExecuteTool` RPC commands to `rad_models` and `rad.wit`
-  - [ ] Implement host-side routing of tool RPCs to Tool Provider extension
-  - [ ] Refactor Orchestrator to delegate all tool execution via `host_rpc`
-  - [ ] Delete `tool_runner.rs` and `mcp_client.rs` from `openai-orchestrator`
-  - [ ] Enhance `mcp-tool-provider` with MCP lifecycle management
-  - [ ] Update and verify all integration tests
+- [x] AWU 91: Complete Tool Execution Delegation via Host Mediation (Current)
+  - [x] Add `GetTools` and `ExecuteTool` RPC commands to `rad_models` and `rad.wit`
+  - [x] Implement host-side routing of tool RPCs to Tool Provider extension
+  - [x] Refactor Orchestrator to delegate all tool execution via `host_rpc`
+  - [x] Delete `tool_runner.rs` and `mcp_client.rs` from `openai-orchestrator`
+  - [x] Enhance `mcp-tool-provider` with MCP lifecycle management
+  - [x] Update and verify all integration tests
+
+## Version 0.11.0 Code Quality & Orchestrator Slimming (Phase 6)
+- [x] AWU 201: Commit & baseline current changes
+- [x] AWU 202: Split `src/wasm/imports.rs` & eliminate unsafe patterns
+- [x] AWU 203: Split `src/wasm/bindings.rs`
+- [x] AWU 204: Complete Tool Execution Delegation
+- [ ] AWU 205: Configuration & cleanup
 

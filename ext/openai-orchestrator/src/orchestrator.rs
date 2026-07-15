@@ -1,15 +1,41 @@
-use crate::call_host;
-use crate::tool::Message;
+use crate::tool::{Message, ToolCall, ToolCallFunction, execute_tool_sync};
 use crate::types::{Dag, OrchestratorState, PendingToolCall, RasCoreEvent, RasRpcCommand};
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
 
 pub static STATE: Mutex<Option<OrchestratorState>> = Mutex::new(None);
 
-fn handle_human_input(text: String) -> Result<(), String> {
-    crate::mcp_client::init_mcp_servers()?;
-    let mcp_names = crate::mcp_client::get_configured_mcp_names()?;
+fn trim_large_output(text: &str) -> String {
+    let max_chars = STATE
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().and_then(|s| s.max_tool_output_chars))
+        .unwrap_or(2000);
 
+    if text.len() <= max_chars {
+        return text.to_string();
+    }
+
+    let head_len = max_chars / 4;
+    let tail_len = max_chars - head_len;
+
+    let head: String = text.chars().take(head_len).collect();
+    let tail: String = text
+        .chars()
+        .rev()
+        .take(tail_len)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+
+    format!(
+        "{head}\n\n[ERROR: THIS PART IS TRUNCATED. YOU MUST READ THIS RANGE SEPARATELY BEFORE EDITING ({} characters saved)]\n\n{tail}",
+        text.len() - max_chars
+    )
+}
+
+fn handle_human_input(text: String) -> Result<(), String> {
     {
         let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
         *state_guard = Some(OrchestratorState {
@@ -18,14 +44,12 @@ fn handle_human_input(text: String) -> Result<(), String> {
             is_reasoning: false,
             reasoning_buffered: String::new(),
             tool_calls: HashMap::new(),
-            pending_tool_calls: Vec::new(),
-            expected_mcp_servers: mcp_names.clone(),
-            mcp_tools: Vec::new(),
-            mcp_tool_providers: HashMap::new(),
-            max_history_messages: None,
-            max_tool_output_chars: None,
+            max_history_messages: Some(50),
+            max_tool_output_chars: Some(2000),
+            is_rehydrated: false,
         });
     }
+
     let dag_val = call_host(RasRpcCommand::GetDag)?;
     let dag: Dag =
         serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
@@ -42,74 +66,8 @@ fn handle_human_input(text: String) -> Result<(), String> {
         text,
     })?;
 
-    if mcp_names.is_empty() {
-        let messages = crate::llm::load_messages_from_dag()?;
-        crate::llm::trigger_llm_stream(messages)
-    } else {
-        for name in mcp_names {
-            let req = serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": "list_tools",
-                "method": "tools/list",
-                "params": {}
-            });
-            let msg_str = serde_json::to_string(&req)
-                .map_err(|e| format!("Failed to serialize tools/list request: {e}"))?;
-            let _ = call_host(RasRpcCommand::SendMcpRequest {
-                name,
-                message: msg_str,
-            })?;
-        }
-        Ok(())
-    }
-}
-
-fn append_process_output(pgid: i32, data: &[u8], is_stderr: bool) -> Result<(), String> {
-    let text = String::from_utf8_lossy(data);
-    if text.contains("CRASH_WASM") {
-        panic!("Simulated Wasm Crash");
-    }
-    let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
-    if let Some(state) = state_guard.as_mut() {
-        for tc in &mut state.pending_tool_calls {
-            if tc.pgid == Some(pgid) {
-                if is_stderr {
-                    tc.stderr.extend_from_slice(data);
-                } else {
-                    tc.stdout.extend_from_slice(data);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn handle_process_exited(pgid: i32, exit_code: Option<i32>) -> Result<(), String> {
-    let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
-    if let Some(state) = state_guard.as_mut() {
-        let mut found = false;
-        for tc in &mut state.pending_tool_calls {
-            if tc.pgid == Some(pgid) {
-                let out_str = String::from_utf8_lossy(&tc.stdout).to_string();
-                let err_str = String::from_utf8_lossy(&tc.stderr).to_string();
-                tc.result = Some(format!(
-                    "Command exited with code {exit_code:?}.\nStdout:\n{out_str}\nStderr:\n{err_str}"
-                ));
-                found = true;
-            }
-        }
-        if found
-            && state
-                .pending_tool_calls
-                .iter()
-                .all(|tc| tc.result.is_some())
-        {
-            let pending = std::mem::take(&mut state.pending_tool_calls);
-            drop(state_guard);
-            crate::tool_runner::process_completed_tool_calls(pending)?;
-        }
-    }
-    Ok(())
+    let messages = crate::llm::load_messages_from_dag()?;
+    crate::llm::trigger_llm_stream(messages)
 }
 
 pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
@@ -133,94 +91,59 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
             let _ = call_host(RasRpcCommand::CompleteTask)?;
             Ok(())
         }
-        RasCoreEvent::ProcessStdout { pgid, data } => {
-            let pgid_i32 = pgid.parse::<i32>().unwrap_or(0);
-            append_process_output(pgid_i32, &data, false)
-        }
-        RasCoreEvent::ProcessStderr { pgid, data } => {
-            let pgid_i32 = pgid.parse::<i32>().unwrap_or(0);
-            append_process_output(pgid_i32, &data, true)
-        }
-        RasCoreEvent::ProcessExited { pgid, exit_code } => {
-            let pgid_i32 = pgid.parse::<i32>().unwrap_or(0);
-            handle_process_exited(pgid_i32, exit_code)
-        }
-        RasCoreEvent::McpResponse {
-            call_id: _,
-            name,
-            message,
-        } => {
-            let is_list_tools = message.contains("\"id\":\"list_tools\"")
-                || message.contains("\"id\": \"list_tools\"");
-            if is_list_tools {
-                let mcp_tools = crate::mcp_client::parse_mcp_tools(&message)?;
-                let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
-                if let Some(state) = state_guard.as_mut() {
-                    for t in &mcp_tools {
-                        state
-                            .mcp_tool_providers
-                            .insert(t.function.name.clone(), name.clone());
-                    }
-                    state.mcp_tools.extend(mcp_tools);
-                    state.expected_mcp_servers.retain(|s| s != &name);
-                    if state.expected_mcp_servers.is_empty() {
-                        drop(state_guard);
-                        let messages = crate::llm::load_messages_from_dag()?;
-                        crate::llm::trigger_llm_stream(messages)?;
-                    }
-                }
-            } else {
-                let (tool_call_id, result_str) =
-                    crate::mcp_client::parse_mcp_call_response(&message)?;
-                let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
-                if let Some(state) = state_guard.as_mut() {
-                    let mut found = false;
-                    for tc in &mut state.pending_tool_calls {
-                        if tc.id == tool_call_id {
-                            tc.result = Some(result_str.clone());
-                            found = true;
-                        }
-                    }
-                    if found
-                        && state
-                            .pending_tool_calls
-                            .iter()
-                            .all(|tc| tc.result.is_some())
-                    {
-                        let pending = std::mem::take(&mut state.pending_tool_calls);
-                        drop(state_guard);
-                        crate::tool_runner::process_completed_tool_calls(pending)?;
-                    }
-                }
-            }
-            Ok(())
-        }
         RasCoreEvent::Rehydrate { active_calls } => {
             let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
-            let state = state_guard.get_or_insert_with(|| OrchestratorState {
+            let state = OrchestratorState {
                 assistant: String::new(),
                 stream: String::new(),
                 is_reasoning: false,
                 reasoning_buffered: String::new(),
-                tool_calls: HashMap::new(),
-                pending_tool_calls: Vec::new(),
-                expected_mcp_servers: Vec::new(),
-                mcp_tools: Vec::new(),
-                mcp_tool_providers: HashMap::new(),
-                max_history_messages: None,
-                max_tool_output_chars: None,
-            });
-            state.pending_tool_calls.clear();
-            for call in active_calls {
-                state.pending_tool_calls.push(PendingToolCall {
-                    id: call.id,
-                    name: call.name,
-                    arguments: call.arguments,
-                    pgid: call.pgid.and_then(|s| s.parse::<i32>().ok()),
-                    stdout: Vec::new(),
-                    stderr: Vec::new(),
-                    result: None,
-                });
+                tool_calls: std::collections::HashMap::new(),
+                max_history_messages: Some(50),
+                max_tool_output_chars: Some(2000),
+                is_rehydrated: true,
+            };
+            *state_guard = Some(state);
+            drop(state_guard);
+
+            // Re-execute rehydrated active tool calls
+            if !active_calls.is_empty() {
+                for call in active_calls {
+                    let result_raw = match crate::tool::execute_tool_sync(&call.name, &call.arguments) {
+                        Ok(res) => res,
+                        Err(e) => format!("Error: {e}"),
+                    };
+                    let result_content = trim_large_output(&result_raw);
+                    
+                    let tool_msg = crate::tool::Message {
+                        role: "tool".to_string(),
+                        content: Some(result_content),
+                        name: Some(call.name.clone()),
+                        tool_call_id: Some(call.id.clone()),
+                        tool_calls: None,
+                    };
+                    let tool_text = serde_json::to_string(&tool_msg)
+                        .map_err(|e| format!("Failed to serialize tool message: {e}"))?;
+                    
+                    let dag_val = call_host(RasRpcCommand::GetDag)?;
+                    let dag: rad_models::Dag = serde_json::from_value(dag_val)
+                        .map_err(|e| format!("Failed to parse Dag: {e}"))?;
+                    let current_parent = dag.current_node_id.unwrap_or_default();
+                    
+                    let node_id_val = call_host(RasRpcCommand::CreateNode {
+                        parent_id: current_parent,
+                        node_type: "tool".to_string(),
+                    })?;
+                    let node_id = node_id_val.as_str().ok_or("Failed to get node id as string")?;
+                    call_host(RasRpcCommand::SetNodeText {
+                        node_id: node_id.to_string(),
+                        text: tool_text,
+                    })?;
+                }
+                
+                // Continue stream
+                let messages = crate::llm::load_messages_from_dag()?;
+                crate::llm::trigger_llm_stream(messages)?;
             }
             Ok(())
         }
@@ -237,7 +160,32 @@ fn handle_done(mut state_guard: MutexGuard<'_, Option<OrchestratorState>>) -> Re
         state.is_reasoning = false;
     }
 
-    let (assistant_tool_calls, pending_calls) = crate::tool_runner::extract_tool_calls(state);
+    // Extract tool calls from state
+    let mut tool_indices: Vec<usize> = state.tool_calls.keys().copied().collect();
+    tool_indices.sort_unstable();
+
+    let mut assistant_tool_calls = Vec::new();
+    let mut pending_calls = Vec::new();
+
+    for idx in tool_indices {
+        if let Some(tool_call) = state.tool_calls.get(&idx) {
+            assistant_tool_calls.push(ToolCall {
+                id: tool_call.id.clone(),
+                tool_type: "function".to_string(),
+                function: ToolCallFunction {
+                    name: tool_call.name.clone(),
+                    arguments: tool_call.arguments.clone(),
+                },
+            });
+            pending_calls.push(PendingToolCall {
+                id: tool_call.id.clone(),
+                name: tool_call.name.clone(),
+                arguments: tool_call.arguments.clone(),
+                result: None,
+            });
+        }
+    }
+    state.tool_calls.clear();
 
     let assistant_content = if state.assistant.is_empty() {
         None
@@ -286,7 +234,60 @@ fn handle_done(mut state_guard: MutexGuard<'_, Option<OrchestratorState>>) -> Re
     if pending_calls.is_empty() {
         let _ = call_host(RasRpcCommand::CompleteTask)?;
     } else {
-        crate::tool_runner::execute_and_collect_tools(pending_calls)?;
+        // Execute tool calls synchronously
+        for mut tc in pending_calls {
+            let result_raw = match execute_tool_sync(&tc.name, &tc.arguments) {
+                Ok(res) => res,
+                Err(e) => format!("Error: {e}"),
+            };
+            let result_content = trim_large_output(&result_raw);
+            tc.result = Some(result_content);
+
+            let tool_msg = Message {
+                role: "tool".to_string(),
+                content: tc.result,
+                name: Some(tc.name.clone()),
+                tool_call_id: Some(tc.id.clone()),
+                tool_calls: None,
+            };
+            let tool_text = serde_json::to_string(&tool_msg)
+                .map_err(|e| format!("Failed to serialize tool message: {e}"))?;
+
+            let dag_val = call_host(RasRpcCommand::GetDag)?;
+            let dag: Dag =
+                serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
+            let current_parent = dag.current_node_id.unwrap_or_default();
+
+            let node_id_val = call_host(RasRpcCommand::CreateNode {
+                parent_id: current_parent,
+                node_type: "tool".to_string(),
+                })?;
+            let node_id = node_id_val
+                .as_str()
+                .ok_or("Failed to get node id as string")?;
+            call_host(RasRpcCommand::SetNodeText {
+                node_id: node_id.to_string(),
+                text: tool_text,
+            })?;
+        }
+
+        let messages = crate::llm::load_messages_from_dag()?;
+        crate::llm::trigger_llm_stream(messages)?;
     }
     Ok(())
+}
+
+fn call_host(command: RasRpcCommand) -> Result<serde_json::Value, String> {
+    let wit_cmd = crate::radcomp::extension::types::RasRpcCommand::from(command);
+    match crate::host_rpc(&wit_cmd) {
+        Ok(json_str) => {
+            if json_str.is_empty() || json_str == "null" {
+                Ok(serde_json::Value::Null)
+            } else {
+                serde_json::from_str(&json_str)
+                    .map_err(|e| format!("JSON parse error from host: {e}"))
+            }
+        }
+        Err(err_msg) => Err(err_msg),
+    }
 }
