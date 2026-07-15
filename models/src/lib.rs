@@ -84,6 +84,10 @@ pub enum RasCoreEvent {
         name: String,
         message: String,
     },
+    /// Event received from LLM connector.
+    LlmConnectorEvent {
+        event: String,
+    },
 }
 
 /// Recovery metadata for a pending process/tool execution.
@@ -178,6 +182,12 @@ pub enum RasRpcCommand {
     },
     /// Send a request to an MCP server.
     SendMcpRequest { name: String, message: String },
+    /// Trigger LLM stream generation using a connector.
+    GenerateLlmStream {
+        model: String,
+        messages_json: String,
+        tools_json: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

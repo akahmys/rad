@@ -8,82 +8,71 @@
 - [✅] Phase 4: Resource-Centric Refactoring (WIT Resources, UCCA)
 - [✅] Phase 5: REPL UX Enhancement (/tree, /tools)
 - [✅] Phase 6: Code Quality & Orchestrator Slimming (v0.11.0)
+- [🔄] Phase 7: Orchestrator Slimming & Abstraction (v0.12.0)
 
 ---
 
-## 🛠️ Short-Term Plan: Phase 6 (Code Quality & Orchestrator Slimming)
+## 🛠️ Short-Term Plan: Phase 7 (Orchestrator Slimming & Abstraction)
 
 ### 💡 Current AWU Status
-- [✅] AWU 201: Commit & baseline current changes
-- [✅] AWU 202: Split `src/wasm/imports.rs` (654→≤300 lines) & eliminate `unwrap()`/`panic!()`
-- [✅] AWU 203: Split `src/wasm/bindings.rs` (396→≤300 lines)
-- [✅] AWU 204: Complete Tool Execution Delegation (Orchestrator slimming)
-- [✅] AWU 205: Configuration & cleanup
+- [✅] AWU 301: Orchestrator Slimming Architectural Investigation
+- [✅] AWU 302: Define `llm-connector.wit` Interface
+- [✅] AWU 303: Update Core Host to support LLM Connector Extensions
+- [✅] AWU 304: Implement Core Wasm-to-Wasm Event Routing
+- [✅] AWU 305: Create `openai-connector` Extension Boilerplate
+- [✅] AWU 306: Migrate HTTP/SSE logic to `openai-connector`
+- [✅] AWU 307: Refactor `openai-orchestrator` to call the Connector
+- [✅] AWU 308: Integration Testing & Verification
 
 ### 📝 AWU Details
 
+#### AWU 301: Orchestrator Slimming Architectural Investigation
+- **Objective:** Orchestratorの責任過多を解消するための具体的な新アーキテクチャ設計案を作成する。
+- **Scope:** 設計ドキュメント作成
+- **Definition of Done (DoD):** `orchestrator_slimming_design.md` を作成し、新インタフェースおよびデータフロー設計を提案する。
+- **Result:** `orchestrator_slimming_design.md` を作成し、Option B (WASM Connector Plugins) の採用と詳細設計をドキュメント化。`ARCHITECTURE.md` に反映完了。
 
-#### AWU 201: Commit & baseline current changes
-- **Objective:** 78ファイルの未コミット変更をコミットし、Phase 6 のベースラインを確立する。
-- **Scope:** 全プロジェクト
-- **Definition of Done (DoD):** `git commit` & `git push` 完了。全56テストがパスすること。
-- **Steps:**
-  - [✅] 201.1: `git add . && bash scripts/check_secrets.sh`
-  - [✅] 201.2: `cargo clippy --all-targets && cargo test -- --test-threads=1`
-  - [✅] 201.3: `git commit -m "feat: resource-centric UCCA refactoring (AWU 101-112)"`
-  - [✅] 201.4: `git push`
-- **Result:** コミット完了 (85 files, +3665/-1621)。56テスト全パス、Clippy クリーン。ブランチ `rad-autopilot-1784067014` にプッシュ済み。
+#### AWU 302: Define `llm-connector.wit` Interface
+- **Objective:** OrchestratorとLLM Connector間でやり取りする標準メッセージ形式・イベント形式を定義した `wit` ファイルを作成する。
+- **Scope:** `wit/llm-connector.wit` の作成・定義。
+- **Definition of Done (DoD):** `llm-connector.wit` が定義され、各クレートから参照可能な状態であること。
+- **Result:** `wit/llm-connector.wit` を作成し、標準メッセージ (`message`)、ツール (`tool`)、およびストリーミングイベント (`llm-event`, `event-stream` リソース) の定義を完了。
 
-#### AWU 202: Split `src/wasm/imports.rs` & eliminate unsafe patterns
-- **Objective:** 654行のファイルを300行以下のモジュールに分割し、15箇所の `unwrap()` と 3箇所の `panic!()` を適切なエラーハンドリングに置換する。
-- **Scope:** `src/wasm/imports.rs`, `src/wasm.rs`
-- **Definition of Done (DoD):** 全分割ファイルが300行以下、`unwrap()`/`panic!()` がゼロ、全テストパス。
-- **Steps:**
-  - [✅] 202.1: `imports_rpc.rs` を作成 — `RadExtensionImports`/`RadOrchestratorImports`/`RadSecurityGuardImports`/`RadToolProviderImports` の `host_rpc` 実装を移動
-  - [✅] 202.2: `imports_resources.rs` を作成 — `HostStreamHandle`/`HostFileHandle`/`HostExecutionHandle` trait 実装を移動
-  - [✅] 202.3: `imports.rs` を thin re-export ハブに縮小
-  - [✅] 202.4: 全15箇所の `unwrap()` を `map_err`/`ok_or_else` に、3箇所の `panic!()` を `Err()` に置換
-  - [✅] 202.5: `src/wasm/rpc_meta.rs` L42 の `unwrap()` を修正
-  - [✅] 202.6: 検証 (`cargo clippy --all-targets && cargo test`)
-- **Result:** `imports.rs` を `imports_rpc.rs` と `imports_resources.rs` に分割。すべての `unwrap()` と `panic!()` をエラーハンドリング・安全なフォールバックへ置き換え。テストは全パス。
+#### AWU 303: Update Core Host to support LLM Connector Extensions
+- **Objective:** ホスト（Core）が `llm-connector` タイプのWasm拡張をロードし、そのエクスポート関数を認識できるようにする。
+- **Scope:** `src/wasm.rs`, `rad.json`
+- **Definition of Done (DoD):** `rad.json` に `llm-connector` 役割の拡張を定義でき、Core起動時に正しくインスタンス化されること。
+- **Result:** `src/wasm.rs` および `bindings.rs` を拡張し、`llm-connector` 役割のコンポーネントをサポートしました。`WasmState` への Host トレイト実装や `open_http_stream` の委譲を完了し、Clippy の警告なしでコンパイルおよび既存のテストを通過させました。
 
-#### AWU 203: Split `src/wasm/bindings.rs`
-- **Objective:** 396行のバインディング変換ファイルを300行以下に分割する。
-- **Scope:** `src/wasm/bindings.rs`, `src/wasm.rs`
-- **Definition of Done (DoD):** 全分割ファイルが300行以下、全テストパス。
-- **Steps:**
-  - [✅] 203.1: `bindings_event.rs` を作成 — `RasCoreEvent` の WIT⇔Core 変換を移動
-  - [✅] 203.2: `bindings.rs` に `RasRpcCommand` 変換のみ残す
-  - [✅] 203.3: 検証 (`cargo clippy --all-targets && cargo test`)
-- **Result:** `bindings_event.rs` を作成し、`RasCoreEvent` 変換処理を抽出。`bindings.rs` の行数を396行から318行に削減。Clippy警告を解消し、テストは全パス。
+#### AWU 304: Implement Core Wasm-to-Wasm Event Routing
+- **Objective:** OrchestratorからConnectorへの `generate-stream` 呼び出しおよび逆方向のイベントストリームをCore経由で仲介・ルーティングする機構を実装する。
+- **Scope:** `src/wasm/rpc.rs`, `src/wasm/imports.rs`
+- **Definition of Done (DoD):** Orchestratorからのリクエストが指定されたコネクタにルーティングされ、結果を受け取れること。
+- **Result:** `wit/rad.wit` および `rad-models` に `GenerateLlmStream` / `LlmConnectorEvent` を追加。ホスト RPC 処理で `llm-connector` 拡張を検索し、型マッピングを行った上でコンポーネントを呼び出し、イベントをバックグラウンドスレッド経由で Orchestrator にブロードキャストするイベントルーティング機構を実装しました。
 
-#### AWU 204: Complete Tool Execution Delegation
-- **Objective:** `openai-orchestrator` から `tool_runner.rs` (161行)、`mcp_client.rs` (197行)、`tool.rs` の実行ロジックを削除し、ホスト経由で `mcp-tool-provider` に委譲する。
-- **Scope:** `ext/openai-orchestrator/`, `ext/mcp-tool-provider/`, `src/wasm/imports.rs`
-- **Definition of Done (DoD):** Orchestrator が LLM 会話ループのみを担当。`tool_runner.rs` と `mcp_client.rs` が削除済み。全テストパス。
-- **Steps:**
-  - [✅] 204.1: ホスト側 `imports.rs` の `GetTools` ハンドラを実装 — Tool Provider の `get_tools()` エクスポートを呼び出し、結果を返す
-  - [✅] 204.2: ホスト側 `imports.rs` の `ExecuteTool` ハンドラを実装 — Tool Provider の `execute_tool()` エクスポートを呼び出し、結果を返す
-  - [✅] 204.3: `mcp-tool-provider` に MCP ライフサイクル管理を移植 — `mcp_client.rs` のサーバ起動・ツール収集ロジック
-  - [✅] 204.4: `orchestrator.rs` を書き換え — `call_host(GetTools)` と `call_host(ExecuteTool)` 経由に変更
-  - [✅] 204.5: `tool.rs` から `execute_tool()` と `get_tool_definitions()` を削除 (型定義のみ残す)
-  - [✅] 204.6: `tool_runner.rs` を削除 — `extract_tool_calls()` と `process_completed_tool_calls()` は `orchestrator.rs` に統合
-  - [✅] 204.7: `mcp_client.rs` を削除
-  - [✅] 204.8: 検証 (`cargo clippy --all-targets && cargo test`)
-- **Result:** `openai-orchestrator` から `tool_runner.rs`、`mcp_client.rs`、`tool.rs` の実行ロジックを削除し、ホスト RPC 経由で `mcp-tool-provider` に完全委譲。デッドロックや自己修復リカバリ時の挙動も安全に解決し、すべての関連テストがクリーンにパスすることを確認。
+#### AWU 305: Create `openai-connector` Extension Boilerplate
+- **Objective:** 新規エクステンション `ext/openai-connector` クレートを立ち上げ、`llm-connector.wit` のボイラープレートを生成する。
+- **Scope:** `ext/openai-connector/`
+- **Definition of Done (DoD):** `cargo build --target wasm32-wasip2` が通り、空のレスポンスを返すモジュールがビルドできること。
+- **Result:** `ext/openai-connector` クレートを新規作成し、`llm-connector.wit` を用いてコンポーネントとしての土台を構築、`rad.json` に `llm-connector` ロールとして登録しました。
 
-#### AWU 205: Configuration & cleanup
-- **Objective:** `rad.json` の設定不足・迷子ファイル・ガバナンスファイル整合性を解消する。
-- **Scope:** `rad.json`, `TASKS.md`, プロジェクトルート
-- **Definition of Done (DoD):** `rad.json` に全エクステンション登録、TASKS.md と PLANS.md が同期、迷子ファイル除去。
-- **Steps:**
-  - [✅] 205.1: `rad.json` に `security-guard` と `mcp-tool-provider` を追加
-  - [✅] 205.2: TASKS.md を PLANS.md と同期 (AWU 91 を完了マーク、Phase 6 の記録を追加)
-  - [✅] 205.3: ルートの `test_import.rs` を削除
-  - [✅] 205.4: `src/wasm.rs` (307行) のボーダーライン超過を解消
-  - [✅] 205.5: 最終検証 (`cargo clippy --all-targets && cargo test && bash scripts/check_secrets.sh`)
-  - [✅] 205.6: コミット・プッシュ
-- **Result:** `rad.json` の登録状況を確認し、`test_import.rs` の削除、`src/wasm.rs` をコンパクト化して279行にスリム化完了。`TASKS.md` を最新化。最終テスト・Clippyも全て警告ゼロでパス。
+#### AWU 306: Migrate HTTP/SSE logic to `openai-connector`
+- **Objective:** 現行の `openai-orchestrator` からOpenAI API向けのリクエスト生成と、受信したHTTP/SSEチャンクのパース（文字抽出・ツールコール抽出）ロジックをコネクタに移転する。
+- **Scope:** `ext/openai-connector/src/`
+- **Definition of Done (DoD):** コネクタ単体でCoreの `OpenHttpStream` を叩き、戻り値を標準 `LlmEvent` としてパースできること。
+- **Result:** `openai-orchestrator` から OpenAI Chat Completion リクエストのシリアライズロジック、および SSE のデシリアライズ、`LlmEvent`（ContentChunk, ReasoningChunk, ToolCallChunk, CompletionComplete, Error）への変換ロジックをコネクタへ完全移転し、安全な実装が正常にコンパイルできることを確認しました。
+
+#### AWU 307: Refactor `openai-orchestrator` to call the Connector
+- **Objective:** `openai-orchestrator` から生HTTPリクエストやSSE解析ロジックを完全に削除し、新設したConnectorを呼び出すシンプルな対話管理ロジックに書き換える。
+- **Scope:** `ext/openai-orchestrator/src/`
+- **Definition of Done (DoD):** `openai-orchestrator` がコンパイル可能で、内部にOpenAI固有のHTTP/SSE/JSONパーサーを持たないこと。
+- **Result:** `openai-orchestrator` から生HTTPリクエスト送信やSSEパーサーを完全に削除し、ホスト経由で `openai-connector` からブロードキャストされる `LlmConnectorEvent` を受け取って状態管理を行うようにリファクタリングを完了しました。
+
+#### AWU 308: Integration Testing & Verification
+- **Objective:** 全体を結合し、REPL上でのエージェント対話ループ、ツール実行、エラーリカバリの動作確認テストを行う。
+- **Scope:** プロジェクト全体、統合テスト実行
+- **Definition of Done (DoD):** すべての既存ユニットテストおよび統合テスト（`cargo test -- --test-threads=1`）がパスすること。
+- **Result:** 全てのエクステンションをリリースビルドし、統合テスト `cargo test -- --test-threads=1` が全て正常に通過（33個のユニットテスト、および全統合・E2Eテストがパス）することを確認しました。
 
 ---
 *Note: This file is the single source of truth for the project status.*

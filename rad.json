@@ -47,6 +47,20 @@
         "fs_read_allow": ["*"],
         "fs_write_allow": ["*"]
       }
+    },
+    {
+      "name": "openai-connector",
+      "source": "target/wasm32-wasip2/release/openai_connector.wasm",
+      "enabled": true,
+      "role": "llm-connector",
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"],
+        "network": {
+          "allow_network": true,
+          "allow_domains": ["*"]
+        }
+      }
     }
   ]
 }

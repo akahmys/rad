@@ -18,7 +18,6 @@ use self::radcomp::extension::types as wit;
 mod conv;
 mod llm;
 mod orchestrator;
-mod sse;
 #[cfg(test)]
 mod tests;
 mod tool;

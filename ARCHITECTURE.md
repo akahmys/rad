@@ -22,14 +22,17 @@ graph TD
     subgraph ExtensionSystem [Policy Layer / Multi-Extension Cooperation]
         WasmRuntime[Wasm Runtime] -->|RPC Orders / Verification| Gateway
         
-        Orchestrator["1. LLM Orchestrator <br> (openai-agent.wasm)"]
-        SecurityGuard["2. Security Guard <br> (security-rules.wasm)"]
-        ToolProvider["3. Tool/MCP Provider <br> (mcp-bridge.wasm)"]
+        Orchestrator["1. LLM Orchestrator <br> (orchestrator.wasm)"]
+        Connector["2. LLM Connector <br> (openai-connector.wasm)"]
+        SecurityGuard["3. Security Guard <br> (security-rules.wasm)"]
+        ToolProvider["4. Tool/MCP Provider <br> (mcp-bridge.wasm)"]
 
-        Orchestrator -->|1. Request Prompt| LLM[External LLM API / Router]
-        Orchestrator -->|2. Exec Tool RPC| WasmRuntime
-        WasmRuntime -->|3. Query Hook| SecurityGuard
-        WasmRuntime -->|4. Resolve Tools| ToolProvider
+        Orchestrator -->|1. Generate Stream| Connector
+        Connector -->|2. Request Stream RPC| WasmRuntime
+        WasmRuntime -->|3. Route Connection| Gateway
+        Orchestrator -->|4. Exec Tool RPC| WasmRuntime
+        WasmRuntime -->|5. Query Hook| SecurityGuard
+        WasmRuntime -->|6. Resolve Tools| ToolProvider
     end
 ```
 
@@ -58,6 +61,9 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
    - **Isolation**: Even if the Orchestrator is hijacked via prompt injection, the independent Security Guard Wasm prevents damage (sandboxed verification).
 3. **Tool/MCP Provider (Capability Bridging)**
    - **Responsibility**: Discovers, parses, and resolves dynamic schemas for external tools (e.g., via MCP servers) and marshals tool calls/replies.
+4. **LLM Connector (Model API translation & streaming)**
+   - **Responsibility**: Translates standardized Message objects and tool definitions into model-specific API payloads, initiates connections (using Core HTTP capability), and parses SSE stream chunks.
+   - **Isolation**: Decouples model-specific network packet parsing and JSON payload generation from the Orchestrator, rendering the main decision loop fully model-agnostic.
 
 ---
 
@@ -334,27 +340,27 @@ sequenceDiagram
     Ext->>LLM: Send context with intervention warning
 ```
 
-### 5.2 Diversity Protocol (Handling Different API Schemas)
+### 5.2 Diversity Protocol (Handling Different API Connectors)
 
-The Core is completely unaware of LLM-specific API differences (OpenAI, Anthropic, Ollama, etc.) or MCP (Model Context Protocol) schemas.
+The Core is completely unaware of LLM-specific API differences (OpenAI, Anthropic, Ollama, etc.) or MCP (Model Context Protocol) schemas. Model adaptation is offloaded to a specialized, hot-swappable **LLM Connector** Wasm extension.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant LLM as Anthropic API
-    participant Adapter as Ext: Protocol Adapter
-    participant Loop as Ext: Main Loop
+    participant LLM as Anthropic Claude API
+    participant Conn as Ext: Anthropic Connector
+    participant Orch as Ext: LLM Orchestrator
     participant Core as rad Core
 
-    Loop->>Adapter: Send request (prompt/history)
-    Note over Adapter: Create Anthropic JSON <br> {"model": "claude-...", "messages": [...]}
-    Adapter->>Core: RPC: open_http_stream("https://api.anthropic.com/...", headers, body)
+    Orch->>Conn: GenerateStream(messages, tools)
+    Note over Conn: Create Anthropic JSON <br> {"model": "claude-...", "messages": [...]}
+    Conn->>Core: RPC: open_http_stream("https://api.anthropic.com/...", headers, body)
     Core->>LLM: HTTP Request (Stream)
-    Core->>Adapter: Event: HttpChunkReceived { chunk: "..." } <br> (Core forwards raw chunk)
-    Note over Adapter: Parse raw chunk to extract content
-    Adapter->>Core: RPC: WriteStdout { text: "..." }
+    Core->>Conn: Event: HttpChunkReceived { chunk: "..." } <br> (Core forwards raw chunk)
+    Note over Conn: Parse raw chunk to extract content / tool calls
+    Conn->>Orch: Stream Event: token("...") or tool_call(...)
+    Orch->>Core: RPC: WriteStdout { text: "..." }
     Core->>Terminal: Print token to screen
-    Adapter->>Loop: Convert to unified format and dispatch event
 ```
 
 ### 5.3 Slash Commands (Meta Commands)

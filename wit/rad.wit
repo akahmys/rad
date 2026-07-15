@@ -37,6 +37,7 @@ interface types {
         task-completed,
         rehydrate(list<pending-tool-call-info>),
         mcp-response(mcp-response-payload),
+        llm-connector-event(string),
     }
 
     record mcp-response-payload {
@@ -99,6 +100,13 @@ interface types {
         get-repo-map,
         get-tools,
         execute-tool(execute-tool-payload),
+        generate-llm-stream(generate-llm-stream-payload),
+    }
+
+    record generate-llm-stream-payload {
+        model: string,
+        messages-json: string,
+        tools-json: string,
     }
 
     record execute-tool-payload {

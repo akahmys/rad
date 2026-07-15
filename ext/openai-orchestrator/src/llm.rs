@@ -1,7 +1,6 @@
 use crate::call_host;
-use crate::tool::{ChatCompletionsRequest, Message, StreamOptions, get_available_tools};
+use crate::tool::{Message, get_available_tools};
 use crate::types::{Dag, RasRpcCommand};
-use std::collections::HashMap;
 
 fn load_local_agent_rules() -> String {
     let paths = [".agents/AGENTS.md", "AGENTS.md"];
@@ -145,22 +144,15 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 pub fn trigger_llm_stream(messages: Vec<Message>) -> Result<(), String> {
     let tools = get_available_tools().unwrap_or_default();
 
-    let req = ChatCompletionsRequest {
+    let messages_json = serde_json::to_string(&messages)
+        .map_err(|e| format!("Failed to serialize messages: {e}"))?;
+    let tools_json = serde_json::to_string(&tools)
+        .map_err(|e| format!("Failed to serialize tools: {e}"))?;
+
+    call_host(RasRpcCommand::GenerateLlmStream {
         model: "qwen".to_string(),
-        messages,
-        stream: true,
-        stream_options: Some(StreamOptions {
-            include_usage: true,
-        }),
-        tools: Some(tools),
-    };
-    let body = serde_json::to_string(&req).map_err(|e| format!("JSON serialize error: {e}"))?;
-    let mut headers = HashMap::new();
-    headers.insert("Content-Type".to_string(), "application/json".to_string());
-    call_host(RasRpcCommand::OpenHttpStream {
-        url: "http://127.0.0.1:8080/v1/chat/completions".to_string(),
-        headers,
-        body,
+        messages_json,
+        tools_json,
     })?;
     Ok(())
 }

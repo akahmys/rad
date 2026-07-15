@@ -13,3 +13,13 @@ pub mod session;
 pub mod subsystems;
 pub mod terminal;
 pub mod wasm;
+
+#[macro_export]
+macro_rules! log_host {
+    ($($arg:tt)*) => {
+        if ::std::env::var("RAD_DEBUG").is_ok() {
+            println!($($arg)*);
+        }
+    };
+}
+

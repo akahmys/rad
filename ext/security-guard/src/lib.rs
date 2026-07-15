@@ -133,6 +133,11 @@ impl From<wit::RasRpcCommand> for CoreRpcCommand {
                 name: payload.name,
                 arguments: payload.arguments,
             },
+            wit::RasRpcCommand::GenerateLlmStream(payload) => CoreRpcCommand::GenerateLlmStream {
+                model: payload.model,
+                messages_json: payload.messages_json,
+                tools_json: payload.tools_json,
+            },
         }
     }
 }
