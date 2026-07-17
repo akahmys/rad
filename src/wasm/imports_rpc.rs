@@ -23,6 +23,9 @@ impl bindings::wit::Host for WasmState {}
 
 impl bindings::RadExtensionImports for WasmState {
     fn host_rpc(&mut self, command: bindings::wit::RasRpcCommand) -> Result<String, String> {
+        if self.is_aborted() {
+            return Err("Task aborted by user".to_string());
+        }
         let rpc_cmd = rad_models::RasRpcCommand::from(command);
 
         permissions::check_permissions(&rpc_cmd, &self.permissions, self.sandbox.workspace_dir())
