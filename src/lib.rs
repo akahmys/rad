@@ -1,5 +1,6 @@
 pub mod command;
 pub mod config;
+pub mod error;
 pub mod dag;
 pub mod fs;
 pub mod git;
@@ -10,6 +11,7 @@ pub mod orchestrator;
 pub mod process;
 pub mod repo_map;
 pub mod session;
+pub mod sys;
 pub mod subsystems;
 pub mod terminal;
 pub mod wasm;
@@ -22,4 +24,3 @@ macro_rules! log_host {
         }
     };
 }
-

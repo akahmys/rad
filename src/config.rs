@@ -179,10 +179,10 @@ fn merge_extensions_array(a_exts: &mut Vec<serde_json::Value>, b_exts: Vec<serde
 }
 
 /// Parses a JSONC string into `serde_json::Value`.
-fn parse_jsonc(content: &str) -> Result<serde_json::Value, String> {
+fn parse_jsonc(content: &str) -> Result<serde_json::Value, crate::error::UnifiedError> {
     jsonc_parser::parse_to_serde_value(content, &jsonc_parser::ParseOptions::default())
-        .map_err(|e| format!("JSONC parse error: {e:?}"))?
-        .ok_or_else(|| "JSONC parsed to empty value".to_string())
+        .map_err(|e| crate::error::UnifiedError::l1(format!("JSONC parse error: {e:?}"), "Config"))?
+        .ok_or_else(|| crate::error::UnifiedError::l1("JSONC parsed to empty value", "Config"))
 }
 
 /// Discovers the config files in order of preference.
@@ -219,12 +219,12 @@ fn discover_config_path(explicit_path: Option<&str>) -> Option<PathBuf> {
 }
 
 /// Load configuration by merging base config with local config if it exists.
-pub fn load_config(explicit_path: Option<&str>) -> Result<Config, String> {
+pub fn load_config(explicit_path: Option<&str>) -> Result<Config, crate::error::UnifiedError> {
     let config_path = discover_config_path(explicit_path);
 
     let base_val = if let Some(path) = config_path {
         let content =
-            fs::read_to_string(&path).map_err(|e| format!("Failed to read base config: {e}"))?;
+            fs::read_to_string(&path).map_err(|e| crate::error::UnifiedError::l1(format!("Failed to read base config: {e}"), "Config"))?;
         let mut base_val = parse_jsonc(&content)?;
 
         // Try loading rad.local.json in the same directory
@@ -232,7 +232,7 @@ pub fn load_config(explicit_path: Option<&str>) -> Result<Config, String> {
             let local_path = parent.join("rad.local.json");
             if local_path.exists() {
                 let local_content = fs::read_to_string(&local_path)
-                    .map_err(|e| format!("Failed to read local config: {e}"))?;
+                    .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to read local config: {e}"), "Config"))?;
                 let local_val = parse_jsonc(&local_content)?;
                 merge_json_value(&mut base_val, local_val);
             }
@@ -244,6 +244,6 @@ pub fn load_config(explicit_path: Option<&str>) -> Result<Config, String> {
     };
 
     let config: Config = serde_json::from_value(base_val)
-        .map_err(|e| format!("Failed to deserialize final config: {e}"))?;
+        .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to deserialize final config: {e}"), "Config"))?;
     Ok(config)
 }

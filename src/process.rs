@@ -1,5 +1,4 @@
-use nix::sys::signal::{Signal, killpg};
-use nix::unistd::Pid;
+use crate::sys::Pid;
 use parking_lot::Mutex;
 use portable_pty::{Child, CommandBuilder, ExitStatus, PtySize, native_pty_system};
 use std::io::Read;
@@ -33,7 +32,6 @@ impl ProcessManager {
     /// Spawns a bash process within its own process group using PTY.
     ///
     /// # Errors
-    ///
     /// Returns an error if the process fails to spawn.
     pub fn spawn_bash_process(
         &self,
@@ -42,7 +40,7 @@ impl ProcessManager {
         call_id: String,
         name: String,
         arguments: String,
-    ) -> Result<RunningProcess, String> {
+    ) -> Result<RunningProcess, crate::error::UnifiedError> {
         let pty_system = native_pty_system();
         let pty_pair = pty_system
             .openpty(PtySize {
@@ -51,7 +49,7 @@ impl ProcessManager {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| format!("Failed to open PTY: {e}"))?;
+            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to open PTY: {e}"), "Process"))?;
 
         let mut cmd = CommandBuilder::new("bash");
         cmd.arg("-c");
@@ -63,12 +61,12 @@ impl ProcessManager {
         let child = pty_pair
             .slave
             .spawn_command(cmd)
-            .map_err(|e| format!("Failed to spawn command in PTY: {e}"))?;
+            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to spawn command in PTY: {e}"), "Process"))?;
 
         let pgid_raw = pty_pair
             .master
             .process_group_leader()
-            .ok_or_else(|| "Failed to get process group leader".to_string())?;
+            .ok_or_else(|| crate::error::UnifiedError::l1("Failed to get process group leader", "Process"))?;
 
         let pid = Pid::from_raw(pgid_raw);
 
@@ -80,12 +78,12 @@ impl ProcessManager {
         let master_reader = pty_pair
             .master
             .try_clone_reader()
-            .map_err(|e| format!("Failed to clone master reader: {e}"))?;
+            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to clone master reader: {e}"), "Process"))?;
 
         let master_writer = pty_pair
             .master
             .take_writer()
-            .map_err(|e| format!("Failed to take master writer: {e}"))?;
+            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to take master writer: {e}"), "Process"))?;
 
         let (stdout_tx, stdout_rx) = mpsc::channel();
         let (_stderr_tx, stderr_rx) = mpsc::channel();
@@ -112,7 +110,7 @@ impl Drop for ProcessManager {
     fn drop(&mut self) {
         let pgids = self.active_pgids.lock();
         for pgid in pgids.iter() {
-            let _ = killpg(*pgid, Signal::SIGKILL);
+            let _ = crate::sys::kill_process_group(*pgid);
         }
     }
 }
@@ -209,13 +207,19 @@ impl RunningProcess {
     }
 
     pub fn kill_group(&mut self) {
-        let _ = killpg(self.pgid, Signal::SIGKILL);
+        let _ = crate::sys::kill_process_group(self.pgid);
         self.unregister_pgid();
     }
 
     pub fn unregister_pgid(&mut self) {
         let mut pgids = self.active_pgids.lock();
         pgids.retain(|&x| x != self.pgid);
+    }
+}
+
+impl Drop for RunningProcess {
+    fn drop(&mut self) {
+        self.kill_group();
     }
 }
 
@@ -227,7 +231,7 @@ impl crate::subsystems::ProcessSubsystem for ProcessManager {
         call_id: String,
         name: String,
         arguments: String,
-    ) -> Result<crate::process::RunningProcess, String> {
+    ) -> Result<crate::process::RunningProcess, crate::error::UnifiedError> {
         self.spawn_bash_process(command, cwd, call_id, name, arguments)
     }
 }

@@ -18,7 +18,10 @@ fn run_mock_http_server(addr: &str) -> std::thread::JoinHandle<()> {
             println!("[MOCK SERVER] Accepted connection!");
             let mut buf = [0; 4096];
             let n = std::io::Read::read(&mut stream, &mut buf).unwrap_or(0);
-            println!("[MOCK SERVER] Request content:\n{}", String::from_utf8_lossy(&buf[..n]));
+            println!(
+                "[MOCK SERVER] Request content:\n{}",
+                String::from_utf8_lossy(&buf[..n])
+            );
 
             let headers = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n";
             let _ = std::io::Write::write_all(&mut stream, headers.as_bytes());
@@ -77,14 +80,34 @@ fn setup_autopilot_orchestrator(
         ..Default::default()
     };
 
-    config.extensions = vec![rad::config::ExtensionConfig {
-        name: "openai-orchestrator".to_string(),
-        enabled: true,
-        role: "orchestrator".to_string(),
-        source: "target/wasm32-wasip2/debug/openai_orchestrator.wasm".to_string(),
-        permissions: Some(perms),
-        config: HashMap::new(),
-    }];
+    let conn_perms = PermissionConfig {
+        fs_read_allow: vec!["*".to_string()],
+        fs_write_allow: vec!["*".to_string()],
+        network: Some(rad::config::NetworkConfig {
+            allow_network: true,
+            allow_domains: vec!["127.0.0.1".to_string()],
+        }),
+        ..Default::default()
+    };
+
+    config.extensions = vec![
+        rad::config::ExtensionConfig {
+            name: "openai-orchestrator".to_string(),
+            enabled: true,
+            role: "orchestrator".to_string(),
+            source: "target/wasm32-wasip2/debug/openai_orchestrator.wasm".to_string(),
+            permissions: Some(perms),
+            config: HashMap::new(),
+        },
+        rad::config::ExtensionConfig {
+            name: "openai-connector".to_string(),
+            enabled: true,
+            role: "llm-connector".to_string(),
+            source: "target/wasm32-wasip2/debug/openai_connector.wasm".to_string(),
+            permissions: Some(conn_perms),
+            config: HashMap::new(),
+        },
+    ];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     // Create initial node to start task from

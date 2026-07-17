@@ -85,9 +85,7 @@ pub enum RasCoreEvent {
         message: String,
     },
     /// Event received from LLM connector.
-    LlmConnectorEvent {
-        event: String,
-    },
+    LlmConnectorEvent { event: String },
 }
 
 /// Recovery metadata for a pending process/tool execution.
@@ -159,6 +157,12 @@ pub enum RasRpcCommand {
     ExecuteTool {
         call_id: String,
         name: String,
+        arguments: String,
+    },
+    /// Call a specific method on a Wasm extension.
+    CallExtension {
+        extension_id: String,
+        method: String,
         arguments: String,
     },
     /// Open a file inside the workspace sandboxed environment.

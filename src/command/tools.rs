@@ -46,12 +46,19 @@ fn render_sub_permissions(output: &mut String, perm: &crate::config::PermissionC
             net.allow_network, net.allow_domains
         );
     }
-    let _ = writeln!(output, "    Allowed MCP Servers: {:?}", perm.allowed_mcp_servers);
+    let _ = writeln!(
+        output,
+        "    Allowed MCP Servers: {:?}",
+        perm.allowed_mcp_servers
+    );
 }
 
 fn render_wasm_tools(
     wasm_runtime: &parking_lot::Mutex<
-        std::collections::HashMap<String, std::sync::Arc<parking_lot::Mutex<crate::wasm::WasmRuntime>>>,
+        std::collections::HashMap<
+            String,
+            std::sync::Arc<parking_lot::Mutex<crate::wasm::WasmRuntime>>,
+        >,
     >,
 ) -> String {
     let mut output = String::new();

@@ -144,14 +144,16 @@ impl FsSandbox {
     /// # Errors
     ///
     /// Returns an error if the read permission check fails or file read fails.
-    pub fn file_read(&self, path: &Path) -> Result<Vec<u8>, String> {
+    pub fn file_read(&self, path: &Path) -> Result<Vec<u8>, crate::error::UnifiedError> {
         let read_allow = self.fs_read_allow.lock();
-        let allowed = self.has_permission(path, &read_allow)?;
+        let allowed = self.has_permission(path, &read_allow)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         if !allowed {
-            return Err("Read permission denied".to_string());
+            return Err(crate::error::UnifiedError::l2(format!("Read permission denied for path: {:?}", path), "FsPermission"));
         }
-        let canonical_path = self.canonicalize_path(path)?;
-        fs::read(&canonical_path).map_err(|e| format!("Failed to read file: {e}"))
+        let canonical_path = self.canonicalize_path(path)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
+        fs::read(&canonical_path).map_err(|e| crate::error::UnifiedError::l1(format!("Failed to read file: {e}"), "Fs"))
     }
 
     /// Writes data to a file on the filesystem.
@@ -159,18 +161,20 @@ impl FsSandbox {
     /// # Errors
     ///
     /// Returns an error if the write permission check fails or file write fails.
-    pub fn file_write(&self, path: &Path, data: &[u8]) -> Result<(), String> {
+    pub fn file_write(&self, path: &Path, data: &[u8]) -> Result<(), crate::error::UnifiedError> {
         let write_allow = self.fs_write_allow.lock();
-        let allowed = self.has_permission(path, &write_allow)?;
+        let allowed = self.has_permission(path, &write_allow)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         if !allowed {
-            return Err("Write permission denied".to_string());
+            return Err(crate::error::UnifiedError::l2(format!("Write permission denied for path: {:?}", path), "FsPermission"));
         }
-        let canonical_path = self.canonicalize_path(path)?;
+        let canonical_path = self.canonicalize_path(path)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         if let Some(parent) = canonical_path.parent() {
             fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create parent directory: {e}"))?;
+                .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to create parent directory: {e}"), "Fs"))?;
         }
-        fs::write(&canonical_path, data).map_err(|e| format!("Failed to write file: {e}"))
+        fs::write(&canonical_path, data).map_err(|e| crate::error::UnifiedError::l1(format!("Failed to write file: {e}"), "Fs"))
     }
 
     /// Patches a file on the filesystem using a unified diff.
@@ -178,55 +182,57 @@ impl FsSandbox {
     /// # Errors
     ///
     /// Returns an error if the write permission check fails, patch parsing fails, or patch application fails.
-    pub fn file_edit_patch(&self, path: &Path, diff: &str) -> Result<(), String> {
+    pub fn file_edit_patch(&self, path: &Path, diff: &str) -> Result<(), crate::error::UnifiedError> {
         let write_allow = self.fs_write_allow.lock();
-        let allowed = self.has_permission(path, &write_allow)?;
+        let allowed = self.has_permission(path, &write_allow)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         if !allowed {
-            return Err("Write permission denied".to_string());
+            return Err(crate::error::UnifiedError::l2(format!("Write permission denied for path: {:?}", path), "FsPermission"));
         }
-        let canonical_path = self.canonicalize_path(path)?;
+        let canonical_path = self.canonicalize_path(path)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
 
         let original = if canonical_path.exists() {
             fs::read_to_string(&canonical_path)
-                .map_err(|e| format!("Failed to read file for patching: {e}"))?
+                .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to read file for patching: {e}"), "Fs"))?
         } else {
             String::new()
         };
 
         let diff_patch =
-            diffy::Patch::from_str(diff).map_err(|e| format!("Failed to parse diff patch: {e}"))?;
+            diffy::Patch::from_str(diff).map_err(|e| crate::error::UnifiedError::l2(format!("Failed to parse diff patch: {e}"), "FsPatch"))?;
         let modified = diffy::apply(&original, &diff_patch)
-            .map_err(|e| format!("Failed to apply patch: {e}"))?;
+            .map_err(|e| crate::error::UnifiedError::l2(format!("Failed to apply patch: {e}"), "FsPatch"))?;
 
         if let Some(parent) = canonical_path.parent() {
             fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create parent directory: {e}"))?;
+                .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to create parent directory: {e}"), "Fs"))?;
         }
         fs::write(&canonical_path, modified)
-            .map_err(|e| format!("Failed to write patched file: {e}"))
+            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to write patched file: {e}"), "Fs"))
     }
 }
 
 mod snapshot;
 
 impl crate::subsystems::FsSubsystem for FsSandbox {
-    fn file_read(&self, path: &Path) -> Result<Vec<u8>, String> {
+    fn file_read(&self, path: &Path) -> Result<Vec<u8>, crate::error::UnifiedError> {
         self.file_read(path)
     }
 
-    fn file_write(&self, path: &Path, data: &[u8]) -> Result<(), String> {
+    fn file_write(&self, path: &Path, data: &[u8]) -> Result<(), crate::error::UnifiedError> {
         self.file_write(path, data)
     }
 
-    fn file_edit_patch(&self, path: &Path, diff: &str) -> Result<(), String> {
+    fn file_edit_patch(&self, path: &Path, diff: &str) -> Result<(), crate::error::UnifiedError> {
         self.file_edit_patch(path, diff)
     }
 
-    fn take_snapshot(&self, node_id: &str, target_paths: &[PathBuf]) -> Result<(), String> {
+    fn take_snapshot(&self, node_id: &str, target_paths: &[PathBuf]) -> Result<(), crate::error::UnifiedError> {
         self.take_snapshot(node_id, target_paths)
     }
 
-    fn checkout_snapshot(&self, node_id: &str) -> Result<(), String> {
+    fn checkout_snapshot(&self, node_id: &str) -> Result<(), crate::error::UnifiedError> {
         self.checkout_snapshot(node_id)
     }
 

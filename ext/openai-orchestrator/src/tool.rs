@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use crate::radcomp::extension::types as wit;
 use crate::{execute_tool, host_rpc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ToolCallFunction {
@@ -28,8 +28,6 @@ pub struct Message {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
 }
-
-
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FunctionDefinition {
@@ -82,7 +80,9 @@ pub fn execute_tool_sync(name: &str, arguments: &str) -> Result<String, String> 
     }
 
     let res_str = String::from_utf8(output).map_err(|e| format!("Invalid UTF-8 from tool: {e}"))?;
-    let is_rehydrating = crate::orchestrator::STATE.lock().ok()
+    let is_rehydrating = crate::orchestrator::STATE
+        .lock()
+        .ok()
         .and_then(|g| g.as_ref().map(|s| s.is_rehydrated))
         .unwrap_or(false);
 

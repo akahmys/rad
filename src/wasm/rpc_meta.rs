@@ -66,29 +66,39 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             arguments,
         } => {
             if let Some(orch) = ctx.orchestrator {
-                let runtimes = orch.wasm_runtime.lock();
-                for (id, runtime_arc) in runtimes.iter() {
-                    let Some(mut runtime) = runtime_arc.try_lock() else {
-                        continue;
-                    };
-                    if runtime.tool_provider.is_some() {
-                        let args_val: serde_json::Value = serde_json::from_str(arguments)
-                            .unwrap_or(serde_json::Value::Null);
-                        let _ = ctx
-                            .event_tx
-                            .send(crate::ipc::RasCoreEvent::ToolCallRequested {
-                                call_id: call_id.clone(),
-                                name: name.clone(),
-                                args: args_val,
-                            });
-
-                        return runtime
-                            .execute_tool(name, arguments)
-                            .map(serde_json::Value::String)
-                            .map_err(|e| {
-                                format!("Tool execution failed in runtime '{}': {}", id, e)
-                            });
+                let provider_arc = {
+                    let runtimes = orch.wasm_runtime.lock();
+                    let mut provider = None;
+                    for runtime_arc in runtimes.values() {
+                        let Some(runtime) = runtime_arc.try_lock() else {
+                            continue;
+                        };
+                        if runtime.tool_provider.is_some() {
+                            provider = Some(runtime_arc.clone());
+                            break;
+                        }
                     }
+                    provider
+                };
+
+                if let Some(provider_arc) = provider_arc {
+                    let mut runtime = provider_arc.lock();
+                    let args_val: serde_json::Value =
+                        serde_json::from_str(arguments).unwrap_or(serde_json::Value::Null);
+                    let _ = ctx
+                        .event_tx
+                        .send(crate::ipc::RasCoreEvent::ToolCallRequested {
+                            call_id: call_id.clone(),
+                            name: name.clone(),
+                            args: args_val,
+                        });
+
+                    return runtime
+                        .execute_tool(name, arguments)
+                        .map(serde_json::Value::String)
+                        .map_err(|e| {
+                            format!("Tool execution failed: {e}")
+                        });
                 }
                 execute_core_tool_fallback(name, arguments, ctx)
             } else {
@@ -138,20 +148,21 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             }
 
             if let Some(orch) = ctx.orchestrator {
-                let runtimes = orch.wasm_runtime.lock();
-                let mut connector_runtime_opt = None;
-                for runtime_arc in runtimes.values() {
-                    let Some(runtime) = runtime_arc.try_lock() else {
-                        continue;
-                    };
-                    if runtime.llm_connector.is_some() {
-                        connector_runtime_opt = Some(runtime_arc.clone());
-                        break;
+                let connector_arc = {
+                    let runtimes = orch.wasm_runtime.lock();
+                    let mut connector_runtime_opt = None;
+                    for runtime_arc in runtimes.values() {
+                        let Some(runtime) = runtime_arc.try_lock() else {
+                            continue;
+                        };
+                        if runtime.llm_connector.is_some() {
+                            connector_runtime_opt = Some(runtime_arc.clone());
+                            break;
+                        }
                     }
-                }
-
-                let connector_arc = connector_runtime_opt
-                    .ok_or_else(|| "LLM Connector extension not found or not loaded".to_string())?;
+                    connector_runtime_opt
+                        .ok_or_else(|| "LLM Connector extension not found or not loaded".to_string())?
+                };
 
                 let mut connector = connector_arc.lock();
                 let connector_ref = &mut *connector;
@@ -234,21 +245,28 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                         match read_res {
                             Ok(Ok(Some(event))) => {
                                 if let Ok(event_json) = serde_json::to_string(&event) {
-                                    let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::LlmConnectorEvent {
-                                        event: event_json,
-                                    });
+                                    let _ = event_tx_clone.send(
+                                        crate::ipc::RasCoreEvent::LlmConnectorEvent {
+                                            event: event_json,
+                                        },
+                                    );
                                 }
                             }
                             Ok(Ok(None)) => {
-                                let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::LlmConnectorEvent {
-                                    event: serde_json::json!({ "type": "done" }).to_string(),
-                                });
+                                let _ = event_tx_clone.send(
+                                    crate::ipc::RasCoreEvent::LlmConnectorEvent {
+                                        event: serde_json::json!({ "type": "done" }).to_string(),
+                                    },
+                                );
                                 break;
                             }
                             Ok(Err(e)) => {
-                                let _ = event_tx_clone.send(crate::ipc::RasCoreEvent::LlmConnectorEvent {
-                                    event: serde_json::json!({ "type": "error", "payload": e }).to_string(),
-                                });
+                                let _ = event_tx_clone.send(
+                                    crate::ipc::RasCoreEvent::LlmConnectorEvent {
+                                        event: serde_json::json!({ "type": "error", "payload": e })
+                                            .to_string(),
+                                    },
+                                );
                                 break;
                             }
                             Err(e) => {
@@ -265,7 +283,147 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
 
                 Ok(serde_json::Value::Null)
             } else {
-                Err("Orchestrator unavailable".to_string())
+                let (tx, rx) = std::sync::mpsc::channel();
+                let _ = ctx.network.open_http_stream(
+                    "http://127.0.0.1/v1/chat/completions",
+                    std::collections::HashMap::new(),
+                    "",
+                    tx,
+                    ctx.llm_timeout_policy.clone(),
+                )?;
+
+                let event_tx_clone = ctx.event_tx.clone();
+                std::thread::spawn(move || {
+                    let mut buffer = String::new();
+                    while let Ok(event) = rx.recv() {
+                        if let crate::ipc::RasCoreEvent::HttpChunkReceived { chunk } = event {
+                            buffer.push_str(&chunk);
+                            while let Some(pos) = buffer.find('\n') {
+                                let line = buffer[..pos].trim().to_string();
+                                buffer = buffer[pos + 1..].to_string();
+                                if line.is_empty() {
+                                    continue;
+                                }
+                                if let Some(stripped) = line.strip_prefix("data:") {
+                                    let data_str = stripped.trim();
+                                    if data_str == "[DONE]" {
+                                        let _ = event_tx_clone.send(
+                                            crate::ipc::RasCoreEvent::LlmConnectorEvent {
+                                                event: serde_json::json!({ "type": "done" })
+                                                    .to_string(),
+                                            },
+                                        );
+                                        break;
+                                    }
+                                    if let Ok(val) =
+                                        serde_json::from_str::<serde_json::Value>(data_str)
+                                    {
+                                        if let Some(reasoning) = val
+                                            .pointer("/choices/0/delta/reasoning_content")
+                                            .and_then(serde_json::Value::as_str)
+                                        {
+                                            let ev =
+                                                serde_json::json!({ "ReasoningChunk": reasoning });
+                                            let _ = event_tx_clone.send(
+                                                crate::ipc::RasCoreEvent::LlmConnectorEvent {
+                                                    event: ev.to_string(),
+                                                },
+                                            );
+                                        } else if let Some(content) = val
+                                            .pointer("/choices/0/delta/content")
+                                            .and_then(serde_json::Value::as_str)
+                                        {
+                                            let ev = serde_json::json!({ "ContentChunk": content });
+                                            let _ = event_tx_clone.send(
+                                                crate::ipc::RasCoreEvent::LlmConnectorEvent {
+                                                    event: ev.to_string(),
+                                                },
+                                            );
+                                        }
+
+                                        if let Some(tool_calls) = val
+                                            .pointer("/choices/0/delta/tool_calls")
+                                            .and_then(serde_json::Value::as_array)
+                                        {
+                                            for tc in tool_calls {
+                                                let index = tc
+                                                    .get("index")
+                                                    .and_then(serde_json::Value::as_u64)
+                                                    .unwrap_or(0);
+                                                let id = tc
+                                                    .get("id")
+                                                    .and_then(serde_json::Value::as_str);
+                                                let name = tc
+                                                    .pointer("/function/name")
+                                                    .and_then(serde_json::Value::as_str);
+                                                let arguments_chunk = tc
+                                                    .pointer("/function/arguments")
+                                                    .and_then(serde_json::Value::as_str)
+                                                    .unwrap_or("");
+                                                let ev = serde_json::json!({
+                                                    "ToolCallChunk": {
+                                                        "index": index,
+                                                        "id": id,
+                                                        "name": name,
+                                                        "arguments-chunk": arguments_chunk,
+                                                    }
+                                                });
+                                                let _ = event_tx_clone.send(
+                                                    crate::ipc::RasCoreEvent::LlmConnectorEvent {
+                                                        event: ev.to_string(),
+                                                    },
+                                                );
+                                            }
+                                        }
+
+                                        if let Some(usage) = val.get("usage") {
+                                            let prompt_tokens = usage
+                                                .get("prompt_tokens")
+                                                .and_then(serde_json::Value::as_u64)
+                                                .unwrap_or(0);
+                                            let completion_tokens = usage
+                                                .get("completion_tokens")
+                                                .and_then(serde_json::Value::as_u64)
+                                                .unwrap_or(0);
+                                            if prompt_tokens > 0 || completion_tokens > 0 {
+                                                let ev = serde_json::json!({
+                                                    "CompletionComplete": {
+                                                        "prompt-tokens": prompt_tokens,
+                                                        "completion-tokens": completion_tokens,
+                                                    }
+                                                });
+                                                let _ = event_tx_clone.send(
+                                                    crate::ipc::RasCoreEvent::LlmConnectorEvent {
+                                                        event: ev.to_string(),
+                                                    },
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                Ok(serde_json::Value::Null)
+            }
+        }
+        RasRpcCommand::CallExtension {
+            extension_id,
+            method,
+            arguments,
+        } => {
+            if let Some(orch) = ctx.orchestrator {
+                let runtimes = orch.wasm_runtime.lock();
+                if let Some(runtime_arc) = runtimes.get(extension_id) {
+                    let mut runtime = runtime_arc.lock();
+                    let res_str = runtime.call_extension_method(method, arguments)?;
+                    Ok(serde_json::Value::String(res_str))
+                } else {
+                    Ok(serde_json::Value::Null)
+                }
+            } else {
+                Ok(serde_json::Value::Null)
             }
         }
         _ => unreachable!(),
@@ -277,7 +435,11 @@ fn execute_core_tool_fallback(
     arguments: &str,
     ctx: &RpcContext<'_>,
 ) -> Result<serde_json::Value, String> {
-    crate::log_host!("[HOST] Core Tool Fallback: executing '{}' with args '{}'", name, arguments);
+    crate::log_host!(
+        "[HOST] Core Tool Fallback: executing '{}' with args '{}'",
+        name,
+        arguments
+    );
     let res = match name {
         "read" => {
             #[derive(serde::Deserialize)]
@@ -287,7 +449,7 @@ fn execute_core_tool_fallback(
             let args: Args = serde_json::from_str(arguments)
                 .map_err(|e| format!("Failed to parse read args: {e}"))?;
             let val = super::rpc_fs::handle_fs(&RasRpcCommand::FileRead { path: args.path }, ctx)?;
-            
+
             let result_str = if let Some(bytes_val) = val.as_array() {
                 let bytes: Vec<u8> = bytes_val
                     .iter()
@@ -309,11 +471,16 @@ fn execute_core_tool_fallback(
             }
             let args: Args = serde_json::from_str(arguments)
                 .map_err(|e| format!("Failed to parse write args: {e}"))?;
-            let _ = super::rpc_fs::handle_fs(&RasRpcCommand::FileWrite {
-                path: args.path,
-                data: args.content.into_bytes(),
-            }, ctx)?;
-            Ok(serde_json::Value::String("File written successfully.".to_string()))
+            let _ = super::rpc_fs::handle_fs(
+                &RasRpcCommand::FileWrite {
+                    path: args.path,
+                    data: args.content.into_bytes(),
+                },
+                ctx,
+            )?;
+            Ok(serde_json::Value::String(
+                "File written successfully.".to_string(),
+            ))
         }
         "edit" => {
             #[derive(serde::Deserialize)]
@@ -323,11 +490,16 @@ fn execute_core_tool_fallback(
             }
             let args: Args = serde_json::from_str(arguments)
                 .map_err(|e| format!("Failed to parse edit args: {e}"))?;
-            let _ = super::rpc_fs::handle_fs(&RasRpcCommand::FileEditPatch {
-                path: args.path,
-                diff: args.diff,
-            }, ctx)?;
-            Ok(serde_json::Value::String("Patch applied successfully.".to_string()))
+            let _ = super::rpc_fs::handle_fs(
+                &RasRpcCommand::FileEditPatch {
+                    path: args.path,
+                    diff: args.diff,
+                },
+                ctx,
+            )?;
+            Ok(serde_json::Value::String(
+                "Patch applied successfully.".to_string(),
+            ))
         }
         "bash" => {
             #[derive(serde::Deserialize)]
@@ -336,13 +508,16 @@ fn execute_core_tool_fallback(
             }
             let args: Args = serde_json::from_str(arguments)
                 .map_err(|e| format!("Failed to parse bash args: {e}"))?;
-            
-            let val = super::rpc_process::handle_process(&RasRpcCommand::SpawnBashProcess {
-                command: args.command,
-            }, ctx)?;
-            
+
+            let val = super::rpc_process::handle_process(
+                &RasRpcCommand::SpawnBashProcess {
+                    command: args.command,
+                },
+                ctx,
+            )?;
+
             let pgid = val.as_i64().ok_or("Expected pgid")?.to_string();
-            
+
             let start = std::time::Instant::now();
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(10));

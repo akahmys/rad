@@ -21,7 +21,7 @@ pub fn open_http_stream<S: ::std::hash::BuildHasher>(
     body: &str,
     event_tx: Sender<RasCoreEvent>,
     timeout_policy: Arc<Mutex<TimeoutPolicy>>,
-) -> Result<String, String> {
+) -> Result<String, crate::error::UnifiedError> {
     let stream_id = format!("http_stream_{}", uuid_like_id());
     let url_owned = url.to_string();
     let body_owned = body.to_string();
@@ -29,8 +29,9 @@ pub fn open_http_stream<S: ::std::hash::BuildHasher>(
     let mut header_map = HeaderMap::new();
     for (k, v) in headers {
         let name = HeaderName::from_bytes(k.as_bytes())
-            .map_err(|e| format!("Invalid header name: {e}"))?;
-        let value = HeaderValue::from_str(&v).map_err(|e| format!("Invalid header value: {e}"))?;
+            .map_err(|e| crate::error::UnifiedError::l1(format!("Invalid header name: {e}"), "Http"))?;
+        let value = HeaderValue::from_str(&v)
+            .map_err(|e| crate::error::UnifiedError::l1(format!("Invalid header value: {e}"), "Http"))?;
         header_map.insert(name, value);
     }
 
@@ -193,7 +194,7 @@ impl crate::subsystems::NetworkSubsystem for HttpManager {
         body: &str,
         event_tx: Sender<crate::ipc::RasCoreEvent>,
         llm_timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
-    ) -> Result<String, String> {
+    ) -> Result<String, crate::error::UnifiedError> {
         open_http_stream(url, headers, body, event_tx, llm_timeout_policy)
     }
 }

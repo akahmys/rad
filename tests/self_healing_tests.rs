@@ -23,7 +23,7 @@ impl rad::subsystems::NetworkSubsystem for MockNetwork {
         _body: &str,
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
         _llm_timeout_policy: Arc<Mutex<rad::ipc::TimeoutPolicy>>,
-    ) -> Result<String, String> {
+    ) -> Result<String, rad::error::UnifiedError> {
         let mut guard = self.responses.lock();
         if let Some(chunks) = guard.pop() {
             let tx = event_tx.clone();
@@ -334,14 +334,24 @@ fn test_core_auto_self_healing_integration() {
         ..Default::default()
     };
 
-    config.extensions = vec![rad::config::ExtensionConfig {
-        name: "openai-orchestrator".to_string(),
-        enabled: true,
-        role: "orchestrator".to_string(),
-        source: wasm_path.to_string(),
-        permissions: Some(perms),
-        config: HashMap::new(),
-    }];
+    config.extensions = vec![
+        rad::config::ExtensionConfig {
+            name: "openai-orchestrator".to_string(),
+            enabled: true,
+            role: "orchestrator".to_string(),
+            source: wasm_path.to_string(),
+            permissions: Some(perms.clone()),
+            config: HashMap::new(),
+        },
+        rad::config::ExtensionConfig {
+            name: "openai-connector".to_string(),
+            enabled: true,
+            role: "llm-connector".to_string(),
+            source: "target/wasm32-wasip2/debug/openai_connector.wasm".to_string(),
+            permissions: Some(perms.clone()),
+            config: HashMap::new(),
+        },
+    ];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {

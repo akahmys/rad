@@ -1,0 +1,25 @@
+package radcomp:web-access;
+
+interface types {
+    variant ras-rpc-command {
+        command(string),
+    }
+}
+
+interface host-rpc {
+    use types.{ras-rpc-command};
+    call: func(command: ras-rpc-command) -> result<string, string>;
+}
+
+interface web-access {
+    search: func(query: string) -> result<string, string>;
+    fetch: func(url: string) -> result<string, string>;
+}
+
+world web-access-extension {
+    use types.{ras-rpc-command};
+    
+    import host-rpc;
+
+    export web-access;
+}

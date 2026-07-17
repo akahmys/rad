@@ -51,13 +51,29 @@ pub mod rad_llm_connector {
     });
 }
 
+pub mod rad_context_tools {
+    wasmtime::component::bindgen!({
+        path: "wit/context-tools.wit",
+        world: "context-tools-extension",
+        additional_derives: [serde::Serialize, serde::Deserialize],
+    });
+}
+
+pub mod rad_web_access {
+    wasmtime::component::bindgen!({
+        path: "wit/web-access.wit",
+        world: "web-access-extension",
+        additional_derives: [serde::Serialize, serde::Deserialize],
+    });
+}
+
 pub use rad_extension::RadExtension;
 pub use rad_extension::RadExtensionImports;
 pub use rad_extension::radcomp::extension::types as wit;
 
 use rad_models::{
-    PendingToolCallInfo as CorePendingToolCallInfo,
-    RasRpcCommand as CoreRasRpcCommand, Target as CoreTarget, TimeoutPolicy as CoreTimeoutPolicy,
+    PendingToolCallInfo as CorePendingToolCallInfo, RasRpcCommand as CoreRasRpcCommand,
+    Target as CoreTarget, TimeoutPolicy as CoreTimeoutPolicy,
 };
 
 impl From<wit::Target> for CoreTarget {
@@ -205,15 +221,21 @@ impl From<wit::RasRpcCommand> for CoreRasRpcCommand {
                 name: payload.name,
                 arguments: payload.arguments,
             },
-            wit::RasRpcCommand::GenerateLlmStream(payload) => CoreRasRpcCommand::GenerateLlmStream {
-                model: payload.model,
-                messages_json: payload.messages_json,
-                tools_json: payload.tools_json,
+            wit::RasRpcCommand::GenerateLlmStream(payload) => {
+                CoreRasRpcCommand::GenerateLlmStream {
+                    model: payload.model,
+                    messages_json: payload.messages_json,
+                    tools_json: payload.tools_json,
+                }
+            }
+            wit::RasRpcCommand::CallExtension(payload) => CoreRasRpcCommand::CallExtension {
+                extension_id: payload.extension_id,
+                method: payload.method,
+                arguments: payload.arguments,
             },
         }
     }
 }
-
 
 impl From<CoreRasRpcCommand> for wit::RasRpcCommand {
     fn from(cmd: CoreRasRpcCommand) -> Self {
@@ -329,13 +351,24 @@ impl From<CoreRasRpcCommand> for wit::RasRpcCommand {
             CoreRasRpcCommand::OpenProcess { command } => {
                 wit::RasRpcCommand::SpawnBashProcess(command)
             }
-            CoreRasRpcCommand::GenerateLlmStream { model, messages_json, tools_json } => {
-                wit::RasRpcCommand::GenerateLlmStream(wit::GenerateLlmStreamPayload {
-                    model,
-                    messages_json,
-                    tools_json,
-                })
-            }
+            CoreRasRpcCommand::GenerateLlmStream {
+                model,
+                messages_json,
+                tools_json,
+            } => wit::RasRpcCommand::GenerateLlmStream(wit::GenerateLlmStreamPayload {
+                model,
+                messages_json,
+                tools_json,
+            }),
+            CoreRasRpcCommand::CallExtension {
+                extension_id,
+                method,
+                arguments,
+            } => wit::RasRpcCommand::CallExtension(wit::CallExtensionPayload {
+                extension_id,
+                method,
+                arguments,
+            }),
         }
     }
 }

@@ -84,6 +84,7 @@ pub fn execute_rpc_command(
         | RasRpcCommand::ReportTokenUsage { .. }
         | RasRpcCommand::GetTools
         | RasRpcCommand::ExecuteTool { .. }
-        | RasRpcCommand::GenerateLlmStream { .. } => super::rpc_meta::handle_meta(cmd, &ctx),
+        | RasRpcCommand::GenerateLlmStream { .. }
+        | RasRpcCommand::CallExtension { .. } => super::rpc_meta::handle_meta(cmd, &ctx),
     }
 }

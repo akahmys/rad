@@ -8,11 +8,15 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_bytes = "0.11"
 wit-bindgen = "0.36.0"
+thiserror = "2.0.18"
+anyhow = "1.0"
 
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_bytes = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
 jsonc-parser = { version = "0.26", features = ["serde"] }
 dirs = "5.0"
 clap = { version = "4.4", features = ["derive"] }
@@ -39,10 +43,12 @@ tempfile = "3.8"
 [workspace]
 members = [
     ".",
+    "ext/context-tools",
     "ext/openai-orchestrator",
     "ext/security-guard",
     "ext/mcp-tool-provider",
     "ext/openai-connector",
+    "ext/web-access",
     "models",
     "templates/rust",
 ]

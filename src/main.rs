@@ -93,9 +93,7 @@ fn main() {
         args.config.clone(),
     ));
 
-    println!(
-        "\x1b[1;36mStarting rad agent shell. Type '/quit' to end the session.\x1b[0m"
-    );
+    println!("\x1b[1;36mStarting rad agent shell. Type '/quit' to end the session.\x1b[0m");
 
     let (rl, history_path) = match init_editor(&cfg.core.workspace) {
         Ok(val) => val,

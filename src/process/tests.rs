@@ -16,9 +16,10 @@ fn test_spawn_and_pgid_isolation() {
         .unwrap();
 
     let expected_pgid = proc.pgid();
-    let actual_pgid = getpgid(Some(expected_pgid)).unwrap();
+    let nix_expected = nix::unistd::Pid::from_raw(expected_pgid.as_raw());
+    let actual_pgid = getpgid(Some(nix_expected)).unwrap();
 
-    assert_eq!(expected_pgid, actual_pgid);
+    assert_eq!(nix_expected, actual_pgid);
     proc.kill_group();
 }
 
@@ -81,12 +82,14 @@ fn test_manager_drop_kills_descendants() {
             .unwrap();
         proc_pid = proc.pgid();
 
-        let pgid = getpgid(Some(proc_pid));
+        let nix_proc_pid = nix::unistd::Pid::from_raw(proc_pid.as_raw());
+        let pgid = getpgid(Some(nix_proc_pid));
         assert!(pgid.is_ok());
     }
 
     thread::sleep(Duration::from_millis(200));
 
-    let pgid = getpgid(Some(proc_pid));
+    let nix_proc_pid = nix::unistd::Pid::from_raw(proc_pid.as_raw());
+    let pgid = getpgid(Some(nix_proc_pid));
     assert!(pgid.is_err());
 }

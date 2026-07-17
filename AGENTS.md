@@ -66,6 +66,12 @@
 
 ---
 
+## 🛠️ Tooling Policies
+
+- **mcp-uutils 優先ポリシー**: When performing operations that can be handled by `mcp-uutils` (e.g., file management, process control), prioritize its use over raw `bash` commands to leverage its structured output and robust error handling.
+
+---
+
 ## 🛠️ Governance Map
 
 | File | Category | Primary Role | Read When | Write When |

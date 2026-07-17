@@ -312,32 +312,50 @@ For a simple and robust security policy, configuration is restricted to a single
 
 ## 5. Major Workflows and Dataflow Scenarios
 
-### 5.1 Exception Handling (Infinite Loop Detection and Intervention)
+### 5.1 Unified Error Handling & Exception Management (3-Pillar Strategy)
 
-If the LLM falls into a logical freeze state (repeating the same command and error), the Extension's guardrail layer detects it and intervenes via DAG manipulation.
+`rad` adopts a structured, transactional error-handling architecture across the Core-Extension boundary. Errors are treated as state transitions within the DAG to ensure system consistency and enable autonomous recovery.
+
+#### 5.1.1 The Three Pillars (三つの柱)
+
+1. **Pillar 1: Error Normalization (`UnifiedError`)**
+   Every physical error detected by the host core (IO errors, execution failures, HTTP connection timeouts, or token limits) is standardized into a serialized `UnifiedError` JSON payload inside the WIT boundary's `result<T, string>`. This avoids breaking interface compatibility while permitting rich, structured classification on the guest extension side.
+   * **L1 (Adaptation)**: Transient API drops or tool/command errors. **Strategy**: Append error node to DAG, feed back to LLM, and retry.
+   * **L2 (Rollback)**: LLM parsing failures (e.g. truncated JSON from output token limit) or capability violations. **Strategy**: Roll back current DAG pointer and physically restore the filesystem state.
+   * **L3 (Reset)**: Context window exhaustion (token budget exceeded). **Strategy**: Compress context via `context-tools` DAG pruning/summarization and reset state.
+
+2. **Pillar 2: Deterministic State Transition & File Rollback Synchronization**
+   * **File Snapshots**: The Core automatically takes directories snapshot backups (`src/fs/snapshot.rs`) before entering LLM thinking phases and executing tools.
+   * **Sync Recovery**: On L2 rollback, the system not only rolls back the active DAG node pointer but also checks out/restores the corresponding filesystem snapshot synchronously to prevent local workspace pollution.
+
+3. **Pillar 3: Dual-Track Feedback**
+   * **Raw Track (LLM-facing)**: Stack traces, truncated JSON snippets, compilation errors, and complete command stderr are written to the DAG context for self-correction.
+   * **Semantic Track (User-facing)**: Clean, non-technical status messages (e.g., `"Error: Model stopped because it reached the maximum output token limit. The response may be incomplete."`) are output to stdout/UI to maintain user trust and predictability.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant LLM as External LLM
-    participant Ext as Extension (Guardrail)
+    participant Ext as Extension (Orchestrator)
     participant Core as rad Core
-    participant OS as OS / Process
+    participant FS as FS Snapshot
 
-    LLM->>Ext: Tool Call Order ("cargo test")
-    Ext->>Core: RPC: spawn_bash_process("cargo test")
-    Core->>OS: fork & exec ("cargo test")
-    OS-->>Core: Exit Code: 101 (Error)
-    Core->>Ext: Event: ProcessExited { pgid, exit_code: Some(101) }
-    Ext->>LLM: Pass test result (error)
+    Note over Ext: Take FS snapshot before execution
+    Ext->>Core: RPC: take_snapshot(...)
+    Core->>FS: Save current directory state
 
-    Note over Ext: History scan: <br>Same error occurred N times consecutively
-
-    Note over Ext: Decide on infinite loop intervention
-    Ext->>Core: RPC: create_node(parent_id, "system")
-    Ext->>Core: RPC: set_node_text(new_node_id, "[SYSTEM: Warning: Tests are failing consecutively. Please change your approach.]")
-    Note over Ext: Rebuild history context using new DAG state
-    Ext->>LLM: Send context with intervention warning
+    LLM->>Ext: Incomplete Tool Call (Truncated by token limit)
+    Note over Ext: Detect truncation (JSON parse fail)
+    Note over Ext: Classify as L2 (Rollback) Error
+    
+    Ext->>Core: RPC: checkout_snapshot(prev_node)
+    Core->>FS: Restore files to previous clean state
+    
+    Ext->>Core: RPC: WriteStdout (User Info)
+    Core->>Terminal: Print: "Error: Model stopped... Response incomplete."
+    
+    Note over Ext: Re-add error instruction in LLM prompt context
+    Ext->>LLM: Send "Tool call edit was not executed: arguments truncated. Re-issue."
 ```
 
 ### 5.2 Diversity Protocol (Handling Different API Connectors)

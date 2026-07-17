@@ -102,7 +102,18 @@ Example `rad.json` structure:
 * **Core (Rust)**: Manages OS resources, process PGID tracking, DAG state history, snapshots, and the WASM runtime host. It acts as an API Gateway executing RPCs.
 * **Extensions (WASM)**: Consist of isolated micro-extensions (LLM Orchestrator, Security Guard, Tool Provider) communicating via WIT-defined interfaces. They are stateless and restore history dynamically from Core's DAG.
 
-### 4.2 Building WebAssembly Extensions
+### 4.2 Unified Error Handling
+
+`rad` employs a transactional, 3-pillar error handling approach designed to treat errors as state transitions within the DAG to ensure system consistency and enable autonomous recovery.
+
+1. **Pillar 1: Error Normalization (`UnifiedError`)**: Categorizes all host runtime and subsystem errors into three distinct recovery levels:
+   * **L1 (Adaptation)**: Transient network drops or tool/command errors. *Strategy*: Log & retry with LLM context feedback.
+   * **L2 (Rollback)**: LLM output parsing failures (e.g. truncated tool call arguments from output token limits). *Strategy*: Roll back DAG pointer and physically restore workspace using file snapshots.
+   * **L3 (Reset)**: Context window or token budget exhaustion. *Strategy*: Run `context-tools` pruning/summarization and reset.
+2. **Pillar 2: Deterministic State Transition & File Rollback**: Ensures directory states (`.rad/snapshots/`) are synchronized with DAG pointer rewinds during L2 rollbacks.
+3. **Pillar 3: Dual-Track Feedback**: Separates technical error traces (sent to the LLM for self-correction) from clean, semantic notification strings (displayed to the user, e.g., `"Error: Model stopped because it reached the maximum output token limit. The response may be incomplete."`).
+
+### 4.3 Building WebAssembly Extensions
 To build Wasm extensions (e.g. the default OpenAI orchestrator):
 ```bash
 cd ext/openai-orchestrator
@@ -110,8 +121,7 @@ cargo build --target wasm32-wasip2 --release
 ```
 The compiled WASM binary is copied to the location configured in `rad.json` (under `extensions` configuration).
 
-
-### 4.3 Running Tests & Compliance
+### 4.4 Running Tests & Compliance
 Before contributing code, verify compliance with project standards:
 * **Code Size limits**: Ensure functions and files adhere to the length limits described in `CODING.md` (e.g., maximum 300 lines per file).
 * **Verify Tests**: Run unit and integration tests sequentially:
@@ -128,4 +138,3 @@ Before contributing code, verify compliance with project standards:
 ## 5. License
 
 [MIT License](LICENSE)
-

@@ -101,7 +101,15 @@ fn test_security_verification_hook_rejection() {
             enabled: true,
             role: "security".to_string(),
             source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
-            permissions: Some(perms),
+            permissions: Some(perms.clone()),
+            config: HashMap::new(),
+        },
+        ExtensionConfig {
+            name: "openai-connector".to_string(),
+            enabled: true,
+            role: "llm-connector".to_string(),
+            source: "target/wasm32-wasip2/debug/openai_connector.wasm".to_string(),
+            permissions: Some(perms.clone()),
             config: HashMap::new(),
         },
     ];

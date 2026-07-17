@@ -1,0 +1,40 @@
+package radcomp:context-tools;
+
+interface types {
+    variant ras-rpc-command {
+        command(string),
+    }
+}
+
+interface host-rpc {
+    use types.{ras-rpc-command};
+    call: func(command: ras-rpc-command) -> result<string, string>;
+}
+
+interface context-tools {
+    record message {
+        node-id: option<string>,
+        role: string,
+        content: string,
+    }
+
+    record optimization-request {
+        messages: list<message>,
+    }
+
+    record optimization-response {
+        optimized-messages: list<message>,
+        summary: string,
+    }
+
+    optimize: func(request: optimization-request) -> result<optimization-response, string>;
+    get-repo-map: func() -> result<string, string>;
+}
+
+world context-tools-extension {
+    use types.{ras-rpc-command};
+    
+    import host-rpc;
+
+    export context-tools;
+}

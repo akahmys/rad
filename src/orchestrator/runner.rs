@@ -213,7 +213,10 @@ impl Orchestrator {
         _request: &crate::ipc::RasRpcRequest,
         req_bytes: &[u8],
     ) -> Result<(), String> {
-        crate::log_host!("[HOST] verify_rpc_exclude started (exclude: {})", exclude_name);
+        crate::log_host!(
+            "[HOST] verify_rpc_exclude started (exclude: {})",
+            exclude_name
+        );
         let runtimes = {
             let guard = self.wasm_runtime.lock();
             guard.clone()
@@ -221,17 +224,30 @@ impl Orchestrator {
 
         for (name, runtime_arc) in runtimes {
             if name == exclude_name {
-                crate::log_host!("[HOST] verify_rpc_exclude: skipping excluded extension '{}'", name);
+                crate::log_host!(
+                    "[HOST] verify_rpc_exclude: skipping excluded extension '{}'",
+                    name
+                );
                 continue;
             }
             crate::log_host!("[HOST] verify_rpc_exclude: trying lock on '{}'", name);
             let Some(mut runtime) = runtime_arc.try_lock() else {
-                crate::log_host!("[HOST] verify_rpc_exclude: failed to lock '{}', skipping", name);
+                crate::log_host!(
+                    "[HOST] verify_rpc_exclude: failed to lock '{}', skipping",
+                    name
+                );
                 continue;
             };
-            crate::log_host!("[HOST] verify_rpc_exclude: locked '{}', calling verify_rpc", name);
+            crate::log_host!(
+                "[HOST] verify_rpc_exclude: locked '{}', calling verify_rpc",
+                name
+            );
             let res = runtime.verify_rpc(req_bytes);
-            crate::log_host!("[HOST] verify_rpc_exclude: verify_rpc for '{}' returned: {:?}", name, res);
+            crate::log_host!(
+                "[HOST] verify_rpc_exclude: verify_rpc for '{}' returned: {:?}",
+                name,
+                res
+            );
             if let Err(e) = res {
                 return Err(format!("Operation rejected by extension '{name}': {e}"));
             }

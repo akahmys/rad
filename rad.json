@@ -61,6 +61,30 @@
           "allow_domains": ["*"]
         }
       }
+    },
+    {
+      "name": "context-tools",
+      "source": "target/wasm32-wasip2/release/context_tools.wasm",
+      "enabled": true,
+      "role": "context-tools",
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"]
+      }
+    },
+    {
+      "name": "web-access",
+      "source": "target/wasm32-wasip2/release/web_access.wasm",
+      "enabled": true,
+      "role": "web-access",
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"],
+        "network": {
+          "allow_network": true,
+          "allow_domains": ["*"]
+        }
+      }
     }
   ]
 }

@@ -1,21 +1,21 @@
 use std::path::Path;
 use std::process::Command;
 
-fn run_git_cmd(workspace: &Path, args: &[&str]) -> Result<String, String> {
+fn run_git_cmd(workspace: &Path, args: &[&str]) -> Result<String, crate::error::UnifiedError> {
     let output = Command::new("git")
         .current_dir(workspace)
         .args(args)
         .output()
-        .map_err(|e| format!("Failed to execute git command: {e}"))?;
+        .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to execute git command: {e}"), "Git"))?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+        Err(crate::error::UnifiedError::l1(String::from_utf8_lossy(&output.stderr).trim().to_string(), "Git"))
     }
 }
 
-pub fn create_autopilot_branch(workspace: &Path, task_id: &str) -> Result<String, String> {
+pub fn create_autopilot_branch(workspace: &Path, task_id: &str) -> Result<String, crate::error::UnifiedError> {
     let branch_name = format!("rad-autopilot-{}", task_id);
     // Check if branch already exists
     let exists = run_git_cmd(
@@ -35,7 +35,7 @@ pub fn create_autopilot_branch(workspace: &Path, task_id: &str) -> Result<String
     Ok(branch_name)
 }
 
-pub fn create_checkpoint(workspace: &Path, message: &str) -> Result<String, String> {
+pub fn create_checkpoint(workspace: &Path, message: &str) -> Result<String, crate::error::UnifiedError> {
     // 1. Stage all changes
     run_git_cmd(workspace, &["add", "."])?;
     // 2. Commit with checkpoint message
@@ -45,7 +45,7 @@ pub fn create_checkpoint(workspace: &Path, message: &str) -> Result<String, Stri
     get_head_sha(workspace)
 }
 
-pub fn rollback_to_checkpoint(workspace: &Path, target_commit: &str) -> Result<(), String> {
+pub fn rollback_to_checkpoint(workspace: &Path, target_commit: &str) -> Result<(), crate::error::UnifiedError> {
     // 1. Reset HEAD and index
     run_git_cmd(workspace, &["reset", "--hard", target_commit])?;
     // 2. Clean untracked files
@@ -53,7 +53,7 @@ pub fn rollback_to_checkpoint(workspace: &Path, target_commit: &str) -> Result<(
     Ok(())
 }
 
-pub fn get_head_sha(workspace: &Path) -> Result<String, String> {
+pub fn get_head_sha(workspace: &Path) -> Result<String, crate::error::UnifiedError> {
     run_git_cmd(workspace, &["rev-parse", "HEAD"])
 }
 

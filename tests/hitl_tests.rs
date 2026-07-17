@@ -23,7 +23,7 @@ impl rad::subsystems::NetworkSubsystem for MockNetwork {
         _body: &str,
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
         _llm_timeout_policy: Arc<Mutex<rad::ipc::TimeoutPolicy>>,
-    ) -> Result<String, String> {
+    ) -> Result<String, rad::error::UnifiedError> {
         let mut guard = self.responses.lock();
         if let Some(chunks) = guard.pop() {
             let tx = event_tx.clone();

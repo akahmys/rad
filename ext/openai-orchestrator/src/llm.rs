@@ -138,7 +138,92 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
         tool_calls: None,
     }];
     all_messages.extend(filtered_messages);
-    Ok(all_messages)
+
+    // Split system message and non-system messages for context optimization
+    let mut system_msg = None;
+    let mut non_system_msgs = Vec::new();
+    for msg in all_messages {
+        if msg.role == "system" {
+            system_msg = Some(msg);
+        } else {
+            non_system_msgs.push(msg);
+        }
+    }
+
+    let mut optimized_non_system = non_system_msgs;
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct CtMessage {
+        #[serde(rename = "node-id")]
+        node_id: Option<String>,
+        role: String,
+        content: String,
+    }
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct CtOptimizationRequest {
+        messages: Vec<CtMessage>,
+    }
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct CtOptimizationResponse {
+        #[serde(rename = "optimized-messages")]
+        optimized_messages: Vec<CtMessage>,
+        summary: String,
+    }
+
+    let ct_req = CtOptimizationRequest {
+        messages: optimized_non_system
+            .iter()
+            .map(|m| CtMessage {
+                node_id: None,
+                role: m.role.clone(),
+                content: serde_json::to_string(m).unwrap_or_default(),
+            })
+            .collect(),
+    };
+
+    if let Ok(req_json) = serde_json::to_string(&ct_req) {
+        if let Ok(res_val) = call_host(RasRpcCommand::CallExtension {
+            extension_id: "context-tools".to_string(),
+            method: "optimize".to_string(),
+            arguments: req_json,
+        }) {
+            if let Some(res_str) = res_val.as_str() {
+                if let Ok(ct_resp) = serde_json::from_str::<CtOptimizationResponse>(res_str) {
+                    let mut temp_msgs = Vec::new();
+                    for m in ct_resp.optimized_messages {
+                        if let Ok(parsed) = serde_json::from_str::<Message>(&m.content) {
+                            temp_msgs.push(parsed);
+                        } else {
+                            temp_msgs.push(Message {
+                                role: m.role,
+                                content: Some(m.content),
+                                name: None,
+                                tool_call_id: None,
+                                tool_calls: None,
+                            });
+                        }
+                    }
+                    if !temp_msgs.is_empty() {
+                        let _ = call_host(RasRpcCommand::WriteStdout {
+                            text: format!(
+                                "\n\x1b[2m[Context optimized: {}]\x1b[0m\n",
+                                ct_resp.summary
+                            ),
+                        });
+                        optimized_non_system = temp_msgs;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut final_messages = Vec::new();
+    if let Some(sys) = system_msg {
+        final_messages.push(sys);
+    }
+    final_messages.extend(optimized_non_system);
+
+    Ok(final_messages)
 }
 
 pub fn trigger_llm_stream(messages: Vec<Message>) -> Result<(), String> {
@@ -146,8 +231,8 @@ pub fn trigger_llm_stream(messages: Vec<Message>) -> Result<(), String> {
 
     let messages_json = serde_json::to_string(&messages)
         .map_err(|e| format!("Failed to serialize messages: {e}"))?;
-    let tools_json = serde_json::to_string(&tools)
-        .map_err(|e| format!("Failed to serialize tools: {e}"))?;
+    let tools_json =
+        serde_json::to_string(&tools).map_err(|e| format!("Failed to serialize tools: {e}"))?;
 
     call_host(RasRpcCommand::GenerateLlmStream {
         model: "qwen".to_string(),
