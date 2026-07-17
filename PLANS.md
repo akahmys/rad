@@ -7,26 +7,28 @@
 - [✅] Phase 12: Codebase Verification & Integrity Audit (v0.17.0)
 - [✅] Phase 14: Esc Key Task Abort Polish & Robustness (v0.19.0)
 - [✅] Phase 15: Release Build, Local Installation & Push (v0.20.0)
+- [✅] Phase 16: Separate Core and MCP Tool Providers (v0.21.0)
+- [🔄] Phase 17: Release Build, Local Installation & Push to Main (v0.22.0)
 
 ---
 
-## 🛠️ Short-Term Plan: Phase 15 (Release Build, Local Installation & Push)
+## 🛠️ Short-Term Plan: Phase 17 (Release Build, Local Installation & Push to Main)
 
 ### 💡 Current AWU Status
-- [✅] AWU 820: Release Build and Local Install (Result: Release build and cargo install completed successfully. Executable replaced at ~/.cargo/bin/rad.)
-- [✅] AWU 821: Push to Git Repository (Result: Successfully committed changes and pushed to branch rad-autopilot-1784327769.)
+- [✅] AWU 840: Release Build and Local Installation (Result: All WASM extensions compiled in release mode, and rad installed successfully at ~/.cargo/bin/rad.)
+- [🔄] AWU 841: Commit and Push to Main (Result: In Progress)
 
 ### 📝 AWU Details
 
-#### AWU 820: Release Build and Local Install
-- **Objective:** Run release build and install the updated binary locally.
-- **Scope:** Terminal commands
-- **Definition of Done (DoD):** Release binary successfully compiled and `rad` installed.
+#### AWU 840: Release Build and Local Installation
+- **Objective:** Build the rad release binaries (including extensions) and install/replace the rad CLI executable locally.
+- **Scope:** Build commands.
+- **Definition of Done (DoD):** Extensions compiled in release mode, cargo install successfully runs and installs rad executable.
 
-#### AWU 821: Push to Git Repository
-- **Objective:** Stage, commit, and push the changes to git.
-- **Scope:** Git command
-- **Definition of Done (DoD):** Successful push.
-- **Result:** Successfully committed changes and pushed to branch rad-autopilot-1784327769.
+#### AWU 841: Commit and Push to Main
+- **Objective:** Stage, commit all changes, and push them to the main branch of the repository.
+- **Scope:** Git commands.
+- **Definition of Done (DoD):** Changes successfully pushed to main branch.
+
 
 

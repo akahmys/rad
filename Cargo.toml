@@ -44,6 +44,7 @@ tempfile = "3.8"
 members = [
     ".",
     "ext/context-tools",
+    "ext/core-tool-provider",
     "ext/openai-orchestrator",
     "ext/security-guard",
     "ext/mcp-tool-provider",

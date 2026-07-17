@@ -39,13 +39,32 @@
       }
     },
     {
+      "name": "core-tool-provider",
+      "source": "target/wasm32-wasip2/release/core_tool_provider.wasm",
+      "enabled": true,
+      "role": "tool-provider",
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"],
+        "execution": {
+          "allow_bash": true,
+          "allow_commands": [],
+          "block_commands": []
+        }
+      }
+    },
+    {
       "name": "mcp-tool-provider",
       "source": "target/wasm32-wasip2/release/mcp_tool_provider.wasm",
       "enabled": true,
       "role": "tool-provider",
       "permissions": {
         "fs_read_allow": ["*"],
-        "fs_write_allow": ["*"]
+        "execution": {
+          "allow_bash": true,
+          "allow_commands": [],
+          "block_commands": []
+        }
       }
     },
     {
