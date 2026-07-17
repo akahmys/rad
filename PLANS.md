@@ -4,35 +4,28 @@
 ## 🗺️ Long-Term Plan (Roadmap)
 - [✅] Phase 10: Codebase Refactoring & Rule Alignment (v0.15.0)
 - [✅] Phase 11: Unified Error Handling Mechanism (v0.16.0)
+- [✅] Phase 12: Codebase Verification & Integrity Audit (v0.17.0)
+- [🔄] Phase 13: Release Build, Local Installation & Push (v0.18.0)
 
 ---
 
-## 🛠️ Short-Term Plan: Phase 11 (Unified Error Handling Mechanism)
+## 🛠️ Short-Term Plan: Phase 13 (Release Build, Local Installation & Push)
 
 ### 💡 Current AWU Status
-- [✅] AWU 605: Propose Unified Error Handling Design (Result: Design proposal approved and reflected in ARCHITECTURE.md and README.md)
-- [✅] AWU 606: Implement Core UnifiedError Types & dependency (Result: thiserror/anyhow dependencies added, src/error.rs created)
-- [✅] AWU 607: Migrate Subsystems to UnifiedError (Result: Config, FS, Git, HTTP subsystems migrated, tests updated and passing)
-- [✅] AWU 608: Implement Rollback & Dual-Track Integration in Orchestrator (Result: JSON error serialization in Wasm boundary, snapshot/rollback, and dual-track user notification implemented and verified)
+- [🔄] AWU 612: Execute Release Build and Local Installation
+- [ ] AWU 613: Push commits to remote git repository
 
 ### 📝 AWU Details
 
-#### AWU 605: Propose Unified Error Handling Design
-- **Objective:** Design a unified error handling mechanism for `rad` core and extensions, using `thiserror` and `anyhow` as per CODING.md, and document the proposal in `implementation_plan.md`.
-- **Scope:** `implementation_plan.md`
-- **Definition of Done (DoD):** Implementation plan with proposed error types and conversion architecture created and submitted for user feedback.
+#### AWU 612: Execute Release Build and Local Installation
+- **Objective:** Build the rad runtime binary in release mode and install it to the local system.
+- **Scope:** Command line / terminal
+- **Definition of Done (DoD):** Release binary successfully compiled and `rad` installed locally (verifiable via `which rad` or similar).
 
-#### AWU 606: Implement Core UnifiedError Types & dependency
-- **Objective:** Add `thiserror` and `anyhow` dependencies to Cargo.toml, and create `src/error.rs` defining the `UnifiedError` structure and its JSON serialization.
-- **Scope:** `Cargo.toml`, `src/error.rs`, `src/lib.rs`
-- **Definition of Done (DoD):** `src/error.rs` compiles with zero warnings under clippy.
+#### AWU 613: Push commits to remote git repository
+- **Objective:** Stage, commit doc/format adjustments, and push changes to the remote git repository.
+- **Scope:** git repository
+- **Definition of Done (DoD):** `git push` runs successfully with zero errors.
+- **Result:** Reviewed README.md and identified missing slash commands and quick start execution commands. Updated documentation to list all 10 interactive slash commands, added binary execution command to Quick Start, and linked CONFIG.md for advanced parameters and credential handling.
+- **Result:** Checked configuration schemas and RPC commands. Discovered minor discrepancies in `RasCoreEvent`'s fields (e.g. `error` vs `message`, `i32` vs `String` for `pgid`) within `ARCHITECTURE.md` and successfully aligned it with `models/src/lib.rs` and `wit/rad.wit` definitions.
 
-#### AWU 607: Migrate Subsystems to UnifiedError
-- **Objective:** Refactor key host subsystems (Config, FS, Git, HTTP) to return `Result<T, UnifiedError>` instead of `Result<T, String>`.
-- **Scope:** `src/config.rs`, `src/fs.rs`, `src/git.rs`, `src/http.rs`
-- **Definition of Done (DoD):** Host library compiles and existing unit tests pass.
-
-#### AWU 608: Implement Rollback & Dual-Track Integration in Orchestrator
-- **Objective:** Update the Wasm host RPC bridge and orchestrator extension loop to process the JSON-serialized error payloads, trigger file rollback on L2, and print clean semantic output to the user.
-- **Scope:** `src/wasm/rpc.rs`, `ext/openai-orchestrator/src/orchestrator.rs`
-- **Definition of Done (DoD):** Full integration test flow compiles and passes.

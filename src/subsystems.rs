@@ -1,9 +1,9 @@
+use crate::error::UnifiedError;
 use parking_lot::Mutex;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use crate::error::UnifiedError;
 
 pub trait FsSubsystem: Send + Sync {
     /// Reads a file.

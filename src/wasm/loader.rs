@@ -1,16 +1,16 @@
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use parking_lot::Mutex;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::WasiCtxBuilder;
 
+use super::{WasmRuntime, WasmState, bindings};
 use crate::config::PermissionConfig;
 use crate::ipc::RasCoreEvent;
 use crate::process::RunningProcess;
 use crate::subsystems::{DagSubsystem, FsSubsystem, NetworkSubsystem, ProcessSubsystem};
-use super::{WasmRuntime, WasmState, bindings};
 
 impl WasmRuntime {
     #[allow(clippy::too_many_arguments)]

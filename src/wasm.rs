@@ -1,8 +1,8 @@
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
-use wasmtime::component::ResourceTable;
 use wasmtime::Store;
+use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{WasiCtx, WasiView};
 
 use crate::config::PermissionConfig;

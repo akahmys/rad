@@ -96,9 +96,7 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                     return runtime
                         .execute_tool(name, arguments)
                         .map(serde_json::Value::String)
-                        .map_err(|e| {
-                            format!("Tool execution failed: {e}")
-                        });
+                        .map_err(|e| format!("Tool execution failed: {e}"));
                 }
                 execute_core_tool_fallback(name, arguments, ctx)
             } else {
@@ -160,8 +158,9 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                             break;
                         }
                     }
-                    connector_runtime_opt
-                        .ok_or_else(|| "LLM Connector extension not found or not loaded".to_string())?
+                    connector_runtime_opt.ok_or_else(|| {
+                        "LLM Connector extension not found or not loaded".to_string()
+                    })?
                 };
 
                 let mut connector = connector_arc.lock();

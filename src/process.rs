@@ -49,7 +49,9 @@ impl ProcessManager {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to open PTY: {e}"), "Process"))?;
+            .map_err(|e| {
+                crate::error::UnifiedError::l1(format!("Failed to open PTY: {e}"), "Process")
+            })?;
 
         let mut cmd = CommandBuilder::new("bash");
         cmd.arg("-c");
@@ -58,15 +60,16 @@ impl ProcessManager {
             cmd.cwd(p);
         }
 
-        let child = pty_pair
-            .slave
-            .spawn_command(cmd)
-            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to spawn command in PTY: {e}"), "Process"))?;
+        let child = pty_pair.slave.spawn_command(cmd).map_err(|e| {
+            crate::error::UnifiedError::l1(
+                format!("Failed to spawn command in PTY: {e}"),
+                "Process",
+            )
+        })?;
 
-        let pgid_raw = pty_pair
-            .master
-            .process_group_leader()
-            .ok_or_else(|| crate::error::UnifiedError::l1("Failed to get process group leader", "Process"))?;
+        let pgid_raw = pty_pair.master.process_group_leader().ok_or_else(|| {
+            crate::error::UnifiedError::l1("Failed to get process group leader", "Process")
+        })?;
 
         let pid = Pid::from_raw(pgid_raw);
 
@@ -75,15 +78,13 @@ impl ProcessManager {
             pgids.push(pid);
         }
 
-        let master_reader = pty_pair
-            .master
-            .try_clone_reader()
-            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to clone master reader: {e}"), "Process"))?;
+        let master_reader = pty_pair.master.try_clone_reader().map_err(|e| {
+            crate::error::UnifiedError::l1(format!("Failed to clone master reader: {e}"), "Process")
+        })?;
 
-        let master_writer = pty_pair
-            .master
-            .take_writer()
-            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to take master writer: {e}"), "Process"))?;
+        let master_writer = pty_pair.master.take_writer().map_err(|e| {
+            crate::error::UnifiedError::l1(format!("Failed to take master writer: {e}"), "Process")
+        })?;
 
         let (stdout_tx, stdout_rx) = mpsc::channel();
         let (_stderr_tx, stderr_rx) = mpsc::channel();

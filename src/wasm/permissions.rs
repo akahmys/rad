@@ -111,7 +111,9 @@ fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Pat
             }
         };
 
-        if canonical_target.starts_with(&canonical_pattern) && canonical_target.starts_with(&canonical_workspace) {
+        if canonical_target.starts_with(&canonical_pattern)
+            && canonical_target.starts_with(&canonical_workspace)
+        {
             return true;
         }
     }
@@ -123,7 +125,11 @@ fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Pat
 /// # Errors
 ///
 /// Returns an error if the capability check fails or the action is denied.
-pub fn check_permissions(cmd: &RasRpcCommand, perms: &PermissionConfig, workspace: &Path) -> Result<(), String> {
+pub fn check_permissions(
+    cmd: &RasRpcCommand,
+    perms: &PermissionConfig,
+    workspace: &Path,
+) -> Result<(), String> {
     match cmd {
         RasRpcCommand::SpawnBashProcess { command } => {
             let exec_config = perms
@@ -159,9 +165,13 @@ pub fn check_permissions(cmd: &RasRpcCommand, perms: &PermissionConfig, workspac
 
             Ok(())
         }
-        RasRpcCommand::OpenProcess { command } => {
-            check_permissions(&RasRpcCommand::SpawnBashProcess { command: command.clone() }, perms, workspace)
-        }
+        RasRpcCommand::OpenProcess { command } => check_permissions(
+            &RasRpcCommand::SpawnBashProcess {
+                command: command.clone(),
+            },
+            perms,
+            workspace,
+        ),
         RasRpcCommand::OpenFile { path, writeable } => {
             let allowed = if *writeable {
                 has_path_permission(path, &perms.fs_write_allow, workspace)

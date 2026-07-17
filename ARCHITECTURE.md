@@ -118,7 +118,7 @@ pub enum RasCoreEvent {
     },
     /// Received an error from the HTTP connection
     HttpErrorReceived {
-        error: String,
+        message: String,
     },
     /// A tool execution request occurred from the LLM
     ToolCallRequested {
@@ -130,10 +130,11 @@ pub enum RasCoreEvent {
     TaskCompleted,
     /// Provides history of pending tool calls to rehydrate extension state
     Rehydrate {
-        pending_tool_calls: Vec<PendingToolCallInfo>,
+        active_calls: Vec<PendingToolCallInfo>,
     },
     /// A response from an external MCP server
     McpResponse {
+        call_id: String,
         name: String,
         message: String,
     },
@@ -141,24 +142,24 @@ pub enum RasCoreEvent {
     // === Process Monitoring (PTY / Bash) ===
     /// A new process group was spawned
     ProcessSpawned {
-        pgid: i32,
+        pgid: String,
         pid: i32,
     },
     /// Received data from the stdout of a process group
     ProcessStdout {
-        pgid: i32,
+        pgid: String,
         #[serde(with = "serde_bytes")]
         data: Vec<u8>,
     },
     /// Received data from the stderr of a process group
     ProcessStderr {
-        pgid: i32,
+        pgid: String,
         #[serde(with = "serde_bytes")]
         data: Vec<u8>,
     },
     /// The main process of a process group exited
     ProcessExited {
-        pgid: i32,
+        pgid: String,
         exit_code: Option<i32>,
     },
 
