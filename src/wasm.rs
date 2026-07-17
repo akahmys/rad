@@ -1,10 +1,9 @@
 use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
-use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime::{Engine, Store};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
+use wasmtime::component::ResourceTable;
+use wasmtime::Store;
+use wasmtime_wasi::{WasiCtx, WasiView};
 
 use crate::config::PermissionConfig;
 use crate::ipc::RasCoreEvent;
@@ -16,6 +15,7 @@ pub mod bindings_event;
 pub mod imports;
 mod imports_resources;
 mod imports_rpc;
+pub mod loader;
 pub mod permissions;
 pub mod rpc;
 pub mod rpc_dag;
@@ -80,125 +80,38 @@ pub struct WasmRuntime {
     pub security_guard: Option<bindings::rad_security_guard::RadSecurityGuard>,
     pub tool_provider: Option<bindings::rad_tool_provider::RadToolProvider>,
     pub llm_connector: Option<bindings::rad_llm_connector::LlmConnector>,
+    pub context_tools: Option<bindings::rad_context_tools::ContextToolsExtension>,
+    pub web_access: Option<bindings::rad_web_access::WebAccessExtension>,
     pub instance: wasmtime::component::Instance,
     pub role: String,
 }
 
 impl WasmRuntime {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        name: String,
-        wasm_path: &Path,
-        role: String,
-        permissions: PermissionConfig,
-        sandbox: Arc<dyn FsSubsystem>,
-        process_manager: Arc<dyn ProcessSubsystem>,
-        dag: Arc<dyn DagSubsystem>,
-        network: Arc<dyn NetworkSubsystem>,
-        active_processes: Arc<Mutex<HashMap<String, RunningProcess>>>,
-        event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
-        orchestrator: Option<std::sync::Weak<crate::orchestrator::Orchestrator>>,
-        hitl_enabled: bool,
-    ) -> Result<Self, String> {
-        let mut config = wasmtime::Config::new();
-        config.wasm_multi_memory(true);
-        config.wasm_component_model(true);
-        let engine = Engine::new(&config).map_err(|e| format!("Failed to create Engine: {e}"))?;
-        let component = Component::from_file(&engine, wasm_path)
-            .map_err(|e| format!("Failed to load Wasm component: {e}"))?;
-
-        let mut linker = Linker::new(&engine);
-        wasmtime_wasi::add_to_linker_sync(&mut linker)
-            .map_err(|e| format!("Linker error WASI: {e}"))?;
-
-        match role.as_str() {
-            "orchestrator" => bindings::rad_orchestrator::RadOrchestrator::add_to_linker(&mut linker, |s| s)
-                .map_err(|e| format!("Linker error RadOrchestrator: {e}"))?,
-            "security" => bindings::rad_security_guard::RadSecurityGuard::add_to_linker(&mut linker, |s| s)
-                .map_err(|e| format!("Linker error RadSecurityGuard: {e}"))?,
-            "tool-provider" => bindings::rad_tool_provider::RadToolProvider::add_to_linker(&mut linker, |s| s)
-                .map_err(|e| format!("Linker error RadToolProvider: {e}"))?,
-            "llm-connector" => bindings::rad_llm_connector::LlmConnector::add_to_linker(&mut linker, |s| s)
-                .map_err(|e| format!("Linker error LlmConnector: {e}"))?,
-            _ => bindings::RadExtension::add_to_linker(&mut linker, |s| s)
-                .map_err(|e| format!("Linker error RadExtension: {e}"))?,
-        }
-
-        let wasi = WasiCtxBuilder::new()
-            .inherit_stdout()
-            .inherit_stderr()
-            .inherit_env()
-            .build();
-        let resource_table = ResourceTable::new();
-
-        let state = WasmState {
-            name,
-            sandbox,
-            process_manager,
-            dag,
-            network,
-            permissions,
-            active_processes,
-            active_mcp_servers: Arc::new(Mutex::new(HashMap::new())),
-            event_tx,
-            llm_timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Infinite)),
-            orchestrator,
-            hitl_enabled,
-            wasi,
-            resource_table,
-        };
-
-        let mut store = Store::new(&engine, state);
-        let instance = linker
-            .instantiate(&mut store, &component)
-            .map_err(|e| format!("Failed to instantiate component: {e}"))?;
-
-        let mut extension = None;
-        let mut orchestrator = None;
-        let mut security_guard = None;
-        let mut tool_provider = None;
-        let mut llm_connector = None;
-
-        match role.as_str() {
-            "orchestrator" => orchestrator = Some(bindings::rad_orchestrator::RadOrchestrator::new(&mut store, &instance)
-                .map_err(|e| format!("Failed to create orchestrator bindings: {e}"))?),
-            "security" => security_guard = Some(bindings::rad_security_guard::RadSecurityGuard::new(&mut store, &instance)
-                .map_err(|e| format!("Failed to create security bindings: {e}"))?),
-            "tool-provider" => tool_provider = Some(bindings::rad_tool_provider::RadToolProvider::new(&mut store, &instance)
-                .map_err(|e| format!("Failed to create tool-provider bindings: {e}"))?),
-            "llm-connector" => llm_connector = Some(bindings::rad_llm_connector::LlmConnector::new(&mut store, &instance)
-                .map_err(|e| format!("Failed to create llm-connector bindings: {e}"))?),
-            _ => extension = Some(bindings::RadExtension::new(&mut store, &instance)
-                .map_err(|e| format!("Failed to create legacy bindings: {e}"))?),
-        }
-
-        Ok(Self {
-            store,
-            extension,
-            orchestrator,
-            security_guard,
-            tool_provider,
-            llm_connector,
-            instance,
-            role,
-        })
-    }
-
     pub fn on_event(&mut self, event: &RasCoreEvent) -> Result<(), String> {
         let ext_name = self.store.data().name.clone();
-        crate::log_host!("[HOST] Dispatching event to Wasm '{}': {:?}", ext_name, event);
+        crate::log_host!(
+            "[HOST] Dispatching event to Wasm '{}': {:?}",
+            ext_name,
+            event
+        );
         let wit_event = bindings::wit::RasCoreEvent::from(event.clone());
 
         if self.role == "orchestrator" {
             if let Some(ref orch) = self.orchestrator {
-                let res = orch.call_on_event(&mut self.store, &wit_event)
+                let res = orch
+                    .call_on_event(&mut self.store, &wit_event)
                     .map_err(|e| format_wasm_error(&ext_name, "on_event", &e))?;
                 crate::log_host!("[HOST] Wasm '{}' on_event returned: {:?}", ext_name, res);
                 res.map_err(|e| format!("Extension internal error: {e}"))
             } else {
                 Err("Orchestrator bindings missing".to_string())
             }
-        } else if self.role == "security" || self.role == "tool-provider" || self.role == "llm-connector" {
+        } else if self.role == "security"
+            || self.role == "tool-provider"
+            || self.role == "llm-connector"
+            || self.role == "context-tools"
+            || self.role == "web-access"
+        {
             Ok(())
         } else {
             if let Some(ref ext) = self.extension {
@@ -220,7 +133,12 @@ impl WasmRuntime {
         let request: crate::ipc::RasRpcRequest = serde_json::from_slice(req_bytes)
             .map_err(|e| format!("Failed to parse request bytes: {e}"))?;
         let bindings_cmd = bindings::wit::RasRpcCommand::from(request.command.clone());
-        crate::log_host!("[HOST] verify_rpc for extension '{}': CoreCommand = {:?}, bindings::wit = {:?}", self.store.data().name, request.command, bindings_cmd);
+        crate::log_host!(
+            "[HOST] verify_rpc for extension '{}': CoreCommand = {:?}, bindings::wit = {:?}",
+            self.store.data().name,
+            request.command,
+            bindings_cmd
+        );
 
         let ext_name = self.store.data().name.clone();
 
@@ -235,7 +153,12 @@ impl WasmRuntime {
             } else {
                 return Err("Security guard bindings missing".to_string());
             }
-        } else if self.role == "orchestrator" || self.role == "tool-provider" || self.role == "llm-connector" {
+        } else if self.role == "orchestrator"
+            || self.role == "tool-provider"
+            || self.role == "llm-connector"
+            || self.role == "context-tools"
+            || self.role == "web-access"
+        {
             // Orchestrator, tool-provider, and llm-connector are auto-approved by host unless targeted by a security guard
         } else {
             if let Some(ref ext) = self.extension {
@@ -273,6 +196,69 @@ impl WasmRuntime {
             Ok(res.rep().to_string())
         } else {
             Err("Tool provider bindings missing".to_string())
+        }
+    }
+
+    pub fn call_extension_method(
+        &mut self,
+        method: &str,
+        arguments: &str,
+    ) -> Result<String, String> {
+        let ext_name = self.store.data().name.clone();
+        match self.role.as_str() {
+            "context-tools" => {
+                if let Some(ref ct) = self.context_tools {
+                    match method {
+                        "optimize" => {
+                            use crate::wasm::bindings::rad_context_tools::exports::radcomp::context_tools::context_tools::OptimizationRequest;
+                            let req: OptimizationRequest = serde_json::from_str(arguments)
+                                .map_err(|e| format!("Failed to parse OptimizationRequest: {e}"))?;
+                            let resp = ct
+                                .radcomp_context_tools_context_tools()
+                                .call_optimize(&mut self.store, &req)
+                                .map_err(|e| format_wasm_error(&ext_name, "optimize", &e))??;
+                            serde_json::to_string(&resp)
+                                .map_err(|e| format!("Serialization error: {e}"))
+                        }
+                        "get-repo-map" => {
+                            let resp = ct
+                                .radcomp_context_tools_context_tools()
+                                .call_get_repo_map(&mut self.store)
+                                .map_err(|e| format_wasm_error(&ext_name, "get_repo_map", &e))??;
+                            Ok(resp)
+                        }
+                        other => Err(format!("Unknown context-tools method: {other}")),
+                    }
+                } else {
+                    Err("context-tools bindings missing".to_string())
+                }
+            }
+            "web-access" => {
+                if let Some(ref wa) = self.web_access {
+                    match method {
+                        "search" => {
+                            let resp = wa
+                                .radcomp_web_access_web_access()
+                                .call_search(&mut self.store, arguments)
+                                .map_err(|e| format_wasm_error(&ext_name, "search", &e))??;
+                            Ok(resp)
+                        }
+                        "fetch" => {
+                            let resp = wa
+                                .radcomp_web_access_web_access()
+                                .call_fetch(&mut self.store, arguments)
+                                .map_err(|e| format_wasm_error(&ext_name, "fetch", &e))??;
+                            Ok(resp)
+                        }
+                        other => Err(format!("Unknown web-access method: {other}")),
+                    }
+                } else {
+                    Err("web-access bindings missing".to_string())
+                }
+            }
+            other => Err(format!(
+                "call_extension_method not supported for role: {other}"
+            )),
         }
     }
 }

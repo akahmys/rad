@@ -9,141 +9,16 @@ wit_bindgen::generate!({
 use self::radcomp::extension::types as wit;
 use rad_models::RasRpcCommand as CoreRpcCommand;
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 mod conv;
 
 struct ToolProviderImpl;
 
-#[derive(serde::Deserialize)]
-struct ExtensionConfigInfo {
-    name: String,
-    config: Option<McpProviderConfig>,
-}
+mod client;
+mod default_tools;
 
-#[derive(serde::Deserialize)]
-struct McpProviderConfig {
-    mcp_servers: Option<HashMap<String, McpServerConfig>>,
-}
-
-#[derive(serde::Deserialize, Clone)]
-struct McpServerConfig {
-    command: String,
-    args: Vec<String>,
-}
-
-#[derive(serde::Deserialize)]
-struct RadJsonConfig {
-    extensions: Option<Vec<ExtensionConfigInfo>>,
-}
-
-struct ActiveMcpServer {
-    stdin: wit::StreamHandle,
-    stdout: wit::StreamHandle,
-}
-
-static MCP_SERVERS: Mutex<Option<HashMap<String, ActiveMcpServer>>> = Mutex::new(None);
-static MCP_TOOL_MAPPING: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
-
-fn load_mcp_config() -> Result<Option<McpProviderConfig>, String> {
-    let paths = ["rad.json", ".rad/rad.json"];
-    let mut content = None;
-    for p in &paths {
-        if let Ok(c) = std::fs::read_to_string(p) {
-            content = Some(c);
-            break;
-        }
-    }
-    let Some(json_str) = content else {
-        return Ok(None);
-    };
-
-    let cfg: RadJsonConfig = serde_json::from_str(&json_str)
-        .map_err(|e| format!("Failed to parse rad.json: {e}"))?;
-
-    let Some(extensions) = cfg.extensions else {
-        return Ok(None);
-    };
-
-    // check both potential names for config compatibility
-    for ext in extensions {
-        if ext.name == "mcp-tool-provider" || ext.name == "openai-orchestrator" {
-            if ext.config.is_some() {
-                return Ok(ext.config);
-            }
-        }
-    }
-
-    Ok(None)
-}
-
-fn init_mcp_servers() -> Result<(), String> {
-    let mut servers_guard = MCP_SERVERS.lock().map_err(|e| e.to_string())?;
-    if servers_guard.is_some() {
-        return Ok(());
-    }
-
-    let mut active = HashMap::new();
-    if let Some(config) = load_mcp_config()? {
-        if let Some(servers) = config.mcp_servers {
-            for (name, cfg) in servers {
-                // Construct command line args
-                let mut cmd_parts = vec![cfg.command.clone()];
-                cmd_parts.extend(cfg.args.clone());
-                let command_line = cmd_parts
-                    .iter()
-                    .map(|arg| format!("'{arg}'"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-
-                let exec = open_process(&command_line)?;
-                let stdin = exec.get_stdin();
-                let stdout = exec.get_stdout();
-                active.insert(name, ActiveMcpServer { stdin, stdout });
-            }
-        }
-    }
-
-    *servers_guard = Some(active);
-    Ok(())
-}
-
-fn read_line(stdout: &wit::StreamHandle) -> Result<String, String> {
-    let mut buffer = Vec::new();
-    let start = std::time::Instant::now();
-    loop {
-        let chunk = stdout.read(1024)?;
-        if chunk.is_empty() {
-            if start.elapsed() > std::time::Duration::from_secs(5) {
-                return Err("Timeout reading from MCP server".to_string());
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            continue;
-        }
-        for &b in &chunk {
-            if b == b'\n' {
-                return String::from_utf8(buffer).map_err(|e| e.to_string());
-            }
-            buffer.push(b);
-        }
-    }
-}
-
-fn mcp_request(server_name: &str, req_val: &serde_json::Value) -> Result<serde_json::Value, String> {
-    init_mcp_servers()?;
-    let mut servers_guard = MCP_SERVERS.lock().map_err(|e| e.to_string())?;
-    let servers = servers_guard.as_mut().ok_or("MCP servers not initialized")?;
-    let server = servers.get_mut(server_name).ok_or_else(|| format!("MCP server {server_name} not found"))?;
-
-    let req_str = serde_json::to_string(req_val).map_err(|e| e.to_string())?;
-    let mut req_bytes = req_str.into_bytes();
-    req_bytes.push(b'\n');
-
-    server.stdin.write(&req_bytes)?;
-
-    let res_line = read_line(&server.stdout)?;
-    serde_json::from_str(&res_line).map_err(|e| format!("Invalid JSON response: {e}. Raw: {res_line}"))
-}
+use client::{init_mcp_servers, mcp_request, MCP_SERVERS, MCP_TOOL_MAPPING};
+use default_tools::{get_default_tools, Tool, FunctionDefinition};
 
 impl Guest for ToolProviderImpl {
     fn get_tools() -> Result<String, String> {
@@ -153,7 +28,10 @@ impl Guest for ToolProviderImpl {
             let mut mapping = HashMap::new();
             let servers_list: Vec<String> = {
                 if let Ok(guard) = MCP_SERVERS.lock() {
-                    guard.as_ref().map(|m| m.keys().cloned().collect()).unwrap_or_default()
+                    guard
+                        .as_ref()
+                        .map(|m| m.keys().cloned().collect())
+                        .unwrap_or_default()
                 } else {
                     Vec::new()
                 }
@@ -172,18 +50,23 @@ impl Guest for ToolProviderImpl {
                             for t in mcp_tools {
                                 if let Some(name) = t.get("name").and_then(|n| n.as_str()) {
                                     mapping.insert(name.to_string(), server_name.clone());
-                                    let description = t.get("description").and_then(|d| d.as_str()).map(ToString::to_string);
-                                    let parameters = t.get("inputSchema").cloned().unwrap_or(serde_json::json!({
-                                        "type": "object",
-                                        "properties": {}
-                                    }));
+                                    let description = t
+                                        .get("description")
+                                        .and_then(|d| d.as_str())
+                                        .map(ToString::to_string);
+                                    let parameters = t.get("inputSchema").cloned().unwrap_or(
+                                        serde_json::json!({
+                                            "type": "object",
+                                            "properties": {}
+                                        }),
+                                    );
                                     tools.push(Tool {
                                         tool_type: "function".to_string(),
                                         function: FunctionDefinition {
                                             name: name.to_string(),
                                             description,
                                             parameters,
-                                        }
+                                        },
                                     });
                                 }
                             }
@@ -246,6 +129,42 @@ impl Guest for ToolProviderImpl {
                     .map_err(|e| format!("Failed to parse bash args: {e}"))?;
                 open_process(&args.command)
             }
+            "search_web" => {
+                #[derive(serde::Deserialize)]
+                struct Args {
+                    query: String,
+                }
+                let args: Args = serde_json::from_str(&arguments)
+                    .map_err(|e| format!("Failed to parse search_web args: {e}"))?;
+
+                let res_val = call_host(CoreRpcCommand::CallExtension {
+                    extension_id: "web-access".to_string(),
+                    method: "search".to_string(),
+                    arguments: args.query,
+                })?;
+
+                let out_str = res_val.as_str().unwrap_or("").to_string();
+                let escaped = out_str.replace('\'', "'\\''");
+                open_process(&format!("echo -n '{escaped}'"))
+            }
+            "fetch_url" => {
+                #[derive(serde::Deserialize)]
+                struct Args {
+                    url: String,
+                }
+                let args: Args = serde_json::from_str(&arguments)
+                    .map_err(|e| format!("Failed to parse fetch_url args: {e}"))?;
+
+                let res_val = call_host(CoreRpcCommand::CallExtension {
+                    extension_id: "web-access".to_string(),
+                    method: "fetch".to_string(),
+                    arguments: args.url,
+                })?;
+
+                let out_str = res_val.as_str().unwrap_or("").to_string();
+                let escaped = out_str.replace('\'', "'\\''");
+                open_process(&format!("echo -n '{escaped}'"))
+            }
             other => {
                 let mapping = {
                     let mut map_guard = MCP_TOOL_MAPPING.lock().map_err(|e| e.to_string())?;
@@ -258,7 +177,9 @@ impl Guest for ToolProviderImpl {
                     map_guard.clone().ok_or("MCP tool mapping unavailable")?
                 };
 
-                let server_name = mapping.get(other).ok_or_else(|| format!("Unknown tool provider for tool '{other}'"))?;
+                let server_name = mapping
+                    .get(other)
+                    .ok_or_else(|| format!("Unknown tool provider for tool '{other}'"))?;
 
                 let args_json: serde_json::Value = serde_json::from_str(&arguments)
                     .map_err(|e| format!("Failed to parse MCP tool args: {e}"))?;
@@ -273,10 +194,14 @@ impl Guest for ToolProviderImpl {
                 });
 
                 let res = mcp_request(server_name, &req)?;
-                
+
                 // Parse tool call result
                 let mut result_text = String::new();
-                if let Some(err) = res.get("error").and_then(|e| e.get("message")).and_then(|m| m.as_str()) {
+                if let Some(err) = res
+                    .get("error")
+                    .and_then(|e| e.get("message"))
+                    .and_then(|m| m.as_str())
+                {
                     result_text = format!("Error from MCP server: {err}");
                 } else if let Some(result) = res.get("result") {
                     if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
@@ -319,103 +244,4 @@ fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, String> {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct FunctionDefinition {
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    pub parameters: serde_json::Value,
-}
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct Tool {
-    #[serde(rename = "type")]
-    pub tool_type: String,
-    pub function: FunctionDefinition,
-}
-
-fn get_default_tools() -> Vec<Tool> {
-    vec![
-        Tool {
-            tool_type: "function".to_string(),
-            function: FunctionDefinition {
-                name: "read".to_string(),
-                description: Some(
-                    "Read the entire contents of a file at the specified path.".to_string(),
-                ),
-                parameters: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "The path to the file to read."
-                        }
-                    },
-                    "required": ["path"]
-                }),
-            },
-        },
-        Tool {
-            tool_type: "function".to_string(),
-            function: FunctionDefinition {
-                name: "write".to_string(),
-                description: Some("Write content to a file at the specified path.".to_string()),
-                parameters: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "The target path to write the file."
-                        },
-                        "content": {
-                            "type": "string",
-                            "description": "The raw text content to write."
-                        }
-                    },
-                    "required": ["path", "content"]
-                }),
-            },
-        },
-        Tool {
-            tool_type: "function".to_string(),
-            function: FunctionDefinition {
-                name: "edit".to_string(),
-                description: Some(
-                    "Apply a unified diff patch to modify a file at the specified path."
-                        .to_string(),
-                ),
-                parameters: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "The target file path to patch."
-                        },
-                        "diff": {
-                            "type": "string",
-                            "description": "The unified diff content to apply."
-                        }
-                    },
-                    "required": ["path", "diff"]
-                }),
-            },
-        },
-        Tool {
-            tool_type: "function".to_string(),
-            function: FunctionDefinition {
-                name: "bash".to_string(),
-                description: Some("Spawn a command in a non-interactive bash shell.".to_string()),
-                parameters: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "command": {
-                            "type": "string",
-                            "description": "The command line string to execute."
-                        }
-                    },
-                    "required": ["command"]
-                }),
-            },
-        },
-    ]
-}

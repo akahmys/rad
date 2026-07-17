@@ -121,6 +121,9 @@ impl Orchestrator {
         // 5. Reset Wasm runtime state
         self.wasm_runtime.lock().clear();
 
+        // Clear active processes
+        self.active_processes.lock().clear();
+
         // 6. Reset token usage
         *self.token_usage.lock() = TokenUsage::default();
 
@@ -197,6 +200,8 @@ impl Orchestrator {
             let mut wasm_guard = self.wasm_runtime.lock();
             wasm_guard.clear();
         }
+
+        self.active_processes.lock().clear();
 
         {
             let mut guard = self.running_task.lock();

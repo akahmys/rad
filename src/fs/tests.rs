@@ -40,17 +40,17 @@ fn test_permissions() {
     let read_err1 = sandbox
         .file_read(Path::new("forbidden/file.txt"))
         .unwrap_err();
-    assert!(read_err1.contains("Read permission denied"));
+    assert!(read_err1.to_string().contains("Read permission denied"));
 
     let read_err2 = sandbox
         .file_read(Path::new("allowed_read/file.txt"))
         .unwrap_err();
-    assert!(!read_err2.contains("Read permission denied"));
+    assert!(!read_err2.to_string().contains("Read permission denied"));
 
     let write_err1 = sandbox
         .file_write(Path::new("forbidden/file.txt"), b"data")
         .unwrap_err();
-    assert!(write_err1.contains("Write permission denied"));
+    assert!(write_err1.to_string().contains("Write permission denied"));
 
     let write_ok = sandbox.file_write(Path::new("allowed_write/file.txt"), b"data");
     assert!(write_ok.is_ok());

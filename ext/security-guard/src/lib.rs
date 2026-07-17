@@ -138,6 +138,11 @@ impl From<wit::RasRpcCommand> for CoreRpcCommand {
                 messages_json: payload.messages_json,
                 tools_json: payload.tools_json,
             },
+            wit::RasRpcCommand::CallExtension(payload) => CoreRpcCommand::CallExtension {
+                extension_id: payload.extension_id,
+                method: payload.method,
+                arguments: payload.arguments,
+            },
         }
     }
 }

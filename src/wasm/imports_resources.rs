@@ -13,10 +13,7 @@ use wasmtime_wasi::WasiView;
 fn push_closed_fallback(
     state: &mut WasmState,
 ) -> wasmtime::component::Resource<crate::wasm::HostStream> {
-    match state
-        .table()
-        .push(crate::wasm::HostStream::Closed)
-    {
+    match state.table().push(crate::wasm::HostStream::Closed) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("[WASM] Critical: failed to push Closed fallback: {e}");
@@ -160,10 +157,7 @@ impl bindings::wit::HostFileHandle for WasmState {
                 return push_closed_fallback(self);
             }
         };
-        match self
-            .table()
-            .push(crate::wasm::HostStream::File(file_dup))
-        {
+        match self.table().push(crate::wasm::HostStream::File(file_dup)) {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("[WASM] get_stream: failed to push stream: {e}");
@@ -304,9 +298,9 @@ impl bindings::wit::HostExecutionHandle for WasmState {
 
 impl crate::wasm::bindings::rad_llm_connector::radcomp::connector::types::Host for WasmState {}
 
-
-
-impl crate::wasm::bindings::rad_llm_connector::radcomp::connector::types::HostStreamHandle for WasmState {
+impl crate::wasm::bindings::rad_llm_connector::radcomp::connector::types::HostStreamHandle
+    for WasmState
+{
     fn read(
         &mut self,
         self_: wasmtime::component::Resource<crate::wasm::HostStream>,
@@ -323,10 +317,7 @@ impl crate::wasm::bindings::rad_llm_connector::radcomp::connector::types::HostSt
         bindings::wit::HostStreamHandle::write(self, self_, data)
     }
 
-    fn close(
-        &mut self,
-        self_: wasmtime::component::Resource<crate::wasm::HostStream>,
-    ) {
+    fn close(&mut self, self_: wasmtime::component::Resource<crate::wasm::HostStream>) {
         bindings::wit::HostStreamHandle::close(self, self_);
     }
 

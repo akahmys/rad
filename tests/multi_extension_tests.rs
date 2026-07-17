@@ -7,6 +7,8 @@ use std::fs;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+static TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn run_mock_http_server(
     addr: &str,
     responses: Arc<Mutex<Vec<String>>>,
@@ -36,6 +38,7 @@ fn run_mock_http_server(
 
 #[test]
 fn test_multi_extension_verification_chain() {
+    let _lock = TEST_MUTEX.lock().unwrap();
     let temp_dir = tempfile::tempdir().unwrap();
     let workspace = temp_dir.path().join("workspace");
     let snapshots = temp_dir.path().join("snapshots");
@@ -119,7 +122,15 @@ fn test_multi_extension_verification_chain() {
             enabled: true,
             role: "tool-provider".to_string(),
             source: "target/wasm32-wasip2/debug/mcp_tool_provider.wasm".to_string(),
-            permissions: Some(perms),
+            permissions: Some(perms.clone()),
+            config: HashMap::new(),
+        },
+        ExtensionConfig {
+            name: "openai-connector".to_string(),
+            enabled: true,
+            role: "llm-connector".to_string(),
+            source: "target/wasm32-wasip2/debug/openai_connector.wasm".to_string(),
+            permissions: Some(perms.clone()),
             config: HashMap::new(),
         },
     ];
@@ -181,6 +192,7 @@ fn test_multi_extension_verification_chain() {
 
 #[test]
 fn test_multi_extension_isolated_roles() {
+    let _lock = TEST_MUTEX.lock().unwrap();
     let temp_dir = tempfile::tempdir().unwrap();
     let workspace = temp_dir.path().join("workspace");
     let snapshots = temp_dir.path().join("snapshots");
@@ -255,7 +267,15 @@ fn test_multi_extension_isolated_roles() {
             enabled: true,
             role: "tool-provider".to_string(),
             source: "target/wasm32-wasip2/debug/mcp_tool_provider.wasm".to_string(),
-            permissions: Some(perms),
+            permissions: Some(perms.clone()),
+            config: HashMap::new(),
+        },
+        ExtensionConfig {
+            name: "openai-connector".to_string(),
+            enabled: true,
+            role: "llm-connector".to_string(),
+            source: "target/wasm32-wasip2/debug/openai_connector.wasm".to_string(),
+            permissions: Some(perms.clone()),
             config: HashMap::new(),
         },
     ];

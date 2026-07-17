@@ -19,7 +19,7 @@ impl rad::subsystems::NetworkSubsystem for MockNetwork {
         _body: &str,
         _event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
         _llm_timeout_policy: Arc<Mutex<rad::ipc::TimeoutPolicy>>,
-    ) -> Result<String, String> {
+    ) -> Result<String, rad::error::UnifiedError> {
         Ok("mock_stream_id".to_string())
     }
 }

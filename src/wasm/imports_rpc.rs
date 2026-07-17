@@ -25,7 +25,7 @@ impl bindings::RadExtensionImports for WasmState {
     fn host_rpc(&mut self, command: bindings::wit::RasRpcCommand) -> Result<String, String> {
         let rpc_cmd = rad_models::RasRpcCommand::from(command);
 
-        permissions::check_permissions(&rpc_cmd, &self.permissions)
+        permissions::check_permissions(&rpc_cmd, &self.permissions, self.sandbox.workspace_dir())
             .map_err(|e| format!("Permission denied in extension '{}': {e}", self.name))?;
 
         let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
@@ -59,7 +59,14 @@ impl bindings::RadExtensionImports for WasmState {
 
         match result {
             Ok(val) => Ok(val.to_string()),
-            Err(e) => Err(format!("RPC command execution failed: {e}")),
+            Err(e) => {
+                if crate::error::UnifiedError::from_json_string(&e).is_some() {
+                    Err(e)
+                } else {
+                    let wrapped = crate::error::UnifiedError::l1(e, "Internal");
+                    Err(wrapped.to_json_string())
+                }
+            }
         }
     }
 
@@ -76,6 +83,10 @@ impl bindings::RadExtensionImports for WasmState {
             path: resolved.clone(),
             writeable,
         };
+
+        permissions::check_permissions(&cmd, &self.permissions, self.sandbox.workspace_dir())
+            .map_err(|e| format!("Permission denied in extension '{}': {e}", self.name))?;
+
         let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
         if let Some(ref orch) = orchestrator {
             let req = RasRpcRequest {
@@ -117,6 +128,10 @@ impl bindings::RadExtensionImports for WasmState {
         let cmd = rad_models::RasRpcCommand::SpawnBashProcess {
             command: command.clone(),
         };
+
+        permissions::check_permissions(&cmd, &self.permissions, self.sandbox.workspace_dir())
+            .map_err(|e| format!("Permission denied in extension '{}': {e}", self.name))?;
+
         let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
         if let Some(ref orch) = orchestrator {
             let req = RasRpcRequest {
@@ -180,7 +195,11 @@ impl bindings::RadExtensionImports for WasmState {
         name: String,
         arguments: String,
     ) -> Result<wasmtime::component::Resource<crate::wasm::HostExecution>, String> {
-        crate::log_host!("[HOST] RadExtensionImports::execute_tool called: name = '{}', args = '{}'", name, arguments);
+        crate::log_host!(
+            "[HOST] RadExtensionImports::execute_tool called: name = '{}', args = '{}'",
+            name,
+            arguments
+        );
         let mut provider_opt = None;
 
         if let Some(orchestrator) = self.orchestrator.as_ref().and_then(|w| w.upgrade()) {
@@ -238,6 +257,28 @@ impl bindings::RadExtensionImports for WasmState {
         headers: Vec<(String, String)>,
         body: String,
     ) -> Result<wasmtime::component::Resource<crate::wasm::HostStream>, String> {
+        let cmd = rad_models::RasRpcCommand::OpenHttpStream {
+            url: url.clone(),
+            headers: std::collections::HashMap::new(),
+            body: body.clone(),
+        };
+
+        permissions::check_permissions(&cmd, &self.permissions, self.sandbox.workspace_dir())
+            .map_err(|e| format!("Permission denied in extension '{}': {e}", self.name))?;
+
+        let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
+        if let Some(ref orch) = orchestrator {
+            let req = RasRpcRequest {
+                id: Some("wasm_call".to_string()),
+                command: cmd.clone(),
+            };
+            let buf = serde_json::to_vec(&req)
+                .map_err(|e| format!("Failed to serialize request: {e}"))?;
+            if let Err(e) = orch.verify_rpc_exclude(&self.name, &req, &buf) {
+                return Err(format!("Security verification failed: {e}"));
+            }
+        }
+
         let (tx, rx) = std::sync::mpsc::channel();
 
         // Convert headers to HashMap
@@ -379,8 +420,80 @@ macro_rules! delegate_extension_imports {
 }
 
 delegate_extension_imports!(bindings::rad_orchestrator::RadOrchestratorImports);
-delegate_extension_imports!(bindings::rad_security_guard::RadSecurityGuardImports, rpc_only);
+delegate_extension_imports!(
+    bindings::rad_security_guard::RadSecurityGuardImports,
+    rpc_only
+);
 delegate_extension_imports!(bindings::rad_tool_provider::RadToolProviderImports);
+
+impl bindings::rad_context_tools::radcomp::context_tools::types::Host for WasmState {}
+
+impl bindings::rad_context_tools::radcomp::context_tools::host_rpc::Host for WasmState {
+    fn call(
+        &mut self,
+        command: bindings::rad_context_tools::radcomp::context_tools::types::RasRpcCommand,
+    ) -> Result<String, String> {
+        let bindings::rad_context_tools::radcomp::context_tools::types::RasRpcCommand::Command(
+            cmd_str,
+        ) = command;
+
+        let output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&cmd_str)
+            .current_dir(self.sandbox.workspace_dir())
+            .output();
+
+        match output {
+            Ok(out) => {
+                if out.status.success() {
+                    let stdout_str = String::from_utf8_lossy(&out.stdout).into_owned();
+                    Ok(stdout_str)
+                } else {
+                    let stderr_str = String::from_utf8_lossy(&out.stderr).into_owned();
+                    Err(format!(
+                        "Command failed with status {}: {stderr_str}",
+                        out.status
+                    ))
+                }
+            }
+            Err(e) => Err(format!("Failed to execute command: {e}")),
+        }
+    }
+}
+
+impl bindings::rad_web_access::radcomp::web_access::types::Host for WasmState {}
+
+impl bindings::rad_web_access::radcomp::web_access::host_rpc::Host for WasmState {
+    fn call(
+        &mut self,
+        command: bindings::rad_web_access::radcomp::web_access::types::RasRpcCommand,
+    ) -> Result<String, String> {
+        let bindings::rad_web_access::radcomp::web_access::types::RasRpcCommand::Command(cmd_str) =
+            command;
+
+        let output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&cmd_str)
+            .current_dir(self.sandbox.workspace_dir())
+            .output();
+
+        match output {
+            Ok(out) => {
+                if out.status.success() {
+                    let stdout_str = String::from_utf8_lossy(&out.stdout).into_owned();
+                    Ok(stdout_str)
+                } else {
+                    let stderr_str = String::from_utf8_lossy(&out.stderr).into_owned();
+                    Err(format!(
+                        "Command failed with status {}: {stderr_str}",
+                        out.status
+                    ))
+                }
+            }
+            Err(e) => Err(format!("Failed to execute command: {e}")),
+        }
+    }
+}
 
 pub(crate) fn resolve_and_verify_path(
     workspace: &std::path::Path,
@@ -429,40 +542,65 @@ impl WasmState {
         name: &str,
         arguments: &str,
     ) -> Result<wasmtime::component::Resource<crate::wasm::HostExecution>, String> {
-        crate::log_host!("[HOST] WIT Core Tool Fallback: executing '{}' with args '{}'", name, arguments);
-        
+        crate::log_host!(
+            "[HOST] WIT Core Tool Fallback: executing '{}' with args '{}'",
+            name,
+            arguments
+        );
+
         // Reconstruct RasRpcCommand to perform security check
         crate::log_host!("[HOST] Fallback: parsing arguments and resolving path");
         let rpc_cmd = match name {
             "read" => {
                 #[derive(serde::Deserialize)]
-                struct Args { path: String }
+                struct Args {
+                    path: String,
+                }
                 let args: Args = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
                 let resolved = resolve_and_verify_path(self.sandbox.workspace_dir(), &args.path)?;
                 rad_models::RasRpcCommand::FileRead { path: resolved }
             }
             "write" => {
                 #[derive(serde::Deserialize)]
-                struct Args { path: String, content: String }
+                struct Args {
+                    path: String,
+                    content: String,
+                }
                 let args: Args = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
                 let resolved = resolve_and_verify_path(self.sandbox.workspace_dir(), &args.path)?;
-                rad_models::RasRpcCommand::FileWrite { path: resolved, data: args.content.into_bytes() }
+                rad_models::RasRpcCommand::FileWrite {
+                    path: resolved,
+                    data: args.content.into_bytes(),
+                }
             }
             "edit" => {
                 #[derive(serde::Deserialize)]
-                struct Args { path: String, diff: String }
+                struct Args {
+                    path: String,
+                    diff: String,
+                }
                 let args: Args = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
                 let resolved = resolve_and_verify_path(self.sandbox.workspace_dir(), &args.path)?;
-                rad_models::RasRpcCommand::FileEditPatch { path: resolved, diff: args.diff }
+                rad_models::RasRpcCommand::FileEditPatch {
+                    path: resolved,
+                    diff: args.diff,
+                }
             }
             "bash" => {
                 #[derive(serde::Deserialize)]
-                struct Args { command: String }
+                struct Args {
+                    command: String,
+                }
                 let args: Args = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
-                rad_models::RasRpcCommand::SpawnBashProcess { command: args.command }
+                rad_models::RasRpcCommand::SpawnBashProcess {
+                    command: args.command,
+                }
             }
             other => return Err(format!("Unknown core tool: {other}")),
         };
+
+        permissions::check_permissions(&rpc_cmd, &self.permissions, self.sandbox.workspace_dir())
+            .map_err(|e| format!("Permission denied in extension '{}': {e}", self.name))?;
 
         crate::log_host!("[HOST] Fallback: parsed command, fetching orchestrator");
         let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
@@ -499,9 +637,10 @@ impl WasmState {
                 }
                 let args: Args = serde_json::from_str(arguments)
                     .map_err(|e| format!("Failed to parse write args: {e}"))?;
-                
+
                 let resolved = resolve_and_verify_path(self.sandbox.workspace_dir(), &args.path)?;
-                self.sandbox.file_write(&resolved, args.content.as_bytes())?;
+                self.sandbox
+                    .file_write(&resolved, args.content.as_bytes())?;
                 "echo 'File written successfully.'".to_string()
             }
             "edit" => {
@@ -512,7 +651,7 @@ impl WasmState {
                 }
                 let args: Args = serde_json::from_str(arguments)
                     .map_err(|e| format!("Failed to parse edit args: {e}"))?;
-                
+
                 let resolved = resolve_and_verify_path(self.sandbox.workspace_dir(), &args.path)?;
                 self.sandbox.file_edit_patch(&resolved, &args.diff)?;
                 "echo 'Patch applied successfully.'".to_string()

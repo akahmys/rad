@@ -14,7 +14,10 @@ impl<'a> TreeRenderer<'a> {
         let mut child_map: HashMap<&str, Vec<&str>> = HashMap::new();
         for (id, node) in &dag.nodes {
             for parent in &node.parent_ids {
-                child_map.entry(parent.as_str()).or_default().push(id.as_str());
+                child_map
+                    .entry(parent.as_str())
+                    .or_default()
+                    .push(id.as_str());
             }
         }
         for children in child_map.values_mut() {

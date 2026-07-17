@@ -101,6 +101,13 @@ interface types {
         get-tools,
         execute-tool(execute-tool-payload),
         generate-llm-stream(generate-llm-stream-payload),
+        call-extension(call-extension-payload),
+    }
+
+    record call-extension-payload {
+        extension-id: string,
+        method: string,
+        arguments: string,
     }
 
     record generate-llm-stream-payload {

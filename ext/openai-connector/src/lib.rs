@@ -101,7 +101,8 @@ impl EventStreamImpl {
                         .pointer("/choices/0/delta/reasoning_content")
                         .and_then(serde_json::Value::as_str)
                     {
-                        queue.push_back(conn_types::LlmEvent::ReasoningChunk(reasoning.to_string()));
+                        queue
+                            .push_back(conn_types::LlmEvent::ReasoningChunk(reasoning.to_string()));
                     } else if let Some(content) = val
                         .pointer("/choices/0/delta/content")
                         .and_then(serde_json::Value::as_str)
@@ -115,29 +116,52 @@ impl EventStreamImpl {
                         .and_then(serde_json::Value::as_array)
                     {
                         for tc in tool_calls {
-                            let index = tc.get("index").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
-                            let id = tc.get("id").and_then(serde_json::Value::as_str).map(String::from);
-                            let name = tc.pointer("/function/name").and_then(serde_json::Value::as_str).map(String::from);
-                            let arguments_chunk = tc.pointer("/function/arguments").and_then(serde_json::Value::as_str).unwrap_or("").to_string();
+                            let index = tc
+                                .get("index")
+                                .and_then(serde_json::Value::as_u64)
+                                .unwrap_or(0) as u32;
+                            let id = tc
+                                .get("id")
+                                .and_then(serde_json::Value::as_str)
+                                .map(String::from);
+                            let name = tc
+                                .pointer("/function/name")
+                                .and_then(serde_json::Value::as_str)
+                                .map(String::from);
+                            let arguments_chunk = tc
+                                .pointer("/function/arguments")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("")
+                                .to_string();
 
-                            queue.push_back(conn_types::LlmEvent::ToolCallChunk(conn_types::ToolCallChunk {
-                                index,
-                                id,
-                                name,
-                                arguments_chunk,
-                            }));
+                            queue.push_back(conn_types::LlmEvent::ToolCallChunk(
+                                conn_types::ToolCallChunk {
+                                    index,
+                                    id,
+                                    name,
+                                    arguments_chunk,
+                                },
+                            ));
                         }
                     }
 
                     // 3. Usage Info
                     if let Some(usage) = val.get("usage") {
-                        let prompt_tokens = usage.get("prompt_tokens").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
-                        let completion_tokens = usage.get("completion_tokens").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+                        let prompt_tokens = usage
+                            .get("prompt_tokens")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0) as u32;
+                        let completion_tokens = usage
+                            .get("completion_tokens")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0) as u32;
                         if prompt_tokens > 0 || completion_tokens > 0 {
-                            queue.push_back(conn_types::LlmEvent::CompletionComplete(conn_types::CompletionUsage {
-                                prompt_tokens,
-                                completion_tokens,
-                            }));
+                            queue.push_back(conn_types::LlmEvent::CompletionComplete(
+                                conn_types::CompletionUsage {
+                                    prompt_tokens,
+                                    completion_tokens,
+                                },
+                            ));
                         }
                     }
                 }
@@ -226,8 +250,9 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
                 tools
                     .into_iter()
                     .map(|t| {
-                        let parameters: serde_json::Value = serde_json::from_str(&t.function.parameters)
-                            .unwrap_or(serde_json::Value::Null);
+                        let parameters: serde_json::Value =
+                            serde_json::from_str(&t.function.parameters)
+                                .unwrap_or(serde_json::Value::Null);
                         ToolSerialize {
                             tool_type: t.tool_type,
                             function: FunctionDefinitionSerialize {
@@ -254,7 +279,9 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
         let body = serde_json::to_string(&req).map_err(|e| format!("JSON serialize error: {e}"))?;
         let headers = vec![("Content-Type".to_string(), "application/json".to_string())];
 
-        let stream_handle = open_http_stream("http://127.0.0.1:8080/v1/chat/completions", &headers, &body)
+        let port = std::env::var("RAD_TEST_PORT").unwrap_or_else(|_| "8080".to_string());
+        let url = format!("http://127.0.0.1:{}/v1/chat/completions", port);
+        let stream_handle = open_http_stream(&url, &headers, &body)
             .map_err(|e| format!("open_http_stream failed: {e}"))?;
 
         let stream_impl = EventStreamImpl {
