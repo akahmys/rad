@@ -5,27 +5,27 @@
 - [✅] Phase 10: Codebase Refactoring & Rule Alignment (v0.15.0)
 - [✅] Phase 11: Unified Error Handling Mechanism (v0.16.0)
 - [✅] Phase 12: Codebase Verification & Integrity Audit (v0.17.0)
-- [🔄] Phase 13: Release Build, Local Installation & Push (v0.18.0)
+- [✅] Phase 14: Esc Key Task Abort Polish & Robustness (v0.19.0)
+- [🔄] Phase 15: Release Build, Local Installation & Push (v0.20.0)
 
 ---
 
-## 🛠️ Short-Term Plan: Phase 13 (Release Build, Local Installation & Push)
+## 🛠️ Short-Term Plan: Phase 15 (Release Build, Local Installation & Push)
 
 ### 💡 Current AWU Status
-- [🔄] AWU 612: Execute Release Build and Local Installation
-- [ ] AWU 613: Push commits to remote git repository
+- [✅] AWU 820: Release Build and Local Install (Result: Release build and cargo install completed successfully. Executable replaced at ~/.cargo/bin/rad.)
+- [🔄] AWU 821: Push to Git Repository (Result: In Progress)
 
 ### 📝 AWU Details
 
-#### AWU 612: Execute Release Build and Local Installation
-- **Objective:** Build the rad runtime binary in release mode and install it to the local system.
-- **Scope:** Command line / terminal
-- **Definition of Done (DoD):** Release binary successfully compiled and `rad` installed locally (verifiable via `which rad` or similar).
+#### AWU 820: Release Build and Local Install
+- **Objective:** Run release build and install the updated binary locally.
+- **Scope:** Terminal commands
+- **Definition of Done (DoD):** Release binary successfully compiled and `rad` installed.
 
-#### AWU 613: Push commits to remote git repository
-- **Objective:** Stage, commit doc/format adjustments, and push changes to the remote git repository.
-- **Scope:** git repository
-- **Definition of Done (DoD):** `git push` runs successfully with zero errors.
-- **Result:** Reviewed README.md and identified missing slash commands and quick start execution commands. Updated documentation to list all 10 interactive slash commands, added binary execution command to Quick Start, and linked CONFIG.md for advanced parameters and credential handling.
-- **Result:** Checked configuration schemas and RPC commands. Discovered minor discrepancies in `RasCoreEvent`'s fields (e.g. `error` vs `message`, `i32` vs `String` for `pgid`) within `ARCHITECTURE.md` and successfully aligned it with `models/src/lib.rs` and `wit/rad.wit` definitions.
+#### AWU 821: Push to Git Repository
+- **Objective:** Stage, commit, and push the changes to git.
+- **Scope:** Git command
+- **Definition of Done (DoD):** Successful push.
+
 

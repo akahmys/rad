@@ -50,6 +50,9 @@ impl Orchestrator {
         let max_attempts = 2;
 
         while attempts < max_attempts {
+            if self.abort_flag.load(Ordering::SeqCst) {
+                return Err("Task aborted by user".to_string());
+            }
             let (event_tx, event_rx) = channel::<RasCoreEvent>();
 
             let wasm_runtimes = self.get_or_init_runtimes(&event_tx)?;
@@ -141,6 +144,9 @@ impl Orchestrator {
                     break;
                 }
                 Err(e) => {
+                    if self.abort_flag.load(Ordering::SeqCst) {
+                        return Err("Task aborted by user".to_string());
+                    }
                     println!("Wasm runtime crashed: {e}. Recovering...");
                     self.clear_runtimes()?;
                     attempts += 1;

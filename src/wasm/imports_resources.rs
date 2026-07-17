@@ -30,6 +30,9 @@ impl bindings::wit::HostStreamHandle for WasmState {
         self_: wasmtime::component::Resource<crate::wasm::HostStream>,
         max_bytes: u32,
     ) -> Result<Vec<u8>, String> {
+        if self.is_aborted() {
+            return Err("Task aborted by user".to_string());
+        }
         use std::io::Read;
         let stream = self.table().get_mut(&self_).map_err(|e| e.to_string())?;
         match stream {
@@ -62,6 +65,9 @@ impl bindings::wit::HostStreamHandle for WasmState {
         self_: wasmtime::component::Resource<crate::wasm::HostStream>,
         data: Vec<u8>,
     ) -> Result<(), String> {
+        if self.is_aborted() {
+            return Err("Task aborted by user".to_string());
+        }
         use std::io::Write;
         let stream = self.table().get_mut(&self_).map_err(|e| e.to_string())?;
         match stream {
@@ -264,6 +270,9 @@ impl bindings::wit::HostExecutionHandle for WasmState {
         &mut self,
         self_: wasmtime::component::Resource<crate::wasm::HostExecution>,
     ) -> Result<i32, String> {
+        if self.is_aborted() {
+            return Err("Task aborted by user".to_string());
+        }
         let exec = self.table().get_mut(&self_).map_err(|e| e.to_string())?;
         let mut running = exec.running.lock();
         match running.child.wait() {

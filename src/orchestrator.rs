@@ -221,9 +221,21 @@ impl Orchestrator {
         Ok(())
     }
 
+    /// Checks if the orchestrator task has been aborted.
+    pub fn is_aborted(&self) -> bool {
+        self.abort_flag.load(Ordering::SeqCst)
+    }
+
     /// Aborts the currently running task.
     pub fn abort(&self) {
         self.abort_flag.store(true, Ordering::SeqCst);
+        {
+            let mut procs = self.active_processes.lock();
+            for proc in procs.values_mut() {
+                proc.kill_group();
+            }
+            procs.clear();
+        }
         let mut guard = self.running_task.lock();
         if let Some(handle) = guard.take() {
             let _ = handle.join();

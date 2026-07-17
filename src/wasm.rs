@@ -73,6 +73,19 @@ impl WasiView for WasmState {
     }
 }
 
+impl WasmState {
+    pub fn is_aborted(&self) -> bool {
+        if let Some(orch) = self
+            .orchestrator
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+        {
+            return orch.is_aborted();
+        }
+        false
+    }
+}
+
 pub struct WasmRuntime {
     pub store: Store<WasmState>,
     pub extension: Option<bindings::RadExtension>,
@@ -88,6 +101,9 @@ pub struct WasmRuntime {
 
 impl WasmRuntime {
     pub fn on_event(&mut self, event: &RasCoreEvent) -> Result<(), String> {
+        if self.store.data().is_aborted() {
+            return Err("Task aborted by user".to_string());
+        }
         let ext_name = self.store.data().name.clone();
         crate::log_host!(
             "[HOST] Dispatching event to Wasm '{}': {:?}",
