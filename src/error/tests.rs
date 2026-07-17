@@ -1,4 +1,4 @@
-use crate::error::{UnifiedError, ErrorLevel};
+use crate::error::{ErrorLevel, UnifiedError};
 
 #[test]
 fn test_unified_error_serialization() {
@@ -28,7 +28,10 @@ fn test_unified_error_l2() {
     let json_str = err.to_json_string();
     let deserialized = UnifiedError::from_json_string(&json_str).unwrap();
     match deserialized {
-        UnifiedError::L2 { message, rollback_target } => {
+        UnifiedError::L2 {
+            message,
+            rollback_target,
+        } => {
             assert_eq!(message, "invalid syntax");
             assert_eq!(rollback_target, "Parser");
         }
@@ -44,7 +47,11 @@ fn test_unified_error_l3() {
     let json_str = err.to_json_string();
     let deserialized = UnifiedError::from_json_string(&json_str).unwrap();
     match deserialized {
-        UnifiedError::L3 { message, prompt_tokens, limit } => {
+        UnifiedError::L3 {
+            message,
+            prompt_tokens,
+            limit,
+        } => {
             assert_eq!(message, "token budget exceeded");
             assert_eq!(prompt_tokens, Some(100));
             assert_eq!(limit, Some(80));

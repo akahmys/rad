@@ -1,7 +1,7 @@
+use super::STATE;
 use crate::tool::{Message, ToolCall, ToolCallFunction, execute_tool_sync};
 use crate::types::{Dag, OrchestratorState, PendingToolCall, RasRpcCommand};
 use std::sync::MutexGuard;
-use super::STATE;
 
 pub(crate) fn trim_large_output(text: &str) -> String {
     let max_chars = STATE
@@ -39,7 +39,9 @@ pub struct ExtUnifiedError {
     pub payload: serde_json::Value,
 }
 
-pub(crate) fn handle_done(mut state_guard: MutexGuard<'_, Option<OrchestratorState>>) -> Result<(), String> {
+pub(crate) fn handle_done(
+    mut state_guard: MutexGuard<'_, Option<OrchestratorState>>,
+) -> Result<(), String> {
     let state = state_guard.as_mut().ok_or("State is None in handle_done")?;
     if state.is_reasoning {
         let _ = call_host(RasRpcCommand::WriteStdout {
@@ -134,10 +136,16 @@ pub(crate) fn handle_done(mut state_guard: MutexGuard<'_, Option<OrchestratorSta
                     if let Ok(ue) = serde_json::from_str::<ExtUnifiedError>(&e) {
                         match ue.level.as_str() {
                             "L2" => {
-                                let msg = ue.payload.get("message").and_then(|v| v.as_str()).unwrap_or("L2 error");
+                                let msg = ue
+                                    .payload
+                                    .get("message")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("L2 error");
                                 // Pillar 3: Semantic User Notification
                                 let _ = call_host(RasRpcCommand::WriteStdout {
-                                    text: format!("\n\x1b[1;31m[Rollback] L2 Error: {msg}. Restoring checkpoint...\x1b[0m\n"),
+                                    text: format!(
+                                        "\n\x1b[1;31m[Rollback] L2 Error: {msg}. Restoring checkpoint...\x1b[0m\n"
+                                    ),
                                 });
                                 // Pillar 2: Roll back files synchronously
                                 let _ = call_host(RasRpcCommand::CheckoutSnapshot {
@@ -147,14 +155,24 @@ pub(crate) fn handle_done(mut state_guard: MutexGuard<'_, Option<OrchestratorSta
                                 format!("Tool call \"{}\" was not executed: {}", tc.name, msg)
                             }
                             "L3" => {
-                                let msg = ue.payload.get("message").and_then(|v| v.as_str()).unwrap_or("L3 error");
+                                let msg = ue
+                                    .payload
+                                    .get("message")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("L3 error");
                                 let _ = call_host(RasRpcCommand::WriteStdout {
-                                    text: format!("\n\x1b[1;31m[Reset] L3 Error: {msg}. Resetting session context...\x1b[0m\n"),
+                                    text: format!(
+                                        "\n\x1b[1;31m[Reset] L3 Error: {msg}. Resetting session context...\x1b[0m\n"
+                                    ),
                                 });
                                 format!("Error: {msg}")
                             }
                             _ => {
-                                let msg = ue.payload.get("message").and_then(|v| v.as_str()).unwrap_or("L1 error");
+                                let msg = ue
+                                    .payload
+                                    .get("message")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("L1 error");
                                 format!("Error: {msg}")
                             }
                         }

@@ -67,5 +67,5 @@ impl From<rad_models::PendingToolCallInfo> for wit::PendingToolCallInfo {
     }
 }
 
-pub mod rpc;
 pub mod event;
+pub mod rpc;

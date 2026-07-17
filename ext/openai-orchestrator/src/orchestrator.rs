@@ -1,9 +1,9 @@
 pub(crate) mod runner;
 
 use crate::types::{Dag, OrchestratorState, RasCoreEvent, RasRpcCommand};
+use runner::{call_host, handle_done, trim_large_output};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use runner::{call_host, handle_done, trim_large_output};
 
 pub static STATE: Mutex<Option<OrchestratorState>> = Mutex::new(None);
 
@@ -286,5 +286,3 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
         _ => Ok(()),
     }
 }
-
-

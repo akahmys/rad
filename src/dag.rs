@@ -8,7 +8,11 @@ pub struct DagSubsystemImpl {
 }
 
 impl crate::subsystems::DagSubsystem for DagSubsystemImpl {
-    fn create_node(&self, parent_id: &str, node_type: &str) -> Result<String, crate::error::UnifiedError> {
+    fn create_node(
+        &self,
+        parent_id: &str,
+        node_type: &str,
+    ) -> Result<String, crate::error::UnifiedError> {
         let mut dag = self.dag.lock();
         dag.create_node(parent_id, node_type)
             .map_err(|e| crate::error::UnifiedError::l1(e, "Dag"))
@@ -20,7 +24,11 @@ impl crate::subsystems::DagSubsystem for DagSubsystemImpl {
             .map_err(|e| crate::error::UnifiedError::l1(e, "Dag"))
     }
 
-    fn merge_nodes(&self, node_ids: &[String], summary_text: &str) -> Result<String, crate::error::UnifiedError> {
+    fn merge_nodes(
+        &self,
+        node_ids: &[String],
+        summary_text: &str,
+    ) -> Result<String, crate::error::UnifiedError> {
         let mut dag = self.dag.lock();
         dag.merge_nodes(node_ids, summary_text)
             .map_err(|e| crate::error::UnifiedError::l1(e, "Dag"))

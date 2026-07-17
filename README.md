@@ -37,6 +37,9 @@
 git clone https://github.com/yourusername/rad.git
 cd rad
 cargo build --release
+
+# Run the runtime
+./target/release/rad
 ```
 
 ### 2.3 Running Tests
@@ -60,9 +63,16 @@ When you run `rad`, you are entered into an interactive shell (REPL) where you c
   ! ls -la
   ```
 * **Metadata & Slash Commands**: Use commands prefixed with `/` for CLI control:
+  * `/help`: Show the help menu listing all available commands.
+  * `/quit`: Exit the interactive session safely.
   * `/status`: Displays current session status, DAG history node information, and accumulated token usage.
+  * `/clear`: Clear the terminal screen.
+  * `/session <id>`: Display the current session ID.
   * `/rollback <node_id>`: Instantly rolls back the workspace directory state and context to the designated DAG node snapshot.
-  * `/reload`: Dynamically reloads the configuration.
+  * `/reload`: Dynamically reloads the configuration file.
+  * `/reset`: Save the current session and start a new clean session (rotates session ID and clears DAG).
+  * `/tree`: Render the history DAG visually as a tree structure in the terminal.
+  * `/tools`: List active permissions and registered tool definitions.
 
 ### 3.2 Capability-Based Security (`rad.json`)
 All filesystem and process operations requested by the AI agent are validated against `rad.json` at the root of the workspace. If an action is not authorized in this capabilities mask, the API Gateway rejects the operation.
@@ -92,6 +102,9 @@ Example `rad.json` structure:
   ]
 }
 ```
+
+> [!NOTE]
+> For advanced configuration parameters, directory lookup precedence rules, and local environment overrides (e.g. `rad.local.json` for credential isolation), please refer to the detailed [CONFIG.md](CONFIG.md) Layout Guide.
 
 ---
 

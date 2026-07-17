@@ -14,10 +14,7 @@ pub enum ErrorLevel {
 #[serde(tag = "level", content = "payload")]
 pub enum UnifiedError {
     #[error("L1 (Adaptation) Error: {message} ({category})")]
-    L1 {
-        message: String,
-        category: String,
-    },
+    L1 { message: String, category: String },
 
     #[error("L2 (Rollback) Error: {message} (rollback to: {rollback_target})")]
     L2 {

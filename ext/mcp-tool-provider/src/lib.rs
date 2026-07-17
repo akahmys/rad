@@ -17,8 +17,8 @@ struct ToolProviderImpl;
 mod client;
 mod default_tools;
 
-use client::{init_mcp_servers, mcp_request, MCP_SERVERS, MCP_TOOL_MAPPING};
-use default_tools::{get_default_tools, Tool, FunctionDefinition};
+use client::{MCP_SERVERS, MCP_TOOL_MAPPING, init_mcp_servers, mcp_request};
+use default_tools::{FunctionDefinition, Tool, get_default_tools};
 
 impl Guest for ToolProviderImpl {
     fn get_tools() -> Result<String, String> {
@@ -243,5 +243,3 @@ fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, String> {
         Err(err_msg) => Err(err_msg),
     }
 }
-
-

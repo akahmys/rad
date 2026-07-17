@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
 use crate::open_process;
 use crate::radcomp::extension::types as wit;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 #[derive(serde::Deserialize)]
 pub struct ExtensionConfigInfo {
