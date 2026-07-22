@@ -58,12 +58,12 @@
       "config": {
         "mcp_servers": {
           "core-utilities-mcp": {
-            "command": "node",
-            "args": ["~/projects/core-utilities-mcp/build/index.js"]
+            "command": "~/projects/core-utilities-mcp/target/release/core-utilities-mcp",
+            "args": []
           },
           "web-access-mcp": {
-            "command": "node",
-            "args": ["~/projects/web-access-mcp/build/index.js"]
+            "command": "~/projects/web-access-mcp/target/release/web-access-mcp",
+            "args": []
           }
         }
       }
