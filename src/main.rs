@@ -36,6 +36,18 @@ fn load_config_and_session(
     println!("Log Dir: {}", cfg.core.log);
     println!("Extensions loaded: {}", cfg.extensions.len());
 
+    let mcp_count: usize = cfg
+        .extensions
+        .iter()
+        .map(|ext| {
+            ext.config
+                .get("mcp_servers")
+                .and_then(serde_json::Value::as_object)
+                .map_or(0, serde_json::Map::len)
+        })
+        .sum();
+    println!("MCP servers loaded: {mcp_count}");
+
     let session_id = args.session.clone().unwrap_or_else(|| {
         std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
