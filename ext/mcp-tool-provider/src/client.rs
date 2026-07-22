@@ -34,12 +34,25 @@ pub static MCP_SERVERS: Mutex<Option<HashMap<String, ActiveMcpServer>>> = Mutex:
 pub static MCP_TOOL_MAPPING: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
 
 pub fn load_mcp_config() -> Result<Option<McpProviderConfig>, String> {
-    let paths = ["rad.json", ".rad/rad.json"];
+    let paths = [
+        "config.json",
+        "rad.json",
+        ".rad/config.json",
+        ".rad/rad.json",
+    ];
     let mut content = None;
     for p in &paths {
         if let Ok(c) = std::fs::read_to_string(p) {
             content = Some(c);
             break;
+        }
+    }
+    if content.is_none() {
+        if let Ok(home) = std::env::var("HOME") {
+            let user_global = format!("{home}/.rad/config.json");
+            if let Ok(c) = std::fs::read_to_string(&user_global) {
+                content = Some(c);
+            }
         }
     }
     let Some(json_str) = content else {
@@ -71,11 +84,23 @@ pub fn init_mcp_servers() -> Result<(), String> {
     }
 
     let mut active = HashMap::new();
+    let home = std::env::var("HOME").unwrap_or_default();
     if let Some(config) = load_mcp_config()? {
         if let Some(servers) = config.mcp_servers {
             for (name, cfg) in servers {
+                let expanded_args: Vec<String> = cfg
+                    .args
+                    .iter()
+                    .map(|arg| {
+                        if arg.starts_with("~/") && !home.is_empty() {
+                            format!("{home}/{}", &arg[2..])
+                        } else {
+                            arg.clone()
+                        }
+                    })
+                    .collect();
                 let mut cmd_parts = vec![cfg.command.clone()];
-                cmd_parts.extend(cfg.args.clone());
+                cmd_parts.extend(expanded_args);
                 let command_line = cmd_parts
                     .iter()
                     .map(|arg| format!("'{arg}'"))

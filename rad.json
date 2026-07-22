@@ -49,6 +49,22 @@
           "allow_bash": true,
           "allow_commands": [],
           "block_commands": []
+        },
+        "allowed_mcp_servers": [
+          "core-utilities-mcp",
+          "web-access-mcp"
+        ]
+      },
+      "config": {
+        "mcp_servers": {
+          "core-utilities-mcp": {
+            "command": "node",
+            "args": ["~/projects/core-utilities-mcp/build/index.js"]
+          },
+          "web-access-mcp": {
+            "command": "node",
+            "args": ["~/projects/web-access-mcp/build/index.js"]
+          }
         }
       }
     },
