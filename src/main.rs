@@ -34,7 +34,22 @@ fn load_config_and_session(
     println!("Workspace Dir: {}", cfg.core.workspace);
     println!("Snapshot Dir: {}", cfg.core.snapshot);
     println!("Log Dir: {}", cfg.core.log);
-    println!("Extensions loaded: {}", cfg.extensions.len());
+    let enabled_exts: Vec<_> = cfg.extensions.iter().filter(|ext| ext.enabled).collect();
+    println!("Extensions loaded ({}):", enabled_exts.len());
+    for ext in &enabled_exts {
+        let mcp_names: Vec<String> = ext
+            .config
+            .get("mcp_servers")
+            .and_then(serde_json::Value::as_object)
+            .map(|map| map.keys().cloned().collect())
+            .unwrap_or_default();
+
+        if mcp_names.is_empty() {
+            println!("  - {}", ext.name);
+        } else {
+            println!("  - {} (MCP: {})", ext.name, mcp_names.join(", "));
+        }
+    }
 
     let session_id = args.session.clone().unwrap_or_else(|| {
         std::time::SystemTime::now()
