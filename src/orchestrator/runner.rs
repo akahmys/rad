@@ -182,7 +182,7 @@ impl Orchestrator {
                     dag: self.dag.clone(),
                 });
                 let network_subsystem = Arc::new(crate::http::HttpManager);
-                let runtime = WasmRuntime::new(
+                let mut runtime = WasmRuntime::new(
                     ext.name.clone(),
                     wasm_path,
                     ext.role.clone(),
@@ -196,6 +196,26 @@ impl Orchestrator {
                     Some(Arc::downgrade(self)),
                     config_guard.core.hitl_enabled,
                 )?;
+
+                if ext.role == "tool-provider" {
+                    match runtime.get_tools() {
+                        Ok(json_str) => {
+                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
+                                && let Some(arr) = val.as_array()
+                            {
+                                println!(
+                                    "\x1b[32mMCP tools verified: {} active tools loaded via {}\x1b[0m",
+                                    arr.len(),
+                                    ext.name
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            println!("\x1b[31mMCP tools load error for '{}': {e}\x1b[0m", ext.name);
+                        }
+                    }
+                }
+
                 guard.insert(ext.name.clone(), Arc::new(Mutex::new(runtime)));
             }
         }

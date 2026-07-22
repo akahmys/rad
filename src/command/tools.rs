@@ -92,12 +92,16 @@ fn render_tools_list(output: &mut String, tools_json: &str) {
         if let Some(tools_list) = val.as_array() {
             for tool in tools_list {
                 let name = tool
-                    .get("name")
+                    .get("function")
+                    .and_then(|f| f.get("name"))
                     .and_then(serde_json::Value::as_str)
+                    .or_else(|| tool.get("name").and_then(serde_json::Value::as_str))
                     .unwrap_or("unknown");
                 let desc = tool
-                    .get("description")
+                    .get("function")
+                    .and_then(|f| f.get("description"))
                     .and_then(serde_json::Value::as_str)
+                    .or_else(|| tool.get("description").and_then(serde_json::Value::as_str))
                     .unwrap_or("");
                 let _ = writeln!(output, "  - {name}: {desc}");
             }
