@@ -197,21 +197,21 @@ impl Orchestrator {
                     config_guard.core.hitl_enabled,
                 )?;
 
-                if ext.role == "tool-provider" {
+                if runtime.tool_provider.is_some() {
                     match runtime.get_tools() {
                         Ok(json_str) => {
                             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
                                 && let Some(arr) = val.as_array()
                             {
                                 println!(
-                                    "\x1b[32mMCP tools verified: {} active tools loaded via {}\x1b[0m",
+                                    "\x1b[32mVerified {} tools from extension '{}'\x1b[0m",
                                     arr.len(),
                                     ext.name
                                 );
                             }
                         }
                         Err(e) => {
-                            println!("\x1b[31mMCP tools load error for '{}': {e}\x1b[0m", ext.name);
+                            println!("\x1b[31mTool provider '{}' error: {e}\x1b[0m", ext.name);
                         }
                     }
                 }

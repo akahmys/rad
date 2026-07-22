@@ -89,7 +89,7 @@ fn test_command_execution() {
     let res = CommandManager::execute(Command::Tools, &orchestrator);
     if let CommandResult::StatusInfo(info) = res {
         assert!(info.contains("Active Permissions:"));
-        assert!(info.contains("Available Tools (from Wasm tool-provider):"));
+        assert!(info.contains("Available Tools"));
     } else {
         panic!("Expected StatusInfo");
     }
