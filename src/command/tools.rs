@@ -62,27 +62,27 @@ fn render_wasm_tools(
     >,
 ) -> String {
     let mut output = String::new();
-    let _ = writeln!(output, "Available Tools (from Wasm tool-provider):");
+    let _ = writeln!(output, "Available Tools (from Wasm tool providers):");
     let runtimes = wasm_runtime.lock();
     let mut found_provider = false;
-    for runtime_arc in runtimes.values() {
+    for (name, runtime_arc) in runtimes.iter() {
         let mut runtime = runtime_arc.lock();
-        if runtime.role == "tool-provider" {
+        if runtime.tool_provider.is_some() {
             found_provider = true;
+            let _ = writeln!(output, "  Extension [{name}]:");
             match runtime.get_tools() {
                 Ok(tools_json) => {
                     render_tools_list(&mut output, &tools_json);
                 }
                 Err(e) => {
-                    let _ = writeln!(output, "  Error fetching tools: {e}");
+                    let _ = writeln!(output, "    Error fetching tools: {e}");
                 }
             }
-            break;
         }
     }
 
     if !found_provider {
-        let _ = writeln!(output, "  No active tool-provider extension found.");
+        let _ = writeln!(output, "  No active tool provider extension found.");
     }
     output
 }
