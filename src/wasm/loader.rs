@@ -61,10 +61,6 @@ impl WasmRuntime {
                 |s| s,
             )
             .map_err(|e| format!("Linker error ContextToolsExtension: {e}"))?,
-            "web-access" => {
-                bindings::rad_web_access::WebAccessExtension::add_to_linker(&mut linker, |s| s)
-                    .map_err(|e| format!("Linker error WebAccessExtension: {e}"))?
-            }
             _ => bindings::RadExtension::add_to_linker(&mut linker, |s| s)
                 .map_err(|e| format!("Linker error RadExtension: {e}"))?,
         }
@@ -104,7 +100,6 @@ impl WasmRuntime {
         let mut tool_provider = None;
         let mut llm_connector = None;
         let mut context_tools = None;
-        let mut web_access = None;
 
         match role.as_str() {
             "orchestrator" => {
@@ -137,12 +132,6 @@ impl WasmRuntime {
                         .map_err(|e| format!("Failed to create context-tools bindings: {e}"))?,
                 )
             }
-            "web-access" => {
-                web_access = Some(
-                    bindings::rad_web_access::WebAccessExtension::new(&mut store, &instance)
-                        .map_err(|e| format!("Failed to create web-access bindings: {e}"))?,
-                )
-            }
             _ => {
                 extension = Some(
                     bindings::RadExtension::new(&mut store, &instance)
@@ -159,7 +148,6 @@ impl WasmRuntime {
             tool_provider,
             llm_connector,
             context_tools,
-            web_access,
             instance,
             role,
         })

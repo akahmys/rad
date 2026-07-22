@@ -12,12 +12,11 @@ When the `rad` Core starts, the system looks up and loads configuration files in
 1. **Explicit Specification**: Path specified via the `--config <PATH>` command-line argument.
 2. **Project Local (Recommended)**: `rad.json` in the root of the project.
 3. **Project Local (Hidden Directory)**: `.rad/rad.json` inside the project.
-4. **User Global**:
-   - Linux/macOS: `~/.config/rad/rad.json` (conforms to the XDG Base Directory specification).
-   - Windows: `%APPDATA%\rad\rad.json`.
+4. **User Global (Recommended)**: `~/.rad/config.json` (or `~/.rad/rad.json`).
+5. **User Global (XDG Fallback)**: `~/.config/rad/rad.json` (Windows: `%APPDATA%\rad\rad.json`).
 
 **Local Override (Separation of Sensitive Information):**
-After loading one of the configuration files above, if **`rad.local.json`** exists in the same directory (e.g., project root or `.rad/rad.local.json`), the Core automatically loads it and **merges (overrides)** the settings.
+After loading one of the configuration files above, if **`rad.local.json`** or **`config.local.json`** exists in the same directory (e.g., project root, `.rad/`, or `~/.rad/`), the Core automatically loads it and **merges (overrides)** the settings.
 > [!IMPORTANT]
 > `rad.local.json` is a local-only file designed to hold personal secrets like API keys. To prevent sharing credentials in repositories, it must always be excluded from Git version control (add it to `.gitignore`).
 

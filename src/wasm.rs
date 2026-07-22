@@ -94,7 +94,6 @@ pub struct WasmRuntime {
     pub tool_provider: Option<bindings::rad_tool_provider::RadToolProvider>,
     pub llm_connector: Option<bindings::rad_llm_connector::LlmConnector>,
     pub context_tools: Option<bindings::rad_context_tools::ContextToolsExtension>,
-    pub web_access: Option<bindings::rad_web_access::WebAccessExtension>,
     pub instance: wasmtime::component::Instance,
     pub role: String,
 }
@@ -247,29 +246,6 @@ impl WasmRuntime {
                     }
                 } else {
                     Err("context-tools bindings missing".to_string())
-                }
-            }
-            "web-access" => {
-                if let Some(ref wa) = self.web_access {
-                    match method {
-                        "search" => {
-                            let resp = wa
-                                .radcomp_web_access_web_access()
-                                .call_search(&mut self.store, arguments)
-                                .map_err(|e| format_wasm_error(&ext_name, "search", &e))??;
-                            Ok(resp)
-                        }
-                        "fetch" => {
-                            let resp = wa
-                                .radcomp_web_access_web_access()
-                                .call_fetch(&mut self.store, arguments)
-                                .map_err(|e| format_wasm_error(&ext_name, "fetch", &e))??;
-                            Ok(resp)
-                        }
-                        other => Err(format!("Unknown web-access method: {other}")),
-                    }
-                } else {
-                    Err("web-access bindings missing".to_string())
                 }
             }
             other => Err(format!(

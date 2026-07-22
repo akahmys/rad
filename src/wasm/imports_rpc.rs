@@ -209,12 +209,24 @@ impl bindings::RadExtensionImports for WasmState {
             // Find the tool provider runtime
             let runtimes = orchestrator.wasm_runtime.lock();
             for (_id, runtime_arc) in runtimes.iter() {
-                let Some(runtime) = runtime_arc.try_lock() else {
+                let Some(mut runtime) = runtime_arc.try_lock() else {
                     continue;
                 };
-                if runtime.tool_provider.is_some() {
-                    provider_opt = Some(runtime_arc.clone());
-                    break;
+                if runtime.tool_provider.is_some()
+                    && let Ok(json_str) = runtime.get_tools()
+                    && let Ok(serde_json::Value::Array(arr)) =
+                        serde_json::from_str::<serde_json::Value>(&json_str)
+                {
+                    let has_tool = arr.iter().any(|t| {
+                        t.get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|n| n.as_str())
+                            == Some(name.as_str())
+                    });
+                    if has_tool {
+                        provider_opt = Some(runtime_arc.clone());
+                        break;
+                    }
                 }
             }
         }
@@ -439,40 +451,6 @@ impl bindings::rad_context_tools::radcomp::context_tools::host_rpc::Host for Was
         let bindings::rad_context_tools::radcomp::context_tools::types::RasRpcCommand::Command(
             cmd_str,
         ) = command;
-
-        let output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(&cmd_str)
-            .current_dir(self.sandbox.workspace_dir())
-            .output();
-
-        match output {
-            Ok(out) => {
-                if out.status.success() {
-                    let stdout_str = String::from_utf8_lossy(&out.stdout).into_owned();
-                    Ok(stdout_str)
-                } else {
-                    let stderr_str = String::from_utf8_lossy(&out.stderr).into_owned();
-                    Err(format!(
-                        "Command failed with status {}: {stderr_str}",
-                        out.status
-                    ))
-                }
-            }
-            Err(e) => Err(format!("Failed to execute command: {e}")),
-        }
-    }
-}
-
-impl bindings::rad_web_access::radcomp::web_access::types::Host for WasmState {}
-
-impl bindings::rad_web_access::radcomp::web_access::host_rpc::Host for WasmState {
-    fn call(
-        &mut self,
-        command: bindings::rad_web_access::radcomp::web_access::types::RasRpcCommand,
-    ) -> Result<String, String> {
-        let bindings::rad_web_access::radcomp::web_access::types::RasRpcCommand::Command(cmd_str) =
-            command;
 
         let output = std::process::Command::new("sh")
             .arg("-c")

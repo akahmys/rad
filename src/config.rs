@@ -207,7 +207,19 @@ fn discover_config_path(explicit_path: Option<&str>) -> Option<PathBuf> {
         return Some(p_rad);
     }
 
-    // 4. User Global
+    // 4. User Global (~/.rad/)
+    if let Some(home_dir) = dirs::home_dir() {
+        let rad_home_config = home_dir.join(".rad/config.json");
+        if rad_home_config.exists() {
+            return Some(rad_home_config);
+        }
+        let rad_home_legacy = home_dir.join(".rad/rad.json");
+        if rad_home_legacy.exists() {
+            return Some(rad_home_legacy);
+        }
+    }
+
+    // 5. User Global XDG Fallback
     if let Some(mut config_dir) = dirs::config_dir() {
         config_dir.push("rad/rad.json");
         if config_dir.exists() {
@@ -228,11 +240,20 @@ pub fn load_config(explicit_path: Option<&str>) -> Result<Config, crate::error::
         })?;
         let mut base_val = parse_jsonc(&content)?;
 
-        // Try loading rad.local.json in the same directory
+        // Try loading rad.local.json or config.local.json in the same directory
         if let Some(parent) = path.parent() {
             let local_path = parent.join("rad.local.json");
-            if local_path.exists() {
-                let local_content = fs::read_to_string(&local_path).map_err(|e| {
+            let local_path_alt = parent.join("config.local.json");
+            let target_local = if local_path.exists() {
+                Some(local_path)
+            } else if local_path_alt.exists() {
+                Some(local_path_alt)
+            } else {
+                None
+            };
+
+            if let Some(lp) = target_local {
+                let local_content = fs::read_to_string(&lp).map_err(|e| {
                     crate::error::UnifiedError::l1(
                         format!("Failed to read local config: {e}"),
                         "Config",
