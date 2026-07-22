@@ -65,11 +65,28 @@ impl WasmRuntime {
                 .map_err(|e| format!("Linker error RadExtension: {e}"))?,
         }
 
-        let wasi = WasiCtxBuilder::new()
+        let mut wasi_builder = WasiCtxBuilder::new();
+        wasi_builder
             .inherit_stdout()
             .inherit_stderr()
-            .inherit_env()
-            .build();
+            .inherit_env();
+
+        let _ = wasi_builder.preopened_dir(
+            ".",
+            ".",
+            wasmtime_wasi::DirPerms::all(),
+            wasmtime_wasi::FilePerms::all(),
+        );
+        if let Ok(home) = std::env::var("HOME") {
+            let _ = wasi_builder.preopened_dir(
+                &home,
+                &home,
+                wasmtime_wasi::DirPerms::all(),
+                wasmtime_wasi::FilePerms::all(),
+            );
+        }
+
+        let wasi = wasi_builder.build();
         let resource_table = ResourceTable::new();
 
         let state = WasmState {
