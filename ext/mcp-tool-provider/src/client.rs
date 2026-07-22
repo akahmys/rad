@@ -88,6 +88,11 @@ pub fn init_mcp_servers() -> Result<(), String> {
     if let Some(config) = load_mcp_config()? {
         if let Some(servers) = config.mcp_servers {
             for (name, cfg) in servers {
+                let expanded_cmd = if cfg.command.starts_with("~/") && !home.is_empty() {
+                    format!("{home}/{}", &cfg.command[2..])
+                } else {
+                    cfg.command.clone()
+                };
                 let expanded_args: Vec<String> = cfg
                     .args
                     .iter()
@@ -99,17 +104,40 @@ pub fn init_mcp_servers() -> Result<(), String> {
                         }
                     })
                     .collect();
-                let mut cmd_parts = vec![cfg.command.clone()];
+                let mut cmd_parts = vec![expanded_cmd];
                 cmd_parts.extend(expanded_args);
-                let command_line = cmd_parts
-                    .iter()
-                    .map(|arg| format!("'{arg}'"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
+                let command_line = cmd_parts.join(" ");
 
                 let exec = open_process(&command_line)?;
                 let stdin = exec.get_stdin();
                 let stdout = exec.get_stdout();
+
+                // Perform MCP handshake
+                let init_req = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "init_1",
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {
+                            "name": "rad",
+                            "version": "0.8.0"
+                        }
+                    }
+                });
+                let req_str = format!("{}\n", serde_json::to_string(&init_req).unwrap_or_default());
+                let _ = stdin.write(req_str.as_bytes());
+                let _ = read_line(&stdout);
+
+                let notif = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized",
+                    "params": {}
+                });
+                let notif_str = format!("{}\n", serde_json::to_string(&notif).unwrap_or_default());
+                let _ = stdin.write(notif_str.as_bytes());
+
                 active.insert(name, ActiveMcpServer { stdin, stdout });
             }
         }
