@@ -59,13 +59,6 @@ pub mod rad_context_tools {
     });
 }
 
-pub mod rad_web_access {
-    wasmtime::component::bindgen!({
-        path: "wit/web-access.wit",
-        world: "web-access-extension",
-        additional_derives: [serde::Serialize, serde::Deserialize],
-    });
-}
 
 pub use rad_extension::RadExtension;
 pub use rad_extension::RadExtensionImports;

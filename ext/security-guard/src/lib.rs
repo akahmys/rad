@@ -25,6 +25,11 @@ impl Guest for SecurityGuardImpl {
                     return false;
                 }
             }
+            CoreRpcCommand::ExecuteTool { arguments, .. } => {
+                if arguments.contains("blocked.txt") || arguments.contains("blocked_command") {
+                    return false;
+                }
+            }
             _ => {}
         }
         true

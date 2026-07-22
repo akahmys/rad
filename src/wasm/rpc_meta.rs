@@ -73,22 +73,20 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                         let Some(mut runtime) = runtime_arc.try_lock() else {
                             continue;
                         };
-                        if runtime.tool_provider.is_some() {
-                            if let Ok(json_str) = runtime.get_tools() {
-                                if let Ok(serde_json::Value::Array(arr)) =
-                                    serde_json::from_str::<serde_json::Value>(&json_str)
-                                {
-                                    let has_tool = arr.iter().any(|t| {
-                                        t.get("function")
-                                            .and_then(|f| f.get("name"))
-                                            .and_then(|n| n.as_str())
-                                            == Some(name.as_str())
-                                    });
-                                    if has_tool {
-                                        provider = Some(runtime_arc.clone());
-                                        break;
-                                    }
-                                }
+                        if runtime.tool_provider.is_some()
+                            && let Ok(json_str) = runtime.get_tools()
+                            && let Ok(serde_json::Value::Array(arr)) =
+                                serde_json::from_str::<serde_json::Value>(&json_str)
+                        {
+                            let has_tool = arr.iter().any(|t| {
+                                t.get("function")
+                                    .and_then(|f| f.get("name"))
+                                    .and_then(|n| n.as_str())
+                                    == Some(name.as_str())
+                            });
+                            if has_tool {
+                                provider = Some(runtime_arc.clone());
+                                break;
                             }
                         }
                     }
