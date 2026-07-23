@@ -106,6 +106,11 @@ pub fn init_mcp_servers() -> Result<(), String> {
                 } else {
                     cfg.command.clone()
                 };
+                // Check if binary command exists before trying to open process
+                if expanded_cmd.starts_with('/') && !std::path::Path::new(&expanded_cmd).exists() {
+                    continue;
+                }
+
                 let expanded_args: Vec<String> = cfg
                     .args
                     .iter()
@@ -172,10 +177,10 @@ fn read_line(stdout: &wit::StreamHandle) -> Result<String, String> {
     loop {
         let chunk = stdout.read(1024)?;
         if chunk.is_empty() {
-            if start.elapsed() > std::time::Duration::from_secs(3) {
-                return Err("Timeout reading from MCP server (3s elapsed)".to_string());
+            if start.elapsed() > std::time::Duration::from_millis(500) {
+                return Err("Timeout reading from MCP server (500ms elapsed)".to_string());
             }
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            std::thread::sleep(std::time::Duration::from_millis(10));
             continue;
         }
         for &b in &chunk {
