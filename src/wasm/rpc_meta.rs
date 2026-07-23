@@ -259,16 +259,17 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                 let event_tx_clone = ctx.event_tx.clone();
                 std::thread::spawn(move || {
                     loop {
-                        let mut connector = connector_arc_clone.lock();
-                        let connector_ref = &mut *connector;
-                        let store = &mut connector_ref.store;
-                        let conn_bindings = connector_ref.llm_connector.as_ref().unwrap();
+                        let read_res = {
+                            let mut connector = connector_arc_clone.lock();
+                            let connector_ref = &mut *connector;
+                            let store = &mut connector_ref.store;
+                            let conn_bindings = connector_ref.llm_connector.as_ref().unwrap();
 
-                        // Call event_stream.read()
-                        let read_res = conn_bindings
-                            .radcomp_connector_producer()
-                            .event_stream()
-                            .call_read(store, resource_any);
+                            conn_bindings
+                                .radcomp_connector_producer()
+                                .event_stream()
+                                .call_read(store, resource_any)
+                        };
 
                         match read_res {
                             Ok(Ok(Some(event))) => {
@@ -304,7 +305,6 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                                 break;
                             }
                         }
-                        drop(connector);
                         std::thread::sleep(std::time::Duration::from_millis(5));
                     }
                 });
