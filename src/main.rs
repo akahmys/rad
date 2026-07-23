@@ -3,8 +3,7 @@
 use clap::Parser;
 use rad::command::{CommandHelper, CommandManager, CommandParser, CommandResult};
 use rad::config;
-use rustyline::Config;
-use rustyline::history::{History, MemHistory};
+use rustyline::history::DefaultHistory;
 use rustyline::{Editor, error::ReadlineError};
 
 #[derive(Parser, Debug)]
@@ -107,16 +106,15 @@ fn load_config_and_session(
 
 fn init_editor(
     workspace: &str,
-) -> Result<(Editor<CommandHelper, MemHistory>, std::path::PathBuf), String> {
-    let mut rl =
-        Editor::<CommandHelper, MemHistory>::with_history(Config::default(), MemHistory::new())
-            .map_err(|e| format!("Failed to initialize shell editor: {e}"))?;
+) -> Result<(Editor<CommandHelper, DefaultHistory>, std::path::PathBuf), String> {
+    let mut rl = Editor::<CommandHelper, DefaultHistory>::new()
+        .map_err(|e| format!("Failed to initialize shell editor: {e}"))?;
 
     rl.set_helper(Some(rad::command::CommandHelper::new()));
 
     let history_path = std::path::PathBuf::from(workspace).join(".rad/history");
     if history_path.exists() {
-        let _ = rl.history_mut().load(&history_path);
+        let _ = rl.load_history(&history_path);
     }
 
     Ok((rl, history_path))
@@ -236,7 +234,7 @@ fn run_agent_task(
 
 fn process_input(
     line: &str,
-    rl: &mut Editor<CommandHelper, MemHistory>,
+    rl: &mut Editor<CommandHelper, DefaultHistory>,
     orchestrator: &std::sync::Arc<rad::orchestrator::Orchestrator>,
     cfg: &rad::config::Config,
     session_id: &str,
@@ -283,7 +281,7 @@ fn process_input(
 }
 
 fn run_repl(
-    mut rl: Editor<CommandHelper, MemHistory>,
+    mut rl: Editor<CommandHelper, DefaultHistory>,
     history_path: &std::path::Path,
     orchestrator: &std::sync::Arc<rad::orchestrator::Orchestrator>,
     cfg: &rad::config::Config,
@@ -318,5 +316,5 @@ fn run_repl(
     if let Some(parent) = history_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = rl.history_mut().save(history_path);
+    let _ = rl.save_history(history_path);
 }
