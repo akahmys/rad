@@ -123,11 +123,43 @@ fn default_role() -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct LlmEndpointProfile {
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
+impl LlmEndpointProfile {
+    #[must_use]
+    pub fn resolved_api_key(&self) -> Option<String> {
+        self.api_key.as_ref().and_then(|k| {
+            if let Some(var_name) = k.strip_prefix("env:") {
+                std::env::var(var_name).ok()
+            } else {
+                Some(k.clone())
+            }
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct LlmConfig {
+    #[serde(default)]
+    pub active: Option<String>,
+    #[serde(default)]
+    pub endpoints: HashMap<String, LlmEndpointProfile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Config {
     #[serde(default)]
     pub core: CoreConfig,
     #[serde(default)]
     pub default_timeout: DefaultTimeoutConfig,
+    #[serde(default)]
+    pub llm: LlmConfig,
     #[serde(default)]
     pub extensions: Vec<ExtensionConfig>,
 }
@@ -185,7 +217,29 @@ fn parse_jsonc(content: &str) -> Result<serde_json::Value, crate::error::Unified
         .ok_or_else(|| crate::error::UnifiedError::l1("JSONC parsed to empty value", "Config"))
 }
 
-/// Discovers the config files in order of preference.
+impl Config {
+    /// Applies environment variable overrides following the precedence hierarchy.
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(ws) = std::env::var("RAD_WORKSPACE") {
+            self.core.workspace = ws;
+        }
+
+        let active_name = self.llm.active.clone().unwrap_or_else(|| "default".to_string());
+        let profile = self.llm.endpoints.entry(active_name.clone()).or_default();
+
+        if let Ok(url) = std::env::var("RAD_BASE_URL").or_else(|_| std::env::var("LLM_BASE_URL")) {
+            profile.base_url = url;
+        }
+        if let Ok(key) = std::env::var("RAD_API_KEY").or_else(|_| std::env::var("LLM_API_KEY")) {
+            profile.api_key = Some(key);
+        }
+        if let Ok(model) = std::env::var("RAD_MODEL").or_else(|_| std::env::var("LLM_MODEL")) {
+            profile.model = Some(model);
+        }
+    }
+}
+
+/// Discovers the config files in clean order of preference.
 fn discover_config_path(explicit_path: Option<&str>) -> Option<PathBuf> {
     if let Some(path_str) = explicit_path {
         let p = PathBuf::from(path_str);
@@ -195,42 +249,28 @@ fn discover_config_path(explicit_path: Option<&str>) -> Option<PathBuf> {
         return None;
     }
 
-    // 2. Project Local (Root)
+    // 1. Project Local (Root or .rad/)
     let p_root = PathBuf::from("rad.json");
     if p_root.exists() {
         return Some(p_root);
     }
-
-    // 3. Project Local (.rad/)
-    let p_rad = PathBuf::from(".rad/rad.json");
+    let p_rad = PathBuf::from(".rad/config.json");
     if p_rad.exists() {
         return Some(p_rad);
     }
 
-    // 4. User Global (~/.rad/)
+    // 2. User Global (~/.rad/config.json)
     if let Some(home_dir) = dirs::home_dir() {
         let rad_home_config = home_dir.join(".rad/config.json");
         if rad_home_config.exists() {
             return Some(rad_home_config);
-        }
-        let rad_home_legacy = home_dir.join(".rad/rad.json");
-        if rad_home_legacy.exists() {
-            return Some(rad_home_legacy);
-        }
-    }
-
-    // 5. User Global XDG Fallback
-    if let Some(mut config_dir) = dirs::config_dir() {
-        config_dir.push("rad/rad.json");
-        if config_dir.exists() {
-            return Some(config_dir);
         }
     }
 
     None
 }
 
-/// Load configuration by merging base config with local config if it exists.
+/// Load configuration by merging base config with local config if it exists and applying env overrides.
 pub fn load_config(explicit_path: Option<&str>) -> Result<Config, crate::error::UnifiedError> {
     let config_path = discover_config_path(explicit_path);
 
@@ -266,11 +306,15 @@ pub fn load_config(explicit_path: Option<&str>) -> Result<Config, crate::error::
         base_val
     } else {
         // If no config file found, return default Config
-        return Ok(Config::default());
+        let mut default_cfg = Config::default();
+        default_cfg.apply_env_overrides();
+        return Ok(default_cfg);
     };
 
-    let config: Config = serde_json::from_value(base_val).map_err(|e| {
+    let mut config: Config = serde_json::from_value(base_val).map_err(|e| {
         crate::error::UnifiedError::l1(format!("Failed to deserialize final config: {e}"), "Config")
     })?;
+
+    config.apply_env_overrides();
     Ok(config)
 }

@@ -38,15 +38,16 @@ fn test_async_task_cancellation_on_rollback() {
         hitl_enabled: false,
         verification_command: None,
     };
-    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
-    config.extensions = vec![rad::config::ExtensionConfig {
-        name: "openai-orchestrator".to_string(),
+    let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
+    let ext_config = rad::config::ExtensionConfig {
+        name: "rad-orchestrator".to_string(),
         enabled: true,
         role: "orchestrator".to_string(),
         source: wasm_path.to_string(),
         permissions: Some(perms),
         config: HashMap::new(),
-    }];
+    };
+    config.extensions = vec![ext_config];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let initial_node = {

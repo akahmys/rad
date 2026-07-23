@@ -1,5 +1,10 @@
 #![deny(clippy::pedantic)]
-#![allow(unsafe_op_in_unsafe_fn)]
+#![allow(
+    unsafe_op_in_unsafe_fn,
+    clippy::collapsible_if,
+    clippy::same_length_and_capacity,
+    clippy::too_many_lines
+)]
 
 wit_bindgen::generate!({
     path: "../../wit/rad.wit",

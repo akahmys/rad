@@ -1490,6 +1490,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
+name = "llm-connector"
+version = "0.8.0"
+dependencies = [
+ "rad-models",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "wit-bindgen 0.36.0",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1699,28 +1710,6 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
-
-[[package]]
-name = "openai-connector"
-version = "0.8.0"
-dependencies = [
- "rad-models",
- "serde",
- "serde_bytes",
- "serde_json",
- "wit-bindgen 0.36.0",
-]
-
-[[package]]
-name = "openai-orchestrator"
-version = "0.8.0"
-dependencies = [
- "rad-models",
- "serde",
- "serde_bytes",
- "serde_json",
- "wit-bindgen 0.36.0",
-]
 
 [[package]]
 name = "openssl"
@@ -1987,6 +1976,17 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+]
+
+[[package]]
+name = "rad-orchestrator"
+version = "0.8.0"
+dependencies = [
+ "rad-models",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "wit-bindgen 0.36.0",
 ]
 
 [[package]]

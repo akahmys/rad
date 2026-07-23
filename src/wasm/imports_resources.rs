@@ -37,7 +37,8 @@ impl bindings::wit::HostStreamHandle for WasmState {
         let stream = self.table().get_mut(&self_).map_err(|e| e.to_string())?;
         match stream {
             crate::wasm::HostStream::File(file) => {
-                let mut buf = vec![0u8; max_bytes as usize];
+                let chunk_size = (max_bytes as usize).min(65536);
+                let mut buf = vec![0u8; chunk_size];
                 match file.read(&mut buf) {
                     Ok(n) => {
                         buf.truncate(n);

@@ -8,7 +8,7 @@ pub fn extract_repo_map(workspace_path: &Path) -> Result<String, String> {
         .set_language(tree_sitter_rust::language())
         .map_err(|e| format!("Failed to set language: {e}"))?;
 
-    let mut result = Vec::new();
+    let mut result = Vec::with_capacity(32);
     visit_dirs(workspace_path, workspace_path, &mut parser, &mut result)?;
 
     Ok(result.join("\n\n"))

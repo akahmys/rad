@@ -150,3 +150,41 @@ fn test_load_config_with_local_override() {
         "local_key"
     );
 }
+
+#[test]
+fn test_llm_config_deserialization_and_env_resolution() {
+    unsafe {
+        std::env::set_var("TEST_RAD_LLM_KEY", "secret_123");
+    }
+    let jsonc = r#"
+    {
+        "llm": {
+            "active": "ollama",
+            "endpoints": {
+                "ollama": {
+                    "base_url": "http://localhost:11434/v1",
+                    "model": "llama3"
+                },
+                "openai": {
+                    "base_url": "https://api.openai.com/v1",
+                    "api_key": "env:TEST_RAD_LLM_KEY",
+                    "model": "gpt-4o"
+                }
+            }
+        }
+    }
+    "#;
+
+    let val = parse_jsonc(jsonc).unwrap();
+    let config: Config = serde_json::from_value(val).unwrap();
+    assert_eq!(config.llm.active.as_deref(), Some("ollama"));
+    assert_eq!(config.llm.endpoints.len(), 2);
+
+    let openai_profile = config.llm.endpoints.get("openai").unwrap();
+    assert_eq!(openai_profile.base_url, "https://api.openai.com/v1");
+    assert_eq!(openai_profile.resolved_api_key().as_deref(), Some("secret_123"));
+
+    unsafe {
+        std::env::remove_var("TEST_RAD_LLM_KEY");
+    }
+}

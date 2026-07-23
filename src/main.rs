@@ -15,6 +15,18 @@ struct Args {
 
     #[arg(short, long, help = "Session ID to reload or resume")]
     session: Option<String>,
+
+    #[arg(long, help = "Override LLM Base URL")]
+    base_url: Option<String>,
+
+    #[arg(long, help = "Override LLM API Key")]
+    api_key: Option<String>,
+
+    #[arg(long, help = "Override LLM Model")]
+    model: Option<String>,
+
+    #[arg(short, long, help = "Override workspace directory")]
+    workspace: Option<String>,
 }
 
 fn load_config_and_session(
@@ -27,8 +39,24 @@ fn load_config_and_session(
     ),
     String,
 > {
-    let cfg = config::load_config(args.config.as_deref())
+    let mut cfg = config::load_config(args.config.as_deref())
         .map_err(|e| format!("Error loading configuration: {e}"))?;
+
+    // Apply CLI overrides (Tier 1 Priority)
+    if let Some(ref ws) = args.workspace {
+        cfg.core.workspace.clone_from(ws);
+    }
+    let active_name = cfg.llm.active.clone().unwrap_or_else(|| "default".to_string());
+    let profile = cfg.llm.endpoints.entry(active_name).or_default();
+    if let Some(ref url) = args.base_url {
+        profile.base_url.clone_from(url);
+    }
+    if let Some(ref key) = args.api_key {
+        profile.api_key = Some(key.clone());
+    }
+    if let Some(ref model) = args.model {
+        profile.model = Some(model.clone());
+    }
 
     println!("\x1b[32mConfiguration loaded successfully!\x1b[0m");
     println!("Workspace Dir: {}", cfg.core.workspace);

@@ -22,6 +22,8 @@ fn test_slash_command_parsing() {
     );
     assert_eq!(CommandParser::parse("/tree"), Some(Command::Tree));
     assert_eq!(CommandParser::parse("/tools"), Some(Command::Tools));
+    assert!(matches!(CommandParser::parse("/llm"), Some(Command::Llm(_))));
+    assert!(matches!(CommandParser::parse("/models"), Some(Command::Llm(_))));
     assert_eq!(CommandParser::parse("regular text"), None);
 }
 

@@ -38,7 +38,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let dag = Arc::new(Mutex::new(Dag::new()));
     let active_processes = Arc::new(Mutex::new(HashMap::new()));
 
-    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
+    let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
     let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
     let network_subsystem = Arc::new(rad::http::HttpManager);
     let (event_tx, _event_rx) = std::sync::mpsc::channel();

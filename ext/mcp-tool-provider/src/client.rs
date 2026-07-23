@@ -67,7 +67,7 @@ pub fn load_mcp_config() -> Result<Option<McpProviderConfig>, String> {
     };
 
     for ext in extensions {
-        if ext.name == "mcp-tool-provider" || ext.name == "openai-orchestrator" {
+        if ext.name == "mcp-tool-provider" || ext.name == "rad-orchestrator" || ext.name == "openai-orchestrator" {
             if ext.config.is_some() {
                 return Ok(ext.config);
             }

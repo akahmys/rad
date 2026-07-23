@@ -89,10 +89,10 @@ fn test_security_verification_hook_rejection() {
 
     config.extensions = vec![
         ExtensionConfig {
-            name: "openai-orchestrator".to_string(),
+            name: "rad-orchestrator".to_string(),
             enabled: true,
             role: "orchestrator".to_string(),
-            source: "target/wasm32-wasip2/debug/openai_orchestrator.wasm".to_string(),
+            source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
             permissions: Some(perms.clone()),
             config: HashMap::new(),
         },
@@ -105,10 +105,10 @@ fn test_security_verification_hook_rejection() {
             config: HashMap::new(),
         },
         ExtensionConfig {
-            name: "openai-connector".to_string(),
+            name: "llm-connector".to_string(),
             enabled: true,
             role: "llm-connector".to_string(),
-            source: "target/wasm32-wasip2/debug/openai_connector.wasm".to_string(),
+            source: "target/wasm32-wasip2/debug/llm_connector.wasm".to_string(),
             permissions: Some(perms.clone()),
             config: HashMap::new(),
         },

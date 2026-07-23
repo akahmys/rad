@@ -34,9 +34,10 @@ fn handle_human_input(text: String) -> Result<(), String> {
         .ok_or("Failed to get node id as string")?;
     call_host(RasRpcCommand::SetNodeText {
         node_id: user_node_id.to_string(),
-        text,
+        text: text.clone(),
     })?;
 
+    crate::log_trace("session", &format!("Received human input: {text}"));
     let messages = crate::llm::load_messages_from_dag()?;
     crate::llm::trigger_llm_stream(messages)
 }

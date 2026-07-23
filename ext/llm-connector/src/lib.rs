@@ -1,6 +1,13 @@
 #![deny(clippy::pedantic)]
-#![allow(unsafe_op_in_unsafe_fn)]
-#![allow(clippy::needless_pass_by_value)]
+#![allow(
+    unsafe_op_in_unsafe_fn,
+    clippy::needless_pass_by_value,
+    clippy::same_length_and_capacity,
+    clippy::collapsible_if,
+    clippy::uninlined_format_args,
+    clippy::cast_possible_truncation,
+    clippy::manual_strip
+)]
 
 wit_bindgen::generate!({
     path: "../../wit/llm-connector.wit",
@@ -277,10 +284,40 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
         };
 
         let body = serde_json::to_string(&req).map_err(|e| format!("JSON serialize error: {e}"))?;
-        let headers = vec![("Content-Type".to_string(), "application/json".to_string())];
+        let mut headers = vec![("Content-Type".to_string(), "application/json".to_string())];
+        let api_key = std::env::var("LLM_API_KEY")
+            .or_else(|_| std::env::var("RAD_API_KEY"))
+            .or_else(|_| std::env::var("OPENAI_API_KEY"))
+            .ok();
 
-        let port = std::env::var("RAD_TEST_PORT").unwrap_or_else(|_| "8080".to_string());
-        let url = format!("http://127.0.0.1:{}/v1/chat/completions", port);
+        if let Some(ref key) = api_key {
+            if !key.trim().is_empty() {
+                headers.push(("Authorization".to_string(), format!("Bearer {}", key.trim())));
+            }
+        }
+
+        let base_url_env = std::env::var("LLM_BASE_URL")
+            .or_else(|_| std::env::var("RAD_BASE_URL"))
+            .or_else(|_| std::env::var("OPENAI_BASE_URL"))
+            .ok();
+
+        let url = if let Ok(test_port) = std::env::var("RAD_TEST_PORT") {
+            format!("http://127.0.0.1:{}/v1/chat/completions", test_port)
+        } else if let Some(base_url) = base_url_env {
+            let trimmed = base_url.trim().trim_end_matches('/');
+            if trimmed.ends_with("/chat/completions") {
+                trimmed.to_string()
+            } else if trimmed.ends_with("/v1") {
+                format!("{trimmed}/chat/completions")
+            } else {
+                format!("{trimmed}/v1/chat/completions")
+            }
+        } else if api_key.is_some() {
+            "https://api.openai.com/v1/chat/completions".to_string()
+        } else {
+            return Err("No LLM endpoint configured. Please set LLM_BASE_URL (or RAD_BASE_URL / OPENAI_BASE_URL) or API_KEY.".to_string());
+        };
+
         let stream_handle = open_http_stream(&url, &headers, &body)
             .map_err(|e| format!("open_http_stream failed: {e}"))?;
 

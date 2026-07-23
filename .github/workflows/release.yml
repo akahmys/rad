@@ -22,13 +22,13 @@ jobs:
           targets: wasm32-wasip2
 
       - name: Build Wasm
-        run: cargo build --target wasm32-wasip2 --release -p openai-orchestrator
+        run: cargo build --target wasm32-wasip2 --release -p rad-orchestrator
 
       - name: Upload Wasm Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openai_orchestrator.wasm
-          path: target/wasm32-wasip2/release/openai_orchestrator.wasm
+          name: rad_orchestrator.wasm
+          path: target/wasm32-wasip2/release/rad_orchestrator.wasm
 
   build-core:
     name: Build Core Binary
