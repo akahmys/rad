@@ -40,7 +40,19 @@ fn read_config_file(path: &str) -> Option<String> {
     } else {
         path.to_string()
     };
-    std::fs::read_to_string(&expanded).ok()
+
+    let cmd = wit::RasRpcCommand::FileRead(expanded);
+    if let Ok(res_str) = crate::host_rpc(&cmd) {
+        if !res_str.is_empty() && res_str != "null" {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&res_str) {
+                if let Some(s) = val.as_str() {
+                    return Some(s.to_string());
+                }
+            }
+            return Some(res_str);
+        }
+    }
+    None
 }
 
 pub fn load_mcp_config() -> Result<Option<McpProviderConfig>, String> {
