@@ -49,7 +49,12 @@ fn test_command_execution() {
     };
 
     let dag = Arc::new(Mutex::new(Dag::new()));
-    let orchestrator = Orchestrator::new(config, "test_session".to_string(), dag.clone(), None);
+    let orchestrator = Arc::new(Orchestrator::new(
+        config,
+        "test_session".to_string(),
+        dag.clone(),
+        None,
+    ));
 
     // 1. Test Status Command on empty DAG
     let res = CommandManager::execute(Command::Status, &orchestrator);

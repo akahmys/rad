@@ -3,7 +3,10 @@ use std::fmt::Write as _;
 
 /// Renders the configured permissions and queries the active tools.
 #[must_use]
-pub fn render_tools_and_permissions(orchestrator: &Orchestrator) -> String {
+pub fn render_tools_and_permissions(orchestrator: &std::sync::Arc<Orchestrator>) -> String {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let _ = orchestrator.get_or_init_runtimes(&tx);
+
     let mut output = String::new();
     let config = orchestrator.config.lock();
     output.push_str(&render_config_permissions(&config));

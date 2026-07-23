@@ -183,7 +183,7 @@ impl Orchestrator {
         Ok(())
     }
 
-    fn get_or_init_runtimes(
+    pub fn get_or_init_runtimes(
         self: &Arc<Self>,
         event_tx: &Sender<RasCoreEvent>,
     ) -> Result<HashMap<String, Arc<Mutex<WasmRuntime>>>, String> {
