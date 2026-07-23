@@ -60,6 +60,7 @@ pub fn load_mcp_config() -> Result<Option<McpProviderConfig>, String> {
         return Ok(None);
     }
     let paths = [
+        "~/.rad/config.json",
         "config.json",
         "rad.json",
         ".rad/config.json",
