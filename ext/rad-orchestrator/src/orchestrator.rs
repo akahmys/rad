@@ -42,7 +42,9 @@ fn handle_human_input(text: String) -> Result<(), String> {
     });
 
     crate::log_trace("session", &format!("Received human input: {text}"));
+    crate::log_trace("session", "Loading messages from DAG...");
     let messages = crate::llm::load_messages_from_dag()?;
+    crate::log_trace("session", "Triggering LLM stream...");
     crate::llm::trigger_llm_stream(messages)
 }
 

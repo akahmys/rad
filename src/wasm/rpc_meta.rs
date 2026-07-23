@@ -38,8 +38,12 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
         RasRpcCommand::GetTools => {
             if let Some(orch) = ctx.orchestrator {
                 let mut all_tools = serde_json::Value::Array(Vec::new());
-                let runtimes = orch.wasm_runtime.lock();
-                for (id, runtime_arc) in runtimes.iter() {
+                let runtimes = {
+                    let guard = orch.wasm_runtime.lock();
+                    guard.values().cloned().collect::<Vec<_>>()
+                };
+
+                for runtime_arc in runtimes {
                     let Some(mut runtime) = runtime_arc.try_lock() else {
                         continue;
                     };
@@ -54,10 +58,7 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                                 }
                             }
                             Err(e) => {
-                                return Err(format!(
-                                    "Failed to get tools from runtime '{}': {}",
-                                    id, e
-                                ));
+                                return Err(format!("Failed to get tools: {e}"));
                             }
                         }
                     }
@@ -75,9 +76,12 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
         } => {
             if let Some(orch) = ctx.orchestrator {
                 let provider_arc = {
-                    let runtimes = orch.wasm_runtime.lock();
+                    let runtimes = {
+                        let guard = orch.wasm_runtime.lock();
+                        guard.values().cloned().collect::<Vec<_>>()
+                    };
                     let mut provider = None;
-                    for runtime_arc in runtimes.values() {
+                    for runtime_arc in runtimes {
                         let Some(mut runtime) = runtime_arc.try_lock() else {
                             continue;
                         };
@@ -166,6 +170,7 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             }
 
             if let Some(orch) = ctx.orchestrator {
+                eprintln!("[DEBUG] Host GenerateLlmStream starting...");
                 let connector_arc = {
                     let runtimes = orch.wasm_runtime.lock();
                     let mut connector_runtime_opt = None;
@@ -182,6 +187,7 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                         "LLM Connector extension not found or not loaded".to_string()
                     })?
                 };
+                eprintln!("[DEBUG] Host found connector_arc.");
 
                 let mut connector = connector_arc.lock();
                 let connector_ref = &mut *connector;
