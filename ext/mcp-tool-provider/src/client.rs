@@ -121,7 +121,9 @@ pub fn init_mcp_servers() -> Result<(), String> {
                 cmd_parts.extend(expanded_args);
                 let command_line = cmd_parts.join(" ");
 
-                let exec = open_process(&command_line)?;
+                let Ok(exec) = open_process(&command_line) else {
+                    continue;
+                };
                 let stdin = exec.get_stdin();
                 let stdout = exec.get_stdout();
 
@@ -140,8 +142,12 @@ pub fn init_mcp_servers() -> Result<(), String> {
                     }
                 });
                 let req_str = format!("{}\n", serde_json::to_string(&init_req).unwrap_or_default());
-                let _ = stdin.write(req_str.as_bytes());
-                let _ = read_line(&stdout);
+                if stdin.write(req_str.as_bytes()).is_err() {
+                    continue;
+                }
+                if read_line(&stdout).is_err() {
+                    continue;
+                }
 
                 let notif = serde_json::json!({
                     "jsonrpc": "2.0",
@@ -166,10 +172,10 @@ fn read_line(stdout: &wit::StreamHandle) -> Result<String, String> {
     loop {
         let chunk = stdout.read(1024)?;
         if chunk.is_empty() {
-            if start.elapsed() > std::time::Duration::from_secs(15) {
-                return Err("Timeout reading from MCP server (15s elapsed)".to_string());
+            if start.elapsed() > std::time::Duration::from_secs(3) {
+                return Err("Timeout reading from MCP server (3s elapsed)".to_string());
             }
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            std::thread::sleep(std::time::Duration::from_millis(50));
             continue;
         }
         for &b in &chunk {
