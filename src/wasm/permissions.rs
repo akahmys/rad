@@ -152,7 +152,10 @@ pub fn check_permissions(
             if !exec_config.allow_commands.is_empty() {
                 let mut allowed = false;
                 for allowed_cmd in &exec_config.allow_commands {
-                    if command.starts_with(allowed_cmd) {
+                    if allowed_cmd == "*"
+                        || command.starts_with(allowed_cmd)
+                        || command.contains(allowed_cmd)
+                    {
                         allowed = true;
                         break;
                     }
