@@ -535,41 +535,48 @@ fn execute_core_tool_fallback(
                 "Patch applied successfully.".to_string(),
             ))
         }
-        "bash" => {
+        "bash" | "spawn_bash_process" | "execute_command" | "terminal" | "sh" => {
             #[derive(serde::Deserialize)]
             struct Args {
+                #[serde(alias = "cmd")]
                 command: String,
             }
             let args: Args = serde_json::from_str(arguments)
-                .map_err(|e| format!("Failed to parse bash args: {e}"))?;
+                .map_err(|e| format!("Failed to parse command args: {e}"))?;
 
-            let val = super::rpc_process::handle_process(
-                &RasRpcCommand::SpawnBashProcess {
-                    command: args.command,
-                },
-                ctx,
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0);
+            let call_id = format!("wasm_proc_{ts}");
+
+            let mut running = ctx.process_manager.spawn_bash_process(
+                &args.command,
+                Some(ctx.sandbox.workspace_dir()),
+                call_id,
+                "spawn_bash_process".to_string(),
+                format!("{{\"command\":\"{}\"}}", args.command),
             )?;
 
-            let pgid = val.as_i64().ok_or("Expected pgid")?.to_string();
-
             let start = std::time::Instant::now();
+            let mut accumulated = Vec::new();
             loop {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-                let mut procs = ctx.active_processes.lock();
-                if let Some(proc) = procs.get_mut(&pgid) {
-                    if proc.child.try_wait().ok().flatten().is_some() {
-                        let (stdout, _stderr) = proc.read_available();
-                        proc.unregister_pgid();
-                        procs.remove(&pgid);
-                        let out_str = String::from_utf8_lossy(&stdout).to_string();
-                        return Ok(serde_json::Value::String(out_str));
-                    }
-                } else {
-                    return Ok(serde_json::Value::String(String::new()));
+                let (stdout, _stderr) = running.read_available();
+                accumulated.extend(stdout);
+                if running.child.try_wait().ok().flatten().is_some() {
+                    let (final_out, _) = running.read_available();
+                    accumulated.extend(final_out);
+                    let out_str = String::from_utf8_lossy(&accumulated).to_string();
+                    return Ok(serde_json::Value::String(out_str));
                 }
                 if start.elapsed() > std::time::Duration::from_secs(30) {
-                    return Err("Bash fallback execution timed out".to_string());
+                    let _ = running.child.kill();
+                    let out_str = String::from_utf8_lossy(&accumulated).to_string();
+                    return Ok(serde_json::Value::String(format!(
+                        "{out_str}\n[Execution Timed Out]"
+                    )));
                 }
+                std::thread::sleep(std::time::Duration::from_millis(10));
             }
         }
         other => Err(format!("Unknown tool: {other}")),
