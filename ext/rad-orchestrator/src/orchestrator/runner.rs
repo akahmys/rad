@@ -226,7 +226,14 @@ pub(crate) fn handle_done(
             })?;
         }
 
-        let messages = crate::llm::load_messages_from_dag()?;
+        let mut messages = crate::llm::load_messages_from_dag()?;
+        messages.push(crate::tool::Message {
+            role: "user".to_string(),
+            content: Some("上記のツール実行結果に基づいて、ユーザーへの最終回答を作成してください。".to_string()),
+            name: None,
+            tool_call_id: None,
+            tool_calls: None,
+        });
         crate::llm::trigger_llm_stream(messages)?;
     }
     Ok(())
