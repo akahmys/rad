@@ -102,12 +102,19 @@ interface types {
         execute-tool(execute-tool-payload),
         generate-llm-stream(generate-llm-stream-payload),
         call-extension(call-extension-payload),
+        log-traced-event(log-traced-event-payload),
     }
 
     record call-extension-payload {
         extension-id: string,
         method: string,
         arguments: string,
+    }
+
+    record log-traced-event-payload {
+        trace-id: string,
+        module: string,
+        message: string,
     }
 
     record generate-llm-stream-payload {

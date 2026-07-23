@@ -89,6 +89,11 @@ impl From<wit::RasRpcCommand> for CoreRpcCommand {
                 method: payload.method,
                 arguments: payload.arguments,
             },
+            wit::RasRpcCommand::LogTracedEvent(payload) => CoreRpcCommand::LogTracedEvent {
+                trace_id: payload.trace_id,
+                module: payload.module,
+                message: payload.message,
+            },
         }
     }
 }
@@ -215,9 +220,15 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
                 method,
                 arguments,
             }),
-            CoreRpcCommand::LogTracedEvent { .. } => {
-                panic!("LogTracedEvent serialization arm")
-            }
+            CoreRpcCommand::LogTracedEvent {
+                trace_id,
+                module,
+                message,
+            } => wit::RasRpcCommand::LogTracedEvent(wit::LogTracedEventPayload {
+                trace_id,
+                module,
+                message,
+            }),
         }
     }
 }

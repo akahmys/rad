@@ -152,6 +152,11 @@ impl From<wit::RasRpcCommand> for CoreRpcCommand {
                 method: payload.method,
                 arguments: payload.arguments,
             },
+            wit::RasRpcCommand::LogTracedEvent(payload) => CoreRpcCommand::LogTracedEvent {
+                trace_id: payload.trace_id,
+                module: payload.module,
+                message: payload.message,
+            },
         }
     }
 }

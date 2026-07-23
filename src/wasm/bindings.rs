@@ -226,6 +226,11 @@ impl From<wit::RasRpcCommand> for CoreRasRpcCommand {
                 method: payload.method,
                 arguments: payload.arguments,
             },
+            wit::RasRpcCommand::LogTracedEvent(payload) => CoreRasRpcCommand::LogTracedEvent {
+                trace_id: payload.trace_id,
+                module: payload.module,
+                message: payload.message,
+            },
         }
     }
 }
@@ -362,9 +367,15 @@ impl From<CoreRasRpcCommand> for wit::RasRpcCommand {
                 method,
                 arguments,
             }),
-            CoreRasRpcCommand::LogTracedEvent { .. } => {
-                panic!("LogTracedEvent is not mapped to legacy wit payload")
-            }
+            CoreRasRpcCommand::LogTracedEvent {
+                trace_id,
+                module,
+                message,
+            } => wit::RasRpcCommand::LogTracedEvent(wit::LogTracedEventPayload {
+                trace_id,
+                module,
+                message,
+            }),
         }
     }
 }
