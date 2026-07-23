@@ -127,9 +127,15 @@ impl bindings::RadExtensionImports for WasmState {
         &mut self,
         command: String,
     ) -> Result<wasmtime::component::Resource<crate::wasm::HostExecution>, String> {
+        let expanded_command = if command.starts_with("~/") || command == "~" {
+            crate::config::expand_tilde(&command).to_string_lossy().to_string()
+        } else {
+            command.clone()
+        };
+
         // Validate command via security guard check
         let cmd = rad_models::RasRpcCommand::SpawnBashProcess {
-            command: command.clone(),
+            command: expanded_command.clone(),
         };
 
         permissions::check_permissions(&cmd, &self.permissions, self.sandbox.workspace_dir())
@@ -151,7 +157,7 @@ impl bindings::RadExtensionImports for WasmState {
         // HITL check
         if self.hitl_enabled {
             let approved = crate::wasm::rpc_process::ask_human_approval_internal(&format!(
-                "Spawn bash process: {command}"
+                "Spawn bash process: {expanded_command}"
             ))?;
             if !approved {
                 return Err("User rejected execution of tool spawn_bash_process".to_string());
@@ -165,11 +171,11 @@ impl bindings::RadExtensionImports for WasmState {
             .unwrap_or(0);
         let call_id = format!("wasm_proc_{ts}");
         let mut running = self.process_manager.spawn_bash_process(
-            &command,
+            &expanded_command,
             Some(self.sandbox.workspace_dir()),
             call_id,
             "spawn_bash_process".to_string(),
-            format!("{{\"command\":\"{command}\"}}"),
+            format!("{{\"command\":\"{expanded_command}\"}}"),
         )?;
 
         // Extract stdin, stdout, stderr channels
