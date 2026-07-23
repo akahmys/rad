@@ -144,6 +144,16 @@ impl LlmEndpointProfile {
     }
 }
 
+#[must_use]
+pub fn expand_tilde(path_str: &str) -> std::path::PathBuf {
+    if let Some(stripped) = path_str.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return std::path::PathBuf::from(home).join(stripped);
+    }
+    std::path::PathBuf::from(path_str)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct LlmConfig {
     #[serde(default)]

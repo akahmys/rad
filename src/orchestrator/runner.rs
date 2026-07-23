@@ -191,7 +191,8 @@ impl Orchestrator {
                 continue;
             }
             let permissions = ext.permissions.clone().unwrap_or_default();
-            let wasm_path = Path::new(&ext.source);
+            let wasm_path_buf = crate::config::expand_tilde(&ext.source);
+            let wasm_path = wasm_path_buf.as_path();
             if wasm_path.exists() {
                 let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl {
                     dag: self.dag.clone(),
