@@ -37,6 +37,10 @@ fn handle_human_input(text: String) -> Result<(), String> {
         text: text.clone(),
     })?;
 
+    let _ = call_host(RasRpcCommand::WriteStdout {
+        text: "\x1b[36m[Thinking...]\x1b[0m\n".to_string(),
+    });
+
     crate::log_trace("session", &format!("Received human input: {text}"));
     let messages = crate::llm::load_messages_from_dag()?;
     crate::llm::trigger_llm_stream(messages)
