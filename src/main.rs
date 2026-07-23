@@ -158,48 +158,7 @@ fn main() {
     );
 }
 
-#[cfg(unix)]
-struct RawModeGuard {
-    orig_termios: nix::sys::termios::Termios,
-}
 
-#[cfg(unix)]
-impl RawModeGuard {
-    fn enable() -> Result<Self, String> {
-        use nix::sys::termios::{LocalFlags, SetArg, tcgetattr, tcsetattr};
-
-        let fd = std::io::stdin();
-        let orig_termios = tcgetattr(&fd).map_err(|e| format!("Failed to get termios: {e}"))?;
-        let mut raw_termios = orig_termios.clone();
-
-        raw_termios.local_flags.remove(LocalFlags::ICANON);
-        raw_termios.local_flags.remove(LocalFlags::ECHO);
-
-        tcsetattr(&fd, SetArg::TCSADRAIN, &raw_termios)
-            .map_err(|e| format!("Failed to set termios: {e}"))?;
-
-        Ok(Self { orig_termios })
-    }
-}
-
-#[cfg(unix)]
-impl Drop for RawModeGuard {
-    fn drop(&mut self) {
-        use nix::sys::termios::{SetArg, tcsetattr};
-        let fd = std::io::stdin();
-        let _ = tcsetattr(&fd, SetArg::TCSADRAIN, &self.orig_termios);
-    }
-}
-
-#[cfg(not(unix))]
-struct RawModeGuard;
-
-#[cfg(not(unix))]
-impl RawModeGuard {
-    fn enable() -> Result<Self, String> {
-        Ok(Self)
-    }
-}
 
 fn run_agent_task(
     task: &str,
@@ -212,21 +171,8 @@ fn run_agent_task(
         return Err(format!("Execution error: {e}"));
     }
 
-    let guard = RawModeGuard::enable()?;
     while orchestrator.is_running() {
-        if let Ok(true) = crossterm::event::poll(std::time::Duration::from_millis(50)) {
-            let ev = crossterm::event::read();
-            if let Ok(crossterm::event::Event::Key(crossterm::event::KeyEvent {
-                code: crossterm::event::KeyCode::Esc,
-                ..
-            })) = ev
-            {
-                std::mem::drop(guard);
-                println!("\n\x1b[1;33mTask execution aborted by user (Esc).\x1b[0m");
-                orchestrator.abort();
-                break;
-            }
-        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
     rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Idle);
     Ok(())
