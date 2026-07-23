@@ -62,7 +62,11 @@ fn load_config_and_session(
     println!("Workspace Dir: {}", cfg.core.workspace);
     println!("Snapshot Dir: {}", cfg.core.snapshot);
     println!("Log Dir: {}", cfg.core.log);
-    let enabled_exts: Vec<_> = cfg.extensions.iter().filter(|ext| ext.enabled).collect();
+    let enabled_exts: Vec<_> = cfg
+        .extensions
+        .iter()
+        .filter(|ext| ext.enabled && rad::config::expand_tilde(&ext.source).exists())
+        .collect();
     println!("Extensions loaded ({}):", enabled_exts.len());
     for ext in &enabled_exts {
         let mcp_names: Vec<String> = ext
