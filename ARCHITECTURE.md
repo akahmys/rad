@@ -22,10 +22,10 @@ graph TD
     subgraph ExtensionSystem [Policy Layer / Multi-Extension Cooperation]
         WasmRuntime[Wasm Runtime] -->|RPC Orders / Verification| Gateway
         
-        Orchestrator["1. LLM Orchestrator <br> (orchestrator.wasm)"]
-        Connector["2. LLM Connector <br> (openai-connector.wasm)"]
-        SecurityGuard["3. Security Guard <br> (security-rules.wasm)"]
-        ToolProvider["4. Tool/MCP Provider <br> (mcp-bridge.wasm)"]
+        Orchestrator["1. LLM Orchestrator <br> (rad_orchestrator.wasm)"]
+        Connector["2. LLM Connector <br> (llm_connector.wasm)"]
+        SecurityGuard["3. Security Guard <br> (security_guard.wasm)"]
+        ToolProvider["4. Tool/MCP Provider <br> (mcp_tool_provider.wasm)"]
 
         Orchestrator -->|1. Generate Stream| Connector
         Connector -->|2. Request Stream RPC| WasmRuntime

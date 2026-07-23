@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use crate::call_host;
 use crate::tool::{Message, get_available_tools};
 use crate::types::{Dag, RasRpcCommand};
@@ -13,7 +14,7 @@ fn load_local_agent_rules() -> String {
                     if !combined.is_empty() {
                         combined.push_str("\n\n");
                     }
-                    combined.push_str(&format!("### Local Project Rules ({p}):\n{content}"));
+                    let _ = write!(combined, "### Local Project Rules ({p}):\n{content}");
                 }
             }
         }
@@ -43,14 +44,11 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 
     while let Some(ref id) = current_id {
         if let Some(node) = dag.nodes.get(id) {
-            let is_valid_role = match node.node_type.as_str() {
-                "user" | "assistant" | "tool" | "system" => true,
-                _ => false,
-            };
+            let is_valid_role = matches!(node.node_type.as_str(), "user" | "assistant" | "tool" | "system");
 
             if is_valid_role {
                 let msg = if let Ok(mut parsed_msg) = serde_json::from_str::<Message>(&node.text) {
-                    parsed_msg.role = node.node_type.clone();
+                    parsed_msg.role.clone_from(&node.node_type);
                     parsed_msg
                 } else {
                     Message {
@@ -66,8 +64,8 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
                     }
                 };
 
-                let is_empty_msg = msg.content.as_ref().map_or(true, |c| c.is_empty())
-                    && msg.tool_calls.as_ref().map_or(true, |t| t.is_empty());
+                let is_empty_msg = msg.content.as_ref().is_none_or(String::is_empty)
+                    && msg.tool_calls.as_ref().is_none_or(Vec::is_empty);
 
                 if !is_empty_msg {
                     messages.push(msg);
@@ -152,24 +150,6 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 
     let mut optimized_non_system = non_system_msgs;
 
-    #[derive(serde::Serialize, serde::Deserialize)]
-    struct CtMessage {
-        #[serde(rename = "node-id")]
-        node_id: Option<String>,
-        role: String,
-        content: String,
-    }
-    #[derive(serde::Serialize, serde::Deserialize)]
-    struct CtOptimizationRequest {
-        messages: Vec<CtMessage>,
-    }
-    #[derive(serde::Serialize, serde::Deserialize)]
-    struct CtOptimizationResponse {
-        #[serde(rename = "optimized-messages")]
-        optimized_messages: Vec<CtMessage>,
-        summary: String,
-    }
-
     let ct_req = CtOptimizationRequest {
         messages: optimized_non_system
             .iter()
@@ -240,4 +220,24 @@ pub fn trigger_llm_stream(messages: Vec<Message>) -> Result<(), String> {
         tools_json,
     })?;
     Ok(())
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CtMessage {
+    #[serde(rename = "node-id")]
+    node_id: Option<String>,
+    role: String,
+    content: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CtOptimizationRequest {
+    messages: Vec<CtMessage>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CtOptimizationResponse {
+    #[serde(rename = "optimized-messages")]
+    optimized_messages: Vec<CtMessage>,
+    summary: String,
 }

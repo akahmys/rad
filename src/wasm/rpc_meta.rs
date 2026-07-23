@@ -8,6 +8,14 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             let _ = ctx.event_tx.send(crate::ipc::RasCoreEvent::TaskCompleted);
             Ok(serde_json::Value::Null)
         }
+        RasRpcCommand::LogTracedEvent {
+            trace_id,
+            module,
+            message,
+        } => {
+            println!("\x1b[36m[TRACE {trace_id}]\x1b[0m \x1b[33m[{module}]\x1b[0m {message}");
+            Ok(serde_json::Value::Null)
+        }
         RasRpcCommand::AskHumanApproval { prompt } => {
             if !ctx.hitl_enabled {
                 Ok(serde_json::Value::Bool(true))

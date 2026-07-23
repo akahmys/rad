@@ -30,16 +30,21 @@
 *   Rust 1.75 or higher
 *   `cargo`
 
-### 2.2 Build Instructions
+### 2.2 Build & Installation (One-Command)
 
 ```bash
-# Clone and build
+# Clone the repository
 git clone https://github.com/yourusername/rad.git
 cd rad
-cargo build --release
 
-# Run the runtime
-./target/release/rad
+# Add WASM target (if not already added)
+rustup target add wasm32-wasip2
+
+# Run the unified build & deployment script
+./scripts/build_all.sh
+
+# Run rad
+rad
 ```
 
 ### 2.3 Running Tests

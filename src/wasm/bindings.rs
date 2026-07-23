@@ -362,6 +362,9 @@ impl From<CoreRasRpcCommand> for wit::RasRpcCommand {
                 method,
                 arguments,
             }),
+            CoreRasRpcCommand::LogTracedEvent { .. } => {
+                panic!("LogTracedEvent is not mapped to legacy wit payload")
+            }
         }
     }
 }

@@ -171,6 +171,12 @@ pub enum RasRpcCommand {
     OpenProcess { command: String },
     /// Retrieve the current execution DAG.
     GetDag,
+    /// Log a structured event with a trace_id across Wasm boundaries.
+    LogTracedEvent {
+        trace_id: String,
+        module: String,
+        message: String,
+    },
     /// Ask for human approval via the terminal.
     AskHumanApproval { prompt: String },
     /// Report token usage for the LLM.

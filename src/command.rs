@@ -25,6 +25,8 @@ pub enum Command {
     Tree,
     /// List active permissions and registered tools.
     Tools,
+    /// Manage LLM server profiles and active endpoints.
+    Llm(llm::LlmSubcommand),
 }
 
 impl fmt::Display for Command {
@@ -40,6 +42,7 @@ impl fmt::Display for Command {
             Command::Reset => write!(f, "/reset"),
             Command::Tree => write!(f, "/tree"),
             Command::Tools => write!(f, "/tools"),
+            Command::Llm(_) => write!(f, "/llm"),
         }
     }
 }
@@ -85,6 +88,10 @@ impl CommandParser {
             "/reset" => Some(Command::Reset),
             "/tree" => Some(Command::Tree),
             "/tools" => Some(Command::Tools),
+            "/llm" | "/models" => {
+                let args = if parts.len() > 1 { &parts[1..] } else { &[] };
+                Some(Command::Llm(llm::parse_llm_command(args)))
+            }
             _ => None,
         }
     }
@@ -123,6 +130,7 @@ impl CommandManager {
                 println!("  /reset          - Save current session and start a new clean session");
                 println!("  /tree           - Show history DAG visually as a tree");
                 println!("  /tools          - List permissions and registered tools");
+                println!("  /llm [cmd]      - Manage LLM endpoints (list, switch, test, add, model)");
                 CommandResult::Continue
             }
             Command::Quit => CommandResult::Quit,
@@ -193,12 +201,17 @@ impl CommandManager {
                 let tools_str = tools::render_tools_and_permissions(orchestrator);
                 CommandResult::StatusInfo(tools_str)
             }
+            Command::Llm(ref subcmd) => {
+                let msg = llm::execute_llm_command(subcmd, orchestrator);
+                CommandResult::StatusInfo(msg)
+            }
         }
     }
 }
 
 pub mod completion;
 pub use completion::CommandHelper;
+pub mod llm;
 pub mod tools;
 pub mod tree;
 

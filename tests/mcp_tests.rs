@@ -52,7 +52,7 @@ fn setup_runtime(
     let active_processes = Arc::new(Mutex::new(HashMap::new()));
     let network = Arc::new(MockNetwork);
 
-    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
+    let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
     let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag });
     let (event_tx, event_rx) = std::sync::mpsc::channel();
 

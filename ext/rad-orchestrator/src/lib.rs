@@ -5,7 +5,9 @@
     clippy::collapsible_if,
     clippy::uninlined_format_args,
     clippy::single_match_else,
-    clippy::manual_assert
+    clippy::manual_assert,
+    clippy::same_length_and_capacity,
+    clippy::needless_pass_by_value
 )]
 
 wit_bindgen::generate!({
@@ -47,4 +49,12 @@ pub(crate) fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, St
         }
         Err(err_msg) => Err(err_msg),
     }
+}
+
+pub(crate) fn log_trace(trace_id: &str, message: &str) {
+    let _ = call_host(CoreRpcCommand::LogTracedEvent {
+        trace_id: trace_id.to_string(),
+        module: "rad-orchestrator".to_string(),
+        message: message.to_string(),
+    });
 }

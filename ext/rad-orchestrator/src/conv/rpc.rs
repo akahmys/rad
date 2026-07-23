@@ -215,6 +215,9 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
                 method,
                 arguments,
             }),
+            CoreRpcCommand::LogTracedEvent { .. } => {
+                panic!("LogTracedEvent serialization arm")
+            }
         }
     }
 }

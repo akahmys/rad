@@ -73,7 +73,7 @@ fn setup_runtime(
         responses: Arc::new(Mutex::new(responses)),
     });
 
-    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
+    let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
     let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
 
     let runtime = WasmRuntime::new(
@@ -123,7 +123,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
         hitl_enabled: false,
         verification_command: None,
     };
-    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
+    let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
 
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
@@ -141,7 +141,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
     };
 
     config.extensions = vec![rad::config::ExtensionConfig {
-        name: "openai-orchestrator".to_string(),
+        name: "rad-orchestrator".to_string(),
         enabled: true,
         role: "orchestrator".to_string(),
         source: wasm_path.to_string(),
@@ -317,7 +317,7 @@ fn test_core_auto_self_healing_integration() {
         hitl_enabled: false,
         verification_command: None,
     };
-    let wasm_path = "target/wasm32-wasip2/debug/openai_orchestrator.wasm";
+    let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
 
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
@@ -336,7 +336,7 @@ fn test_core_auto_self_healing_integration() {
 
     config.extensions = vec![
         rad::config::ExtensionConfig {
-            name: "openai-orchestrator".to_string(),
+            name: "rad-orchestrator".to_string(),
             enabled: true,
             role: "orchestrator".to_string(),
             source: wasm_path.to_string(),
@@ -344,10 +344,10 @@ fn test_core_auto_self_healing_integration() {
             config: HashMap::new(),
         },
         rad::config::ExtensionConfig {
-            name: "openai-connector".to_string(),
+            name: "llm-connector".to_string(),
             enabled: true,
             role: "llm-connector".to_string(),
-            source: "target/wasm32-wasip2/debug/openai_connector.wasm".to_string(),
+            source: "target/wasm32-wasip2/debug/llm_connector.wasm".to_string(),
             permissions: Some(perms.clone()),
             config: HashMap::new(),
         },

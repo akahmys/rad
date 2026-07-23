@@ -85,7 +85,10 @@ async fn run_http_stream_async(
     event_tx: &Sender<RasCoreEvent>,
     timeout_policy: &Arc<Mutex<TimeoutPolicy>>,
 ) -> Result<(), String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
     let (max_silent_wait, _) = get_timeout_values(timeout_policy);
 
     let req_future = client
@@ -93,10 +96,10 @@ async fn run_http_stream_async(
         .headers(headers)
         .body(body.to_string())
         .send();
-    let response = connect_with_timeout(req_future, max_silent_wait, event_tx).await?;
+    let response = connect_with_timeout(url, req_future, max_silent_wait, event_tx).await?;
 
     if !response.status().is_success() {
-        return Err(format!("HTTP status error: {}", response.status()));
+        return Err(format!("HTTP status error: {} for {}", response.status(), url));
     }
 
     let stream = response.bytes_stream();
@@ -104,25 +107,26 @@ async fn run_http_stream_async(
 }
 
 async fn connect_with_timeout(
+    url: &str,
     req_future: impl std::future::Future<Output = Result<reqwest::Response, reqwest::Error>>,
     max_silent_wait: Option<Duration>,
     event_tx: &Sender<RasCoreEvent>,
 ) -> Result<reqwest::Response, String> {
     if let Some(wait_dur) = max_silent_wait {
         if let Ok(res_res) = tokio::time::timeout(wait_dur, req_future).await {
-            res_res.map_err(|e| format!("HTTP request failed: {e}"))
+            res_res.map_err(|e| format!("Failed to connect to LLM server at {url}: {e}"))
         } else {
             let duration_ms = u64::try_from(wait_dur.as_millis()).unwrap_or(u64::MAX);
             let _ = event_tx.send(RasCoreEvent::StreamTimeout {
                 target: "llm".to_string(),
                 duration_ms,
             });
-            Err("Initial connection timed out".to_string())
+            Err(format!("Connection to LLM server at {url} timed out"))
         }
     } else {
         req_future
             .await
-            .map_err(|e| format!("HTTP request failed: {e}"))
+            .map_err(|e| format!("Failed to connect to LLM server at {url}: {e}"))
     }
 }
 

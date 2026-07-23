@@ -42,6 +42,21 @@ impl Orchestrator {
         let workspace_path = Path::new(&config.core.workspace);
         let session_id = self.session_id.lock().clone();
 
+        // Apply active LLM profile environment settings
+        if let Some(ref active_name) = config.llm.active
+            && let Some(profile) = config.llm.endpoints.get(active_name)
+        {
+            unsafe {
+                std::env::set_var("OPENAI_BASE_URL", &profile.base_url);
+                if let Some(key) = profile.resolved_api_key() {
+                    std::env::set_var("OPENAI_API_KEY", key);
+                }
+                if let Some(ref model) = profile.model {
+                    std::env::set_var("OPENAI_MODEL", model);
+                }
+            }
+        }
+
         // 1. Git Autopilot Setup
         let (has_git, initial_sha) =
             crate::orchestrator::autopilot::setup_git_autopilot(workspace_path, &session_id);

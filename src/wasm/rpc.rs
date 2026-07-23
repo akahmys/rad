@@ -80,6 +80,7 @@ pub fn execute_rpc_command(
         RasRpcCommand::WriteStdout { .. } => super::rpc_terminal::handle_terminal(cmd, &ctx),
 
         RasRpcCommand::CompleteTask
+        | RasRpcCommand::LogTracedEvent { .. }
         | RasRpcCommand::AskHumanApproval { .. }
         | RasRpcCommand::ReportTokenUsage { .. }
         | RasRpcCommand::GetTools
