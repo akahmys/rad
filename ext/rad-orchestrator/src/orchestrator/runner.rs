@@ -127,8 +127,10 @@ pub(crate) fn handle_done(
     })?;
 
     if pending_calls.is_empty() {
+        crate::log_trace("session", "No pending tool calls. Completing task.");
         let _ = call_host(RasRpcCommand::CompleteTask)?;
     } else {
+        crate::log_trace("session", &format!("Found {} pending tool calls.", pending_calls.len()));
         // Pillar 2: Take a snapshot of the workspace before running tools
         let _ = call_host(RasRpcCommand::TakeSnapshot {
             node_id: assistant_node_id.to_string(),
@@ -136,6 +138,7 @@ pub(crate) fn handle_done(
         });
 
         for mut tc in pending_calls {
+            crate::log_trace("session", &format!("Executing tool '{}' with args: {}", tc.name, tc.arguments));
             let result_raw = match execute_tool_sync(&tc.name, &tc.arguments) {
                 Ok(res) => res,
                 Err(e) => {

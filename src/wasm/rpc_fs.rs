@@ -10,7 +10,8 @@ use crate::ipc::RasRpcCommand;
 pub fn handle_fs(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_json::Value, String> {
     match cmd {
         RasRpcCommand::FileRead { path } => {
-            let data = ctx.sandbox.file_read(path)?;
+            let expanded = crate::config::expand_tilde(&path.to_string_lossy());
+            let data = ctx.sandbox.file_read(&expanded)?;
             serde_json::to_value(serde_bytes::Bytes::new(&data))
                 .map_err(|e| format!("Failed to serialize file_read result: {e}"))
         }
