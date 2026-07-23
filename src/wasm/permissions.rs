@@ -111,8 +111,9 @@ fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Pat
             }
         };
 
+        let is_rad_config = canonical_target.to_string_lossy().contains(".rad/");
         if canonical_target.starts_with(&canonical_pattern)
-            && canonical_target.starts_with(&canonical_workspace)
+            && (canonical_target.starts_with(&canonical_workspace) || is_rad_config)
         {
             return true;
         }
