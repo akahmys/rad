@@ -643,16 +643,19 @@ impl WasmState {
                 self.sandbox.file_edit_patch(&resolved, &args.diff)?;
                 "echo 'Patch applied successfully.'".to_string()
             }
-            "bash" => {
+            "bash" | "execute_command" | "spawn_bash_process" | "terminal" | "sh" => {
                 #[derive(serde::Deserialize)]
                 struct Args {
+                    #[serde(alias = "cmd")]
                     command: String,
                 }
                 let args: Args = serde_json::from_str(arguments)
                     .map_err(|e| format!("Failed to parse bash args: {e}"))?;
                 args.command
             }
-            _ => unreachable!(),
+            other => {
+                return Err(format!("Unknown fallback tool: {other}"));
+            }
         };
 
         bindings::RadExtensionImports::open_process(self, command_to_run)
