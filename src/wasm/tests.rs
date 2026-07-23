@@ -35,7 +35,13 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let dag = Arc::new(Mutex::new(Dag::new()));
     let active_processes = Arc::new(Mutex::new(HashMap::new()));
 
-    let wasm_path = std::path::Path::new("target/wasm32-wasip2/debug/security_guard.wasm");
+    let debug_path = std::path::Path::new("target/wasm32-wasip2/debug/security_guard.wasm");
+    let release_path = std::path::Path::new("target/wasm32-wasip2/release/security_guard.wasm");
+    let wasm_path = if debug_path.exists() {
+        debug_path
+    } else {
+        release_path
+    };
 
     let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: dag.clone() });
     let network_subsystem = Arc::new(crate::http::HttpManager);

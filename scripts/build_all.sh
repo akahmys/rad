@@ -14,7 +14,9 @@ cargo build --target wasm32-wasip2 --release \
     -p context-tools
 
 mkdir -p ~/.rad/wasm
+mkdir -p target/wasm32-wasip2/debug
 cp target/wasm32-wasip2/release/*.wasm ~/.rad/wasm/
+cp target/wasm32-wasip2/release/*.wasm target/wasm32-wasip2/debug/
 
 echo "🧪 Step 2: Running Unit and Integration Tests..."
 cargo test --workspace
