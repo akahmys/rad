@@ -20,16 +20,39 @@
 - [✅] Phase 26: WASM I/O & Streaming Performance Optimization (v0.31.0)
 - [✅] Phase 27: One-Command Build & Deployment Automation (v0.32.0)
 - [✅] Phase 28: Documentation Update, Config Deployment & Git Main Release (v0.33.0)
+- [✅] Phase 29: MCP Host Tilde Expansion & Instant Tool Result Visibility (v0.34.0)
 
 ---
 
-## 🛠️ Short-Term Plan: Phase 28
+## 🛠️ Short-Term Plan: Phase 29
 
 ### 💡 Current AWU Status
-- [✅] AWU 880: Update Architecture & Configuration Documentation (Result: Success)
-- [✅] AWU 881: Update Local & Workspace Configuration Files (Result: Success)
-- [✅] AWU 882: Run One-Command Build Script (scripts/build_all.sh) & Verification (Result: Success)
-- [✅] AWU 883: Commit & Push All Changes to Git (main Branch) (Result: Success)
+- [✅] AWU 884: Host-side tilde expansion & permission bypass for MCP binary paths in `src/wasm/imports_rpc.rs` & `permissions.rs` (Result: Success)
+- [✅] AWU 885: Remove WASM-side unexpanded path check in `ext/mcp-tool-provider/src/client.rs` & add initialization error tracing (Result: Success)
+- [✅] AWU 886: Instant Tool Result Output via `WriteStdout` in `ext/rad-orchestrator/src/orchestrator/runner.rs` (Result: Success)
+- [✅] AWU 887: One-command build, full test verification, audit, local installation & push to main (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 884: Host-side tilde expansion & permission bypass for MCP binary paths
+- **Objective:** Ensure host-side `open_process` expands `~` for binary commands and `permissions.rs` allows execution of binaries in `~/.cargo/bin/`.
+- **Scope:** `src/wasm/imports_rpc.rs`, `src/wasm/permissions.rs`.
+- **Definition of Done (DoD):** MCP binary paths with `~` are expanded and permitted by host RPC.
+
+#### AWU 885: Remove WASM-side unexpanded path check in `ext/mcp-tool-provider`
+- **Objective:** Clean up WASM-side path checking in `client.rs` so unexpanded tildes are passed to the host cleanly.
+- **Scope:** `ext/mcp-tool-provider/src/client.rs`.
+- **Definition of Done (DoD):** WASM client delegates path expansion to host `open_process`.
+
+#### AWU 886: Instant Tool Result Output via `WriteStdout`
+- **Objective:** Write tool execution results directly to terminal stdout in `runner.rs` immediately after execution.
+- **Scope:** `ext/rad-orchestrator/src/orchestrator/runner.rs`.
+- **Definition of Done (DoD):** Raw tool results are printed to screen in real time.
+
+#### AWU 887: One-command build, full test verification, audit, local installation & push to main
+- **Objective:** Run `./scripts/build_all.sh`, pass all 60 tests and Clippy, install binary, and push to main.
+- **Scope:** Workspace repository.
+- **Definition of Done (DoD):** All tests pass, binary installed, clean git status on main.
 
 ### 📝 AWU Details
 

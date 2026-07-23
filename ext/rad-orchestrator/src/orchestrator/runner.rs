@@ -191,6 +191,11 @@ pub(crate) fn handle_done(
                 }
             };
             let result_content = trim_large_output(&result_raw);
+            if !result_content.trim().is_empty() {
+                let _ = call_host(RasRpcCommand::WriteStdout {
+                    text: format!("\n\x1b[36m[Tool Output]\x1b[0m\n{}\n", result_content.trim()),
+                });
+            }
             tc.result = Some(result_content);
 
             let tool_msg = Message {

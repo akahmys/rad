@@ -127,8 +127,19 @@ impl bindings::RadExtensionImports for WasmState {
         &mut self,
         command: String,
     ) -> Result<wasmtime::component::Resource<crate::wasm::HostExecution>, String> {
-        let expanded_command = if command.starts_with("~/") || command == "~" {
-            crate::config::expand_tilde(&command).to_string_lossy().to_string()
+        let expanded_command = if command.starts_with('~') {
+            let mut parts = command.split_whitespace();
+            if let Some(first) = parts.next() {
+                let expanded_first = crate::config::expand_tilde(first).to_string_lossy().to_string();
+                let rest: Vec<&str> = parts.collect();
+                if rest.is_empty() {
+                    expanded_first
+                } else {
+                    format!("{expanded_first} {}", rest.join(" "))
+                }
+            } else {
+                command.clone()
+            }
         } else {
             command.clone()
         };

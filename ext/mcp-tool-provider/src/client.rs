@@ -108,37 +108,21 @@ pub fn init_mcp_servers() -> Result<(), String> {
     }
 
     let mut active = HashMap::new();
-    let home = std::env::var("HOME").unwrap_or_default();
     if let Some(config) = load_mcp_config()? {
         if let Some(servers) = config.mcp_servers {
             for (name, cfg) in servers {
-                let expanded_cmd = if cfg.command.starts_with("~/") && !home.is_empty() {
-                    format!("{home}/{}", &cfg.command[2..])
-                } else {
-                    cfg.command.clone()
-                };
-                // Check if binary command exists before trying to open process
-                if expanded_cmd.starts_with('/') && !std::path::Path::new(&expanded_cmd).exists() {
-                    continue;
-                }
-
-                let expanded_args: Vec<String> = cfg
-                    .args
-                    .iter()
-                    .map(|arg| {
-                        if arg.starts_with("~/") && !home.is_empty() {
-                            format!("{home}/{}", &arg[2..])
-                        } else {
-                            arg.clone()
-                        }
-                    })
-                    .collect();
-                let mut cmd_parts = vec![expanded_cmd];
-                cmd_parts.extend(expanded_args);
+                let mut cmd_parts = vec![cfg.command.clone()];
+                cmd_parts.extend(cfg.args.clone());
                 let command_line = cmd_parts.join(" ");
 
-                let Ok(exec) = open_process(&command_line) else {
-                    continue;
+                let exec = match open_process(&command_line) {
+                    Ok(exec) => exec,
+                    Err(e) => {
+                        let _ = crate::host_rpc(&wit::RasRpcCommand::WriteStdout(
+                            format!("\n\x1b[33m[MCP Warning] Failed to spawn MCP server '{name}': {e}\x1b[0m\n")
+                        ));
+                        continue;
+                    }
                 };
                 let stdin = exec.get_stdin();
                 let stdout = exec.get_stdout();
