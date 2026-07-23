@@ -234,15 +234,24 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                     })
                     .collect();
 
-                let stream_res = conn_bindings
+                let stream_res = match conn_bindings
                     .radcomp_connector_producer()
                     .call_generate_stream(
                         &mut connector_ref.store,
                         model,
                         &wit_messages,
                         &wit_tools,
-                    )
-                    .map_err(|e| format!("generate_stream call failed: {e}"))??;
+                    ) {
+                    Ok(Ok(stream)) => stream,
+                    Ok(Err(e)) => {
+                        eprintln!("\x1b[31m[LLM Connector Error] {e}\x1b[0m");
+                        return Err(format!("LLM Stream Generation Error: {e}"));
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[31m[LLM Connector Call Error] {e}\x1b[0m");
+                        return Err(format!("LLM Connector Call Error: {e}"));
+                    }
+                };
                 let resource_any = stream_res;
 
                 // Spawn a thread to poll the event stream.

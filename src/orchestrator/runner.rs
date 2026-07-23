@@ -48,13 +48,19 @@ impl Orchestrator {
         {
             unsafe {
                 std::env::set_var("OPENAI_BASE_URL", &profile.base_url);
+                std::env::set_var("LLM_BASE_URL", &profile.base_url);
+                std::env::set_var("RAD_BASE_URL", &profile.base_url);
                 if let Some(key) = profile.resolved_api_key() {
-                    std::env::set_var("OPENAI_API_KEY", key);
+                    std::env::set_var("OPENAI_API_KEY", &key);
+                    std::env::set_var("LLM_API_KEY", &key);
                 }
                 if let Some(ref model) = profile.model {
                     std::env::set_var("OPENAI_MODEL", model);
+                    std::env::set_var("LLM_MODEL", model);
                 }
             }
+            // Clear cached runtimes so WasiCtx initializes with updated environment variables
+            let _ = self.clear_runtimes();
         }
 
         // 1. Git Autopilot Setup

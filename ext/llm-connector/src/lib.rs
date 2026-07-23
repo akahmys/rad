@@ -318,8 +318,9 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
             return Err("No LLM endpoint configured. Please set LLM_BASE_URL (or RAD_BASE_URL / OPENAI_BASE_URL) or API_KEY.".to_string());
         };
 
+        eprintln!("[llm-connector] Connecting to endpoint: {url}");
         let stream_handle = open_http_stream(&url, &headers, &body)
-            .map_err(|e| format!("open_http_stream failed: {e}"))?;
+            .map_err(|e| format!("open_http_stream to {url} failed: {e}"))?;
 
         let stream_impl = EventStreamImpl {
             stream_handle,
