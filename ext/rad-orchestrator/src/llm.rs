@@ -207,18 +207,22 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 }
 
 pub fn trigger_llm_stream(messages: Vec<Message>) -> Result<(), String> {
+    crate::log_trace("session", "Getting available tools...");
     let tools = get_available_tools().unwrap_or_default();
+    crate::log_trace("session", &format!("Got {} available tools. Serializing...", tools.len()));
 
     let messages_json = serde_json::to_string(&messages)
         .map_err(|e| format!("Failed to serialize messages: {e}"))?;
     let tools_json =
         serde_json::to_string(&tools).map_err(|e| format!("Failed to serialize tools: {e}"))?;
 
+    crate::log_trace("session", "Calling GenerateLlmStream host RPC...");
     call_host(RasRpcCommand::GenerateLlmStream {
         model: "qwen".to_string(),
         messages_json,
         tools_json,
     })?;
+    crate::log_trace("session", "GenerateLlmStream host RPC call completed.");
     Ok(())
 }
 
