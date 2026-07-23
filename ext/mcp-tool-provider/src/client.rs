@@ -153,8 +153,8 @@ fn read_line(stdout: &wit::StreamHandle) -> Result<String, String> {
     loop {
         let chunk = stdout.read(1024)?;
         if chunk.is_empty() {
-            if start.elapsed() > std::time::Duration::from_secs(5) {
-                return Err("Timeout reading from MCP server".to_string());
+            if start.elapsed() > std::time::Duration::from_secs(15) {
+                return Err("Timeout reading from MCP server (15s elapsed)".to_string());
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
             continue;
