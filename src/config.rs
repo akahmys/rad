@@ -104,6 +104,7 @@ pub struct PermissionConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExtensionConfig {
     pub name: String,
+    #[serde(default)]
     pub source: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
