@@ -115,7 +115,7 @@ impl CommandManager {
     #[must_use]
     pub fn execute(
         command: Command,
-        orchestrator: &crate::orchestrator::Orchestrator,
+        orchestrator: &std::sync::Arc<crate::orchestrator::Orchestrator>,
     ) -> CommandResult {
         match command {
             Command::Help => {
