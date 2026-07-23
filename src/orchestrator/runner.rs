@@ -196,26 +196,30 @@ impl Orchestrator {
         self: &Arc<Self>,
         event_tx: &Sender<RasCoreEvent>,
     ) -> Result<HashMap<String, Arc<Mutex<WasmRuntime>>>, String> {
-        let mut guard = self.wasm_runtime.lock();
-        let config_guard = self.config.lock();
-        for ext in &config_guard.extensions {
+        let (extensions, hitl_enabled) = {
+            let config_guard = self.config.lock();
+            (config_guard.extensions.clone(), config_guard.core.hitl_enabled)
+        };
+
+        for ext in &extensions {
             if !ext.enabled {
                 continue;
             }
-            if guard.contains_key(&ext.name) {
-                eprintln!("[DEBUG] Extension '{}' is already in cache.", ext.name);
-                continue;
+            {
+                let guard = self.wasm_runtime.lock();
+                if guard.contains_key(&ext.name) {
+                    continue;
+                }
             }
+
             let permissions = ext.permissions.clone().unwrap_or_default();
             let wasm_path_buf = crate::config::expand_tilde(&ext.source);
             let wasm_path = wasm_path_buf.as_path();
-            eprintln!("[DEBUG] Loading WASM for '{}' at {:?}...", ext.name, wasm_path);
             if wasm_path.exists() {
                 let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl {
                     dag: self.dag.clone(),
                 });
                 let network_subsystem = Arc::new(crate::http::HttpManager);
-                eprintln!("[DEBUG] Calling WasmRuntime::new for '{}'...", ext.name);
                 let mut runtime = WasmRuntime::new(
                     ext.name.clone(),
                     wasm_path,
@@ -228,12 +232,10 @@ impl Orchestrator {
                     self.active_processes.clone(),
                     event_tx.clone(),
                     Some(Arc::downgrade(self)),
-                    config_guard.core.hitl_enabled,
+                    hitl_enabled,
                 )?;
-                eprintln!("[DEBUG] WasmRuntime::new for '{}' succeeded.", ext.name);
 
                 if runtime.tool_provider.is_some() {
-                    eprintln!("[DEBUG] Getting tools from tool provider '{}'...", ext.name);
                     match runtime.get_tools() {
                         Ok(json_str) => {
                             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
@@ -252,11 +254,12 @@ impl Orchestrator {
                     }
                 }
 
+                let mut guard = self.wasm_runtime.lock();
                 guard.insert(ext.name.clone(), Arc::new(Mutex::new(runtime)));
-            } else {
-                eprintln!("[DEBUG] WASM file for '{}' does not exist!", ext.name);
             }
         }
+
+        let guard = self.wasm_runtime.lock();
         Ok(guard.clone())
     }
 
