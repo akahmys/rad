@@ -34,16 +34,14 @@ pub static MCP_SERVERS: Mutex<Option<HashMap<String, ActiveMcpServer>>> = Mutex:
 pub static MCP_TOOL_MAPPING: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
 
 fn read_config_file(path: &str) -> Option<String> {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let expanded = if path.starts_with("~/") && !home.is_empty() {
-        format!("{home}/{}", &path[2..])
-    } else {
-        path.to_string()
-    };
-
-    let cmd = wit::RasRpcCommand::FileRead(expanded);
+    let cmd = wit::RasRpcCommand::FileRead(path.to_string());
     if let Ok(res_str) = crate::host_rpc(&cmd) {
         if !res_str.is_empty() && res_str != "null" {
+            if let Ok(bytes) = serde_json::from_str::<Vec<u8>>(&res_str) {
+                if let Ok(s) = String::from_utf8(bytes) {
+                    return Some(s);
+                }
+            }
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&res_str) {
                 if let Some(s) = val.as_str() {
                     return Some(s.to_string());
