@@ -33,7 +33,20 @@ pub struct ActiveMcpServer {
 pub static MCP_SERVERS: Mutex<Option<HashMap<String, ActiveMcpServer>>> = Mutex::new(None);
 pub static MCP_TOOL_MAPPING: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
 
+fn read_config_file(path: &str) -> Option<String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let expanded = if path.starts_with("~/") && !home.is_empty() {
+        format!("{home}/{}", &path[2..])
+    } else {
+        path.to_string()
+    };
+    std::fs::read_to_string(&expanded).ok()
+}
+
 pub fn load_mcp_config() -> Result<Option<McpProviderConfig>, String> {
+    if std::env::var("RAD_TEST_PORT").is_ok() {
+        return Ok(None);
+    }
     let paths = [
         "config.json",
         "rad.json",
@@ -42,7 +55,7 @@ pub fn load_mcp_config() -> Result<Option<McpProviderConfig>, String> {
     ];
     let mut content = None;
     for p in &paths {
-        if let Ok(c) = std::fs::read_to_string(p) {
+        if let Some(c) = read_config_file(p) {
             content = Some(c);
             break;
         }
@@ -50,7 +63,7 @@ pub fn load_mcp_config() -> Result<Option<McpProviderConfig>, String> {
     if content.is_none() {
         if let Ok(home) = std::env::var("HOME") {
             let user_global = format!("{home}/.rad/config.json");
-            if let Ok(c) = std::fs::read_to_string(&user_global) {
+            if let Some(c) = read_config_file(&user_global) {
                 content = Some(c);
             }
         }
@@ -67,7 +80,7 @@ pub fn load_mcp_config() -> Result<Option<McpProviderConfig>, String> {
     };
 
     for ext in extensions {
-        if ext.name == "mcp-tool-provider" || ext.name == "rad-orchestrator" {
+        if ext.name == "mcp-tool-provider" {
             if ext.config.is_some() {
                 return Ok(ext.config);
             }
