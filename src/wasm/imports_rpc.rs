@@ -654,7 +654,7 @@ impl WasmState {
                 self.sandbox.file_edit_patch(&resolved, &args.diff)?;
                 "echo 'Patch applied successfully.'".to_string()
             }
-            "bash" | "execute_command" | "spawn_bash_process" | "terminal" | "sh" => {
+            "bash" | "spawn_bash_process" => {
                 #[derive(serde::Deserialize)]
                 struct Args {
                     #[serde(alias = "cmd")]
@@ -665,7 +665,7 @@ impl WasmState {
                 args.command
             }
             other => {
-                return Err(format!("Unknown fallback tool: {other}"));
+                return Err(format!("Tool '{other}' is not a valid built-in tool and no registered MCP tool provider handled it"));
             }
         };
 

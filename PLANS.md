@@ -21,16 +21,39 @@
 - [✅] Phase 27: One-Command Build & Deployment Automation (v0.32.0)
 - [✅] Phase 28: Documentation Update, Config Deployment & Git Main Release (v0.33.0)
 - [✅] Phase 29: MCP Host Tilde Expansion & Instant Tool Result Visibility (v0.34.0)
+- [✅] Phase 30: Complete Removal of Built-in Shell Fallbacks & Accurate MCP Startup Verification Output (v0.35.0)
 
 ---
 
-## 🛠️ Short-Term Plan: Phase 29
+## 🛠️ Short-Term Plan: Phase 30
 
 ### 💡 Current AWU Status
-- [✅] AWU 884: Host-side tilde expansion & permission bypass for MCP binary paths in `src/wasm/imports_rpc.rs` & `permissions.rs` (Result: Success)
-- [✅] AWU 885: Remove WASM-side unexpanded path check in `ext/mcp-tool-provider/src/client.rs` & add initialization error tracing (Result: Success)
-- [✅] AWU 886: Instant Tool Result Output via `WriteStdout` in `ext/rad-orchestrator/src/orchestrator/runner.rs` (Result: Success)
-- [✅] AWU 887: One-command build, full test verification, audit, local installation & push to main (Result: Success)
+- [✅] AWU 888: Remove premature MCP extension header printing in `src/main.rs` & implement verified status output in `src/orchestrator/runner.rs` (Result: Success)
+- [✅] AWU 889: Delete legacy `execute_command`/`spawn_bash_process` fallbacks from `ext/rad-orchestrator/src/orchestrator/runner.rs` (Result: Success)
+- [✅] AWU 890: Clean up legacy command fallbacks in `src/wasm/rpc_meta.rs` & `src/wasm/imports_rpc.rs` (Result: Success)
+- [✅] AWU 891: One-command build, full test verification, audit, local installation & push to main (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 888: Verified status output for MCP extension loading
+- **Objective:** Update extension startup display to reflect real runtime tool verification (green [OK - N tools] or red [FAILED - 0 tools]).
+- **Scope:** `src/main.rs`, `src/orchestrator/runner.rs`.
+- **Definition of Done (DoD):** Startup display accurately reflects tool counts without misleading pre-verification logs.
+
+#### AWU 889: Delete legacy fallbacks from rad-orchestrator
+- **Objective:** Remove `execute_command` and `spawn_bash_process` alias handling from `runner.rs`.
+- **Scope:** `ext/rad-orchestrator/src/orchestrator/runner.rs`.
+- **Definition of Done (DoD):** Only tools from tool providers are recognized.
+
+#### AWU 890: Clean up legacy command fallbacks in host RPC
+- **Objective:** Remove legacy fallback handlers for execute_command/bash in `rpc_meta.rs` and `imports_rpc.rs`.
+- **Scope:** `src/wasm/rpc_meta.rs`, `src/wasm/imports_rpc.rs`.
+- **Definition of Done (DoD):** Unexposed shell fallback execution is completely removed.
+
+#### AWU 891: One-command build, full test verification, audit, local installation & push to main
+- **Objective:** Run `./scripts/build_all.sh`, pass all 60 tests and Clippy, install binary, and push to main.
+- **Scope:** Workspace repository.
+- **Definition of Done (DoD):** All tests pass, binary installed, clean git status on main.
 
 ### 📝 AWU Details
 

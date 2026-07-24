@@ -535,7 +535,7 @@ fn execute_core_tool_fallback(
                 "Patch applied successfully.".to_string(),
             ))
         }
-        "bash" | "spawn_bash_process" | "execute_command" | "terminal" | "sh" => {
+        "bash" | "spawn_bash_process" => {
             #[derive(serde::Deserialize)]
             struct Args {
                 #[serde(alias = "cmd")]
@@ -579,7 +579,9 @@ fn execute_core_tool_fallback(
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
         }
-        other => Err(format!("Unknown tool: {other}")),
+        other => Err(format!(
+            "Tool '{other}' is not a valid built-in tool and no registered MCP tool provider handled it"
+        )),
     };
     crate::log_host!("[HOST] Core Tool Fallback Result for '{}': {:?}", name, res);
     res

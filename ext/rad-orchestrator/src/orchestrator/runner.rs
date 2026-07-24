@@ -282,10 +282,7 @@ fn parse_inline_tool_calls(
                 let call_id = format!("inline_call_{call_count}");
                 call_count += 1;
 
-                let norm_name = match name {
-                    "execute_command" | "bash" | "sh" | "terminal" => "spawn_bash_process",
-                    other => other,
-                };
+                let norm_name = name;
 
                 let norm_args = if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_slice) {
                     val.to_string()

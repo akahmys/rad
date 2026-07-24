@@ -241,15 +241,22 @@ impl Orchestrator {
                             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
                                 && let Some(arr) = val.as_array()
                             {
-                                println!(
-                                    "\x1b[32mVerified {} tools from extension '{}'\x1b[0m",
-                                    arr.len(),
-                                    ext.name
-                                );
+                                if arr.is_empty() {
+                                    println!(
+                                        "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools (Check MCP binary paths or servers)\x1b[0m",
+                                        ext.name
+                                    );
+                                } else {
+                                    println!(
+                                        "\x1b[32m[OK] Verified {} tools from extension '{}'\x1b[0m",
+                                        arr.len(),
+                                        ext.name
+                                    );
+                                }
                             }
                         }
                         Err(e) => {
-                            println!("\x1b[31mTool provider '{}' error: {e}\x1b[0m", ext.name);
+                            println!("\x1b[31m[FAILED] Tool provider '{}' error: {e}\x1b[0m", ext.name);
                         }
                     }
                 }
