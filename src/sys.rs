@@ -20,14 +20,17 @@ pub fn kill_process_group(pgid: Pid) -> Result<(), String> {
     use nix::unistd::Pid as NixPid;
 
     let pid = NixPid::from_raw(pgid.as_raw());
-    match killpg(pid, Signal::SIGKILL) {
-        Ok(_) => Ok(()),
-        Err(nix::Error::ESRCH) => {
-            // Process group already exited, ignore
-            Ok(())
+    let _ = killpg(pid, Signal::SIGKILL);
+
+    let start = std::time::Instant::now();
+    while start.elapsed() < std::time::Duration::from_millis(100) {
+        if killpg(pid, Signal::SIGTERM) == Err(nix::Error::ESRCH) {
+            break;
         }
-        Err(e) => Err(e.to_string()),
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
+
+    Ok(())
 }
 
 #[cfg(not(unix))]

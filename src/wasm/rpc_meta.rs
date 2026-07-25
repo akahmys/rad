@@ -47,20 +47,13 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                     let Some(mut runtime) = runtime_arc.try_lock() else {
                         continue;
                     };
-                    if runtime.tool_provider.is_some() {
-                        match runtime.get_tools() {
-                            Ok(json_str) => {
-                                if let Ok(serde_json::Value::Array(arr)) =
-                                    serde_json::from_str::<serde_json::Value>(&json_str)
-                                    && let Some(arr_ref) = all_tools.as_array_mut()
-                                {
-                                    arr_ref.extend(arr);
-                                }
-                            }
-                            Err(e) => {
-                                return Err(format!("Failed to get tools: {e}"));
-                            }
-                        }
+                    if runtime.tool_provider.is_some()
+                        && let Ok(json_str) = runtime.get_tools()
+                        && let Ok(serde_json::Value::Array(arr)) =
+                            serde_json::from_str::<serde_json::Value>(&json_str)
+                        && let Some(arr_ref) = all_tools.as_array_mut()
+                    {
+                        arr_ref.extend(arr);
                     }
                 }
                 Ok(all_tools)

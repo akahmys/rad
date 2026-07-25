@@ -41,29 +41,6 @@ impl FsSandbox {
         &self.workspace_dir
     }
 
-    fn canonicalize_path(&self, path: &Path) -> Result<PathBuf, String> {
-        let absolute_path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            let abs_workspace = if self.workspace_dir.is_absolute() {
-                self.workspace_dir.clone()
-            } else {
-                std::env::current_dir()
-                    .map_err(|e| format!("Failed to get current dir: {e}"))?
-                    .join(&self.workspace_dir)
-            };
-            abs_workspace.join(path)
-        };
-
-        if absolute_path.exists() {
-            absolute_path
-                .canonicalize()
-                .map_err(|e| format!("Failed to canonicalize path: {e}"))
-        } else {
-            Self::clean_path(&absolute_path)
-        }
-    }
-
     fn clean_path(path: &Path) -> Result<PathBuf, String> {
         let mut components = Vec::new();
         for component in path.components() {
@@ -113,25 +90,49 @@ impl FsSandbox {
         Ok(cleaned)
     }
 
+    /// Resolves, expands tildes, and canonicalizes raw input paths cleanly.
+    pub fn resolve_target_path(&self, raw_path: &Path) -> Result<PathBuf, String> {
+        let expanded = crate::config::expand_tilde(&raw_path.to_string_lossy());
+        let absolute = if expanded.is_absolute() {
+            expanded.to_path_buf()
+        } else {
+            let abs_workspace = if self.workspace_dir.is_absolute() {
+                self.workspace_dir.clone()
+            } else {
+                std::env::current_dir()
+                    .map_err(|e| format!("Failed to get current dir: {e}"))?
+                    .join(&self.workspace_dir)
+            };
+            abs_workspace.join(&expanded)
+        };
+
+        if absolute.exists() {
+            absolute
+                .canonicalize()
+                .map_err(|e| format!("Failed to canonicalize path: {e}"))
+        } else {
+            Self::clean_path(&absolute)
+        }
+    }
+
+    fn canonicalize_path(&self, path: &Path) -> Result<PathBuf, String> {
+        self.resolve_target_path(path)
+    }
+
     fn has_permission(&self, path: &Path, allowed_patterns: &[String]) -> Result<bool, String> {
-        let canonical_path = self.canonicalize_path(path)?;
+        let canonical_path = self.resolve_target_path(path)?;
         for pattern in allowed_patterns {
             if pattern == "*" {
                 return Ok(true);
             }
             let pattern_buf = PathBuf::from(pattern);
-            let absolute_pattern = if pattern_buf.is_absolute() {
-                pattern_buf
+            let expanded_pattern = crate::config::expand_tilde(&pattern_buf.to_string_lossy());
+            let absolute_pattern = if expanded_pattern.is_absolute() {
+                expanded_pattern.to_path_buf()
             } else {
-                self.workspace_dir.join(&pattern_buf)
+                self.workspace_dir.join(&expanded_pattern)
             };
-            let canonical_pattern = if absolute_pattern.exists() {
-                absolute_pattern
-                    .canonicalize()
-                    .map_err(|e| format!("Failed to canonicalize pattern path: {e}"))?
-            } else {
-                Self::clean_path(&absolute_pattern)?
-            };
+            let canonical_pattern = Self::clean_path(&absolute_pattern)?;
             if canonical_path.starts_with(&canonical_pattern) {
                 return Ok(true);
             }
@@ -145,9 +146,12 @@ impl FsSandbox {
     ///
     /// Returns an error if the read permission check fails or file read fails.
     pub fn file_read(&self, path: &Path) -> Result<Vec<u8>, crate::error::UnifiedError> {
+        let resolved = self
+            .resolve_target_path(path)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         let read_allow = self.fs_read_allow.lock();
         let allowed = self
-            .has_permission(path, &read_allow)
+            .has_permission(&resolved, &read_allow)
             .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         if !allowed {
             return Err(crate::error::UnifiedError::l2(
@@ -155,10 +159,7 @@ impl FsSandbox {
                 "FsPermission",
             ));
         }
-        let canonical_path = self
-            .canonicalize_path(path)
-            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
-        fs::read(&canonical_path)
+        fs::read(&resolved)
             .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to read file: {e}"), "Fs"))
     }
 
@@ -168,9 +169,12 @@ impl FsSandbox {
     ///
     /// Returns an error if the write permission check fails or file write fails.
     pub fn file_write(&self, path: &Path, data: &[u8]) -> Result<(), crate::error::UnifiedError> {
+        let resolved = self
+            .resolve_target_path(path)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         let write_allow = self.fs_write_allow.lock();
         let allowed = self
-            .has_permission(path, &write_allow)
+            .has_permission(&resolved, &write_allow)
             .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         if !allowed {
             return Err(crate::error::UnifiedError::l2(
@@ -178,10 +182,7 @@ impl FsSandbox {
                 "FsPermission",
             ));
         }
-        let canonical_path = self
-            .canonicalize_path(path)
-            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
-        if let Some(parent) = canonical_path.parent() {
+        if let Some(parent) = resolved.parent() {
             fs::create_dir_all(parent).map_err(|e| {
                 crate::error::UnifiedError::l1(
                     format!("Failed to create parent directory: {e}"),
@@ -189,7 +190,7 @@ impl FsSandbox {
                 )
             })?;
         }
-        fs::write(&canonical_path, data)
+        fs::write(&resolved, data)
             .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to write file: {e}"), "Fs"))
     }
 
@@ -203,9 +204,12 @@ impl FsSandbox {
         path: &Path,
         diff: &str,
     ) -> Result<(), crate::error::UnifiedError> {
+        let resolved = self
+            .resolve_target_path(path)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         let write_allow = self.fs_write_allow.lock();
         let allowed = self
-            .has_permission(path, &write_allow)
+            .has_permission(&resolved, &write_allow)
             .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
         if !allowed {
             return Err(crate::error::UnifiedError::l2(
@@ -213,12 +217,8 @@ impl FsSandbox {
                 "FsPermission",
             ));
         }
-        let canonical_path = self
-            .canonicalize_path(path)
-            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
-
-        let original = if canonical_path.exists() {
-            fs::read_to_string(&canonical_path).map_err(|e| {
+        let original_text = if resolved.exists() {
+            fs::read_to_string(&resolved).map_err(|e| {
                 crate::error::UnifiedError::l1(
                     format!("Failed to read file for patching: {e}"),
                     "Fs",
@@ -231,11 +231,11 @@ impl FsSandbox {
         let diff_patch = diffy::Patch::from_str(diff).map_err(|e| {
             crate::error::UnifiedError::l2(format!("Failed to parse diff patch: {e}"), "FsPatch")
         })?;
-        let modified = diffy::apply(&original, &diff_patch).map_err(|e| {
+        let modified = diffy::apply(&original_text, &diff_patch).map_err(|e| {
             crate::error::UnifiedError::l2(format!("Failed to apply patch: {e}"), "FsPatch")
         })?;
 
-        if let Some(parent) = canonical_path.parent() {
+        if let Some(parent) = resolved.parent() {
             fs::create_dir_all(parent).map_err(|e| {
                 crate::error::UnifiedError::l1(
                     format!("Failed to create parent directory: {e}"),
@@ -243,7 +243,7 @@ impl FsSandbox {
                 )
             })?;
         }
-        fs::write(&canonical_path, modified).map_err(|e| {
+        fs::write(&resolved, modified).map_err(|e| {
             crate::error::UnifiedError::l1(format!("Failed to write patched file: {e}"), "Fs")
         })
     }

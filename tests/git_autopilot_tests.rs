@@ -3,7 +3,6 @@ use rad::dag::Dag;
 use rad::orchestrator::Orchestrator;
 
 use parking_lot::Mutex;
-use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;

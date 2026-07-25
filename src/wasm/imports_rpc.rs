@@ -224,12 +224,15 @@ impl bindings::RadExtensionImports for WasmState {
 
         if let Some(orchestrator) = self.orchestrator.as_ref().and_then(|w| w.upgrade()) {
             // Find the tool provider runtime
-            let runtimes = orchestrator.wasm_runtime.lock();
-            for (_id, runtime_arc) in runtimes.iter() {
+            let runtimes = {
+                let guard = orchestrator.wasm_runtime.lock();
+                guard.values().cloned().collect::<Vec<_>>()
+            };
+            for runtime_arc in runtimes {
                 let Some(mut runtime) = runtime_arc.try_lock() else {
                     continue;
                 };
-                if runtime.tool_provider.is_some()
+                if (runtime.role == "tool-provider" || runtime.tool_provider.is_some())
                     && let Ok(json_str) = runtime.get_tools()
                     && let Ok(serde_json::Value::Array(arr)) =
                         serde_json::from_str::<serde_json::Value>(&json_str)
@@ -245,6 +248,22 @@ impl bindings::RadExtensionImports for WasmState {
                         break;
                     }
                 }
+            }
+        }
+
+        if let Some(orchestrator) = self.orchestrator.as_ref().and_then(|w| w.upgrade()) {
+            let exec_cmd = crate::ipc::RasRpcCommand::ExecuteTool {
+                call_id: "test".to_string(),
+                name: name.clone(),
+                arguments: arguments.clone(),
+            };
+            let dummy_req = crate::ipc::RasRpcRequest {
+                id: Some("test".to_string()),
+                command: exec_cmd,
+            };
+            let req_bytes = serde_json::to_vec(&dummy_req).unwrap_or_default();
+            if let Err(e) = orchestrator.verify_rpc_exclude(&self.name, &dummy_req, &req_bytes) {
+                return Err(format!("Operation rejected by security extension: {e}"));
             }
         }
 

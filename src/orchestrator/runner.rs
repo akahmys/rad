@@ -60,8 +60,6 @@ impl Orchestrator {
                     std::env::set_var("LLM_MODEL", model);
                 }
             }
-            // Clear cached runtimes so WasiCtx initializes with updated environment variables
-            let _ = self.clear_runtimes();
         }
 
         // 1. Git Autopilot Setup
@@ -126,6 +124,13 @@ impl Orchestrator {
             } else {
                 eprintln!("[DEBUG] Dispatching HumanInputReceived to {} runtimes...", wasm_runtimes.len());
                 for (name, runtime_arc) in &wasm_runtimes {
+                    let is_orchestrator = {
+                        let runtime = runtime_arc.lock();
+                        runtime.role == "orchestrator"
+                    };
+                    if !is_orchestrator {
+                        continue;
+                    }
                     eprintln!("[DEBUG] Calling on_event on runtime '{name}'...");
                     let mut runtime = runtime_arc.lock();
                     if let Err(e) = runtime.on_event(&init_event) {
@@ -224,11 +229,11 @@ impl Orchestrator {
                     ext.name.clone(),
                     wasm_path,
                     ext.role.clone(),
-                    permissions,
+                    permissions.clone(),
                     self.sandbox.clone() as Arc<dyn crate::subsystems::FsSubsystem>,
                     self.process_manager.clone() as Arc<dyn crate::subsystems::ProcessSubsystem>,
-                    dag_subsystem,
-                    network_subsystem,
+                    dag_subsystem.clone(),
+                    network_subsystem.clone(),
                     self.active_processes.clone(),
                     event_tx.clone(),
                     Some(Arc::downgrade(self)),
@@ -242,10 +247,49 @@ impl Orchestrator {
                                 && let Some(arr) = val.as_array()
                             {
                                 if arr.is_empty() {
-                                    println!(
-                                        "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools (Check MCP binary paths or servers)\x1b[0m",
-                                        ext.name
-                                    );
+                                    std::thread::sleep(std::time::Duration::from_millis(150));
+                                    // Instantiate a fresh WASM runtime to force guest static state reset
+                                    if let Ok(mut fresh_rt) = WasmRuntime::new(
+                                        ext.name.clone(),
+                                        wasm_path,
+                                        ext.role.clone(),
+                                        permissions.clone(),
+                                        self.sandbox.clone() as Arc<dyn crate::subsystems::FsSubsystem>,
+                                        self.process_manager.clone() as Arc<dyn crate::subsystems::ProcessSubsystem>,
+                                        dag_subsystem.clone(),
+                                        network_subsystem.clone(),
+                                        self.active_processes.clone(),
+                                        event_tx.clone(),
+                                        Some(Arc::downgrade(self)),
+                                        hitl_enabled,
+                                    ) {
+                                        if let Ok(retry_str) = fresh_rt.get_tools()
+                                            && let Ok(retry_val) = serde_json::from_str::<serde_json::Value>(&retry_str)
+                                            && let Some(retry_arr) = retry_val.as_array()
+                                            && !retry_arr.is_empty()
+                                        {
+                                            println!(
+                                                "\x1b[32m[OK] Verified {} tools from extension '{}'\x1b[0m",
+                                                retry_arr.len(),
+                                                ext.name
+                                            );
+                                            runtime = fresh_rt;
+                                        } else {
+                                            let err_detail = fresh_rt.get_tools().unwrap_or_else(|e| format!("RPC err: {e}"));
+                                            println!(
+                                                "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools (Check MCP binary paths or servers). Detail: {}\x1b[0m",
+                                                ext.name,
+                                                err_detail
+                                            );
+                                        }
+                                    } else {
+                                        let err_detail = runtime.get_tools().unwrap_or_else(|e| format!("RPC err: {e}"));
+                                        println!(
+                                            "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools (Check MCP binary paths or servers). Detail: {}\x1b[0m",
+                                            ext.name,
+                                            err_detail
+                                        );
+                                    }
                                 } else {
                                     println!(
                                         "\x1b[32m[OK] Verified {} tools from extension '{}'\x1b[0m",
@@ -304,10 +348,10 @@ impl Orchestrator {
                 );
                 continue;
             }
-            crate::log_host!("[HOST] verify_rpc_exclude: trying lock on '{}'", name);
+            crate::log_host!("[HOST] verify_rpc_exclude: try_locking '{}'", name);
             let Some(mut runtime) = runtime_arc.try_lock() else {
                 crate::log_host!(
-                    "[HOST] verify_rpc_exclude: failed to lock '{}', skipping",
+                    "[HOST] verify_rpc_exclude: skipping currently locked extension '{}' (already in call chain)",
                     name
                 );
                 continue;

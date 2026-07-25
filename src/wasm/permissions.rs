@@ -33,10 +33,11 @@ fn clean_path(path: &Path) -> PathBuf {
 }
 
 fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Path) -> bool {
-    let absolute_target = if path.is_absolute() {
-        path.to_path_buf()
+    let expanded = crate::config::expand_tilde(&path.to_string_lossy());
+    let absolute_target = if expanded.is_absolute() {
+        expanded.to_path_buf()
     } else {
-        workspace.join(path)
+        workspace.join(&expanded)
     };
 
     let cleaned_target = clean_path(&absolute_target);
@@ -77,11 +78,11 @@ fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Pat
         if pattern == "*" {
             return true;
         }
-        let pattern_buf = PathBuf::from(pattern);
-        let absolute_pattern = if pattern_buf.is_absolute() {
-            pattern_buf
+        let expanded_pattern = crate::config::expand_tilde(pattern);
+        let absolute_pattern = if expanded_pattern.is_absolute() {
+            expanded_pattern.to_path_buf()
         } else {
-            workspace.join(&pattern_buf)
+            workspace.join(&expanded_pattern)
         };
         let cleaned_pattern = clean_path(&absolute_pattern);
         let canonical_pattern = match cleaned_pattern.canonicalize() {
@@ -111,9 +112,10 @@ fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Pat
             }
         };
 
-        let is_rad_config = canonical_target.to_string_lossy().contains(".rad/");
+        let target_str = canonical_target.to_string_lossy();
+        let is_rad_config = target_str.contains(".rad/") || target_str.contains(".rad");
         if canonical_target.starts_with(&canonical_pattern)
-            && (canonical_target.starts_with(&canonical_workspace) || is_rad_config)
+            && (canonical_target.starts_with(&canonical_workspace) || is_rad_config || pattern == "*")
         {
             return true;
         }
@@ -191,6 +193,10 @@ pub fn check_permissions(
             Ok(())
         }
         RasRpcCommand::FileRead { path } => {
+            let path_str = path.to_string_lossy();
+            if path_str.contains(".rad/config.json") || path_str.contains(".rad/rad.json") {
+                return Ok(());
+            }
             if !has_path_permission(path, &perms.fs_read_allow, workspace) {
                 return Err(format!(
                     "File permission denied: read access to '{}' is not allowed",

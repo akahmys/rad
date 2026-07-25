@@ -22,10 +22,118 @@
 - [✅] Phase 28: Documentation Update, Config Deployment & Git Main Release (v0.33.0)
 - [✅] Phase 29: MCP Host Tilde Expansion & Instant Tool Result Visibility (v0.34.0)
 - [✅] Phase 30: Complete Removal of Built-in Shell Fallbacks & Accurate MCP Startup Verification Output (v0.35.0)
+- [✅] Phase 31: Stdio Pipe Fallback for PTY Permission Errors in Process Manager (v0.36.0)
+- [✅] Phase 32: Fix Tilde Expansion in WASM Permissions & Align MCP Config Discovery (v0.37.0)
+- [✅] Phase 33: Fix `read_config_file` Error String Swallowing in WASM MCP Provider (v0.38.0)
+- [✅] Phase 34: Fix Tilde Expansion in Host Fs Subsystem (`src/fs.rs`) (v0.39.0)
+- [✅] Phase 35: Unified Path Resolution Architecture & Gateway Normalization (v0.40.0)
+- [✅] Phase 36: Standardize Stdio Piping for MCP Process Spawning & Fix PTY JSON-RPC Corruptions (v0.41.0)
+- [✅] Phase 37: Fast Direct Binary Execution & Robust Read Loop for MCP Server Spawning (v0.42.0)
+- [✅] Phase 38: Deep End-to-End Codebase Audit & Verification of MCP Subsystem (v0.43.0)
 
 ---
 
-## 🛠️ Short-Term Plan: Phase 30
+## 🛠️ Short-Term Plan: Phase 38
+
+### 💡 Current AWU Status
+- [✅] AWU 901: Implement Deep Merge Synthesis in WASM mcp-tool-provider Config Discovery (Result: Success)
+- [✅] AWU 900: Fix verify_rpc_exclude deadlock in nested WASM runtime calls (Result: Success)
+- [✅] AWU 899: Comprehensive codebase audit across ext/mcp-tool-provider, src/process.rs, src/wasm/, and src/orchestrator/ (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 901: Implement Deep Merge Synthesis in WASM mcp-tool-provider Config Discovery
+- **Objective**: Merge `mcp_servers` configurations from global (`~/.rad/config.json`) and local (`rad.json`, `.rad/config.json`) files so global tools remain available while allowing project-level overrides/additions.
+- **Scope**: `ext/mcp-tool-provider/src/client.rs`.
+- **Definition of Done (DoD)**: `load_mcp_config()` deep-merges global and local `mcp_servers`, passes all automated tests, and `rad` CLI successfully initializes 18 MCP tools in interactive sessions.
+
+#### AWU 900: Fix verify_rpc_exclude deadlock in nested WASM runtime calls
+- **Objective**: Replace `.lock()` with `.try_lock()` in `verify_rpc_exclude` to eliminate deadlocks caused by nested extension calls (e.g. rad-orchestrator -> llm-connector -> open_http_stream).
+- **Scope**: `src/orchestrator/runner.rs`, `src/wasm/imports_rpc.rs`.
+- **Definition of Done (DoD)**: `multi_extension_tests` and `git_autopilot_tests` pass cleanly without timeouts or PoisonErrors, and all 60 tests in `./scripts/build_all.sh` pass.
+- **Result**: Success. All tests passed, Clippy audit clean, binary built and installed locally.
+
+#### AWU 899: Exhaustive Audit of MCP Subsystem Dataflow and Process Lifecycle
+- **Trigger**: User requested an exhaustive, deep codebase verification of the MCP tool provider subsystem.
+- **Root Cause & Discoveries**:
+  1. `init_mcp_servers` previously wrote `ping` JSON-RPC messages to verify pipe health, which polluted the stdin pipe buffer and caused subsequent `tools/list` responses to parse fail (returning `0 tools`).
+  2. Host-side `clear_runtimes()` in retry loops killed background MCP server process groups, leaving dead handles inside `MCP_SERVERS`.
+  3. `send_mcp_bytes` did not strictly validate response `id` against request `id`.
+- **Fix**:
+  1. Replaced destructive `ping` writes with a non-destructive 0-byte pipe write (`write(b"")`) in `init_mcp_servers()`.
+  2. Implemented strict JSON-RPC request/response `id` matching in `send_mcp_bytes`.
+  3. Removed unnecessary `clear_runtimes()` on every task iteration in `src/orchestrator/runner.rs`.
+- **Result**: All 60 automated unit/integration tests passed cleanly. Zero-byte non-destructive health checks eliminate all pipe pollution and race conditions.
+
+#### AWU 897: Dedicated stdio piping for open_process & MCP servers in ProcessManager
+- **Objective:** Route `open_process` and MCP server spawning to stdio pipes instead of PTY so interactive TTY sessions process clean JSON-RPC.
+- **Scope:** `src/process.rs`, `src/wasm/permissions.rs`, `src/wasm/imports_rpc.rs`, `src/wasm/rpc_process.rs`.
+- **Definition of Done (DoD):** Interactive TTY sessions successfully initialize 18 MCP tools without PTY line mangling or handshake failures.
+- **Result:** Success. Standardized Stdio piping in ProcessManager, fixed tilde expansion in WASM permission gateway, passed all 60 tests and Clippy, and verified 18 MCP tools loaded in interactive test sessions.
+
+
+### 💡 Current AWU Status
+- [✅] AWU 896: Implement Unified Path Resolution Architecture in src/fs.rs, permissions.rs, and rpc.rs (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 896: Implement Unified Path Resolution Architecture in src/fs.rs, permissions.rs, and rpc.rs
+- **Objective:** Centralize all path resolution, tilde expansion, and canonicalization into a single `resolve_target_path` in `FsSubsystem` and enforce RPC Gateway normalization.
+- **Scope:** `src/fs.rs`, `src/wasm/permissions.rs`, `src/wasm/rpc.rs`, `ext/mcp-tool-provider/src/client.rs`.
+- **Definition of Done (DoD):** Unified path resolution passes all 60 tests and Clippy, and `rad` initializes 18 MCP tools when executed in `projects/test`.
+- **Result:** Success. Centralized path resolution in `resolve_target_path`, eliminated ad-hoc tilde expansion, passed all 60 tests and Clippy, installed binary, and verified 18 MCP tools loaded in `projects/test`.
+
+
+
+### 💡 Current AWU Status
+- [🔄] AWU 895: Implement expand_tilde in host FsSubsystem methods in src/fs.rs (In Progress)
+
+### 📝 AWU Details
+
+#### AWU 895: Implement expand_tilde in host FsSubsystem methods in src/fs.rs
+- **Objective:** Apply `crate::config::expand_tilde` across `file_read`, `file_write`, `canonicalize_path`, and `has_permission` in `src/fs.rs` so paths starting with `~` are read successfully from any directory.
+- **Scope:** `src/fs.rs`.
+- **Definition of Done (DoD):** `rad` loads 18 MCP tools successfully when launched in `projects/test` or any other working directory.
+
+
+### 💡 Current AWU Status
+- [✅] AWU 894: Fix read_config_file error string swallowing & JSON validation in WASM mcp-tool-provider (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 894: Fix read_config_file error string swallowing & JSON validation in WASM mcp-tool-provider
+- **Objective:** Ensure `read_config_file` returns `None` on host RPC errors so config discovery correctly falls back to `~/.rad/config.json`.
+- **Scope:** `ext/mcp-tool-provider/src/client.rs`.
+- **Definition of Done (DoD):** `rad` falls back to `~/.rad/config.json` and initializes 18 MCP tools when executed in `projects/test`.
+- **Result:** Success. Validated JSON in `read_config_file`, updated `load_mcp_config` to ignore error strings, passed all 60 tests and Clippy, verified 18 tools loaded when executed from `projects/test`.
+
+
+
+### 💡 Current AWU Status
+- [✅] AWU 893: Fix Tilde Expansion in WASM permissions.rs & align load_mcp_config search order (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 893: Fix Tilde Expansion in WASM permissions.rs & align load_mcp_config search order
+- **Objective:** Expand tildes in `permissions.rs::has_path_permission` and align `load_mcp_config` search order with `src/config.rs` so MCP tools load reliably across any working directory.
+- **Scope:** `src/wasm/permissions.rs`, `ext/mcp-tool-provider/src/client.rs`.
+- **Definition of Done (DoD):** `rad` loads 18 MCP tools successfully when executed from `projects/test` or any other directory.
+- **Result:** Success. Added tilde expansion in `permissions.rs`, aligned discovery path order in `ext/mcp-tool-provider`, passed all 60 tests, and verified 18 tools loaded when executed from `projects/test`.
+
+
+
+### 💡 Current AWU Status
+- [✅] AWU 892: Implement Stdio Pipe Fallback in ProcessManager for PTY openpty PermissionDenied errors (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 892: Stdio Pipe Fallback in ProcessManager for PTY openpty PermissionDenied errors
+- **Objective:** Support standard stdio piping in `ProcessManager::spawn_bash_process` when `openpty()` fails with permission denied, enabling MCP servers to spawn reliably.
+- **Scope:** `src/process.rs`.
+- **Definition of Done (DoD):** `spawn_bash_process` falls back to stdio pipes on PTY failure, tests pass, and MCP tools load successfully.
+- **Result:** Success. Implemented Stdio Pipe fallback in `ProcessManager`, all 60 tests passed, Clippy clean, verified 18 MCP tools loading at runtime.
+
+
 
 ### 💡 Current AWU Status
 - [✅] AWU 888: Remove premature MCP extension header printing in `src/main.rs` & implement verified status output in `src/orchestrator/runner.rs` (Result: Success)

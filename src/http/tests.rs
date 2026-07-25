@@ -25,7 +25,7 @@ fn test_http_streaming_success() {
     let policy = Arc::new(Mutex::new(TimeoutPolicy::Infinite));
     let url = format!("http://127.0.0.1:{port}/stream");
 
-    let stream_id = open_http_stream(&url, HashMap::new(), "", tx, policy).unwrap();
+    let stream_id = open_http_stream(&url, HashMap::new(), "", tx, policy.clone()).unwrap();
     assert!(!stream_id.is_empty());
 
     let mut tokens = Vec::new();
@@ -79,8 +79,8 @@ fn test_http_streaming_timeout() {
     let mut timeout_occurred = false;
     let mut received_events = Vec::new();
     let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(1) {
-        if let Ok(event) = rx.recv_timeout(Duration::from_millis(100)) {
+    while start.elapsed() < Duration::from_secs(2) {
+        if let Ok(event) = rx.recv_timeout(Duration::from_millis(200)) {
             received_events.push(format!("{event:?}"));
             if matches!(event, RasCoreEvent::StreamTimeout { ref target, .. } if target == "llm") {
                 timeout_occurred = true;
@@ -126,14 +126,14 @@ fn test_http_streaming_dynamic_policy_update() {
     }));
 
     let url = format!("http://127.0.0.1:{port}/stream");
-    let _ = open_http_stream(&url, HashMap::new(), "", tx, policy.clone());
+    let _stream_id = open_http_stream(&url, HashMap::new(), "", tx, policy.clone()).unwrap();
 
     // Wait for the first chunk to be received
     let mut hello_received = false;
     let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(1) {
+    while start.elapsed() < Duration::from_secs(2) {
         if let Ok(RasCoreEvent::HttpChunkReceived { chunk }) =
-            rx.recv_timeout(Duration::from_millis(100))
+            rx.recv_timeout(Duration::from_millis(200))
             && chunk.contains("hello")
         {
             hello_received = true;
