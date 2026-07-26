@@ -20,6 +20,11 @@ interface context-tools {
 
     record optimization-request {
         messages: list<message>,
+        // Maximum number of messages to retain. When the message list exceeds
+        // this count, it is windowed down to the first message (the original
+        // goal) plus the most recent messages before role-based compaction is
+        // applied. `none` disables count-based windowing.
+        max-history: option<u32>,
     }
 
     record optimization-response {

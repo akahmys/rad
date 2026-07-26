@@ -47,8 +47,8 @@ The Extension subscribes to the event stream from the Core and makes all logical
 * **WIT (Wasm Interface Type) & WASI (v0.7.0+)**: To enable multi-language extension development (Rust, Go, TypeScript, etc.), RPC contracts and events are defined in WIT IDL files. Low-level bindings are automatically compiled via `wit-bindgen`.
 * **Unified Capability-Centric Architecture (UCCA)**: The Wasm guest interacts with the host through strongly-typed resource handles (`stream-handle`, `file-handle`, `execution-handle`) instead of generic JSON messages. For example, reading logs or process stdout is done by pulling bytes through a `stream-handle`, preventing unwanted side-effects.
 * **Statelessness (v0.2.2+)**: Instead of holding chat history in memory-based state arrays, the Extension fetches history dynamically from Core's DAG (`GetDag`) to ensure robustness across restarts.
-* **Conversation/Thought Context Construction**: Manages the history (context) sent to the LLM.
-* **Compaction**: Summarizes or truncates history to stay within token limits.
+* **Conversation/Thought Context Construction**: The LLM Orchestrator walks the DAG from `current_node_id`, deserializes each node into a `Message`, filters orphaned tool-call nodes, and assembles the system prompt. This step is mechanical (no judgment about what to keep or discard) and stays tightly coupled to the DAG data model, so it remains in the Orchestrator rather than being delegated.
+* **Compaction**: All policy decisions about what to keep, discard, or summarize once history grows too large are delegated to the `context-tools` extension via RPC. `context-tools` receives the assembled message list plus a length/threshold parameter and returns a single, unified trimming/compression result — both count-based windowing and role-based squashing live in one place, not split across extensions. This isolates compaction strategy so it can be swapped (e.g. for future token-aware or LLM-based summarization) without touching the Orchestrator's control loop.
 
 ### 1.3 Multi-Extension Cooperation & Responsibility Isolation
 To maximize modularity and robustness, `rad` supports chaining multiple extensions simultaneously. Instead of a single monolithic extension, policies are isolated into micro-extensions:
@@ -64,6 +64,9 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
 4. **LLM Connector (Model API translation & streaming)**
    - **Responsibility**: Translates standardized Message objects and tool definitions into model-specific API payloads, initiates connections (using Core HTTP capability), and parses SSE stream chunks.
    - **Isolation**: Decouples model-specific network packet parsing and JSON payload generation from the Orchestrator, rendering the main decision loop fully model-agnostic.
+5. **Context Compactor (`context-tools`)**
+   - **Responsibility**: Owns all context-size-reduction policy once the Orchestrator has assembled the raw message list — trimming it to a configurable history-length budget and squashing runs of non-user/assistant (tool) messages into summaries. Also exposes auxiliary context-gathering utilities (e.g. `get-repo-map`).
+   - **Isolation**: Stateless and pure — takes a message list (and thresholds) in, returns a possibly-shortened list and a human-readable summary out. It does not read the DAG or hold session state itself. Failure degrades gracefully: the Orchestrator falls back to sending the uncompacted list rather than blocking the turn, since compaction is a quality optimization, not a correctness requirement.
 
 ---
 
@@ -323,7 +326,7 @@ For a simple and robust security policy, configuration is restricted to a single
    Every physical error detected by the host core (IO errors, execution failures, HTTP connection timeouts, or token limits) is standardized into a serialized `UnifiedError` JSON payload inside the WIT boundary's `result<T, string>`. This avoids breaking interface compatibility while permitting rich, structured classification on the guest extension side.
    * **L1 (Adaptation)**: Transient API drops or tool/command errors. **Strategy**: Append error node to DAG, feed back to LLM, and retry.
    * **L2 (Rollback)**: LLM parsing failures (e.g. truncated JSON from output token limit) or capability violations. **Strategy**: Roll back current DAG pointer and physically restore the filesystem state.
-   * **L3 (Reset)**: Context window exhaustion (token budget exceeded). **Strategy**: Compress context via `context-tools` DAG pruning/summarization and reset state.
+   * **L3 (Reset)**: Context window exhaustion (token budget exceeded). **Strategy**: Re-invoke `context-tools`'s unified compaction (count- and role-based trimming) against the assembled message list to shrink it below budget, then reset state.
 
 2. **Pillar 2: Deterministic State Transition & File Rollback Synchronization**
    * **File Snapshots**: The Core automatically takes directories snapshot backups (`src/fs/snapshot.rs`) before entering LLM thinking phases and executing tools.

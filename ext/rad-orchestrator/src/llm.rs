@@ -79,30 +79,18 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 
     messages.reverse();
 
-    let max_history = crate::orchestrator::STATE
+    // Count-based history windowing is handled by the `context-tools`
+    // extension's `optimize` call below (alongside role-based compaction),
+    // not here. This function only reconstructs the raw message list from
+    // the DAG.
+    let max_history_messages = crate::orchestrator::STATE
         .lock()
         .ok()
         .and_then(|guard| guard.as_ref().and_then(|s| s.max_history_messages))
         .unwrap_or(30);
 
-    let messages_to_send = if messages.len() > max_history && !messages.is_empty() {
-        let first_goal = messages[0].clone();
-        let remaining_len = messages.len() - 1;
-        let limit = max_history - 1;
-        let start_idx = if remaining_len > limit {
-            messages.len() - limit
-        } else {
-            1
-        };
-        let mut trimmed = vec![first_goal];
-        trimmed.extend(messages[start_idx..].to_vec());
-        trimmed
-    } else {
-        messages
-    };
-
     let mut filtered_messages = Vec::new();
-    for msg in messages_to_send {
+    for msg in messages {
         if msg.role == "tool" {
             let has_matching_call = if let Some(ref tid) = msg.tool_call_id {
                 filtered_messages.iter().any(|prev_msg: &Message| {
@@ -159,6 +147,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
                 content: serde_json::to_string(m).unwrap_or_default(),
             })
             .collect(),
+        max_history: Some(u32::try_from(max_history_messages).unwrap_or(u32::MAX)),
     };
 
     if let Ok(req_json) = serde_json::to_string(&ct_req) {
@@ -237,6 +226,8 @@ struct CtMessage {
 #[derive(serde::Serialize, serde::Deserialize)]
 struct CtOptimizationRequest {
     messages: Vec<CtMessage>,
+    #[serde(rename = "max-history")]
+    max_history: Option<u32>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
