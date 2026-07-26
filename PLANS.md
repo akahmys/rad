@@ -33,6 +33,38 @@
 - [✅] Phase 39: Consolidate Context Compaction Logic into `context-tools` Extension (v0.44.0)
 - [✅] Phase 40: Post-Consolidation Audit Fixes — Orphan-Filter Ordering & CallExtension Deadlock Risk (v0.45.0)
 - [✅] Phase 41: Second Audit Pass — Unsafe Tool-Call Squashing, File-Size Limit, Production Unwrap (v0.46.0)
+- [✅] Phase 42: Full File-Size Limit Compliance — Split All Remaining 300+ Line Files (v0.47.0)
+
+---
+
+## 🛠️ Short-Term Plan: Phase 42
+
+### 💡 Current AWU Status
+- [✅] AWU 911: Split All Remaining CODING.md 300-Line Violations (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 911: Split All Remaining CODING.md 300-Line Violations
+- **Trigger**: User asked for a recap of remaining known issues after AWU 910 shipped; AWU 910 had only fixed one of several files already over CODING.md's 300-line limit (`ext/rad-orchestrator/src/orchestrator.rs`, folded into that AWU because it was directly touched by the squashing fix). Nine more files were still over the limit. User then explicitly asked to address the 300-line limit ("300行制限に対応").
+- **Files split** (each into 2–5 sibling files by concern, with the original either becoming a thin dispatcher or keeping the "core"/most-referenced piece and re-exporting where call sites needed an unchanged path):
+  1. `src/wasm/imports_rpc.rs` (695→181 lines) → `imports_process.rs`, `imports_tool.rs`, `imports_http.rs`, `imports_delegate.rs` (process/tool/http import handlers + the trait-delegation macro & context-tools host bridge).
+  2. `src/wasm/rpc_meta.rs` (603→166 lines) → `rpc_meta_fallback.rs` (built-in tool fallback), `rpc_meta_llm_connector.rs` (Wasm-connector LLM stream path), `rpc_meta_llm_fallback.rs` (raw-HTTP-SSE LLM stream path).
+  3. `ext/mcp-tool-provider/src/client.rs` (387→132 lines) → `mcp_config.rs` (config discovery/parsing), `mcp_transport.rs` (JSON-RPC line transport; re-exports `mcp_request` so `lib.rs`'s import path is unchanged).
+  4. `src/wasm/bindings.rs` (381→142 lines) → `bindings/rpc_command.rs` (the two large `RasRpcCommand`↔WIT `From` impls).
+  5. `src/orchestrator/runner.rs` (366→202 lines) → `runner/runtimes.rs` (Wasm runtime init/lookup/clear), `runner/events.rs` (RPC verification fan-out + event-dispatch loop); both as sibling inherent-`impl Orchestrator` blocks.
+  6. `src/wasm/imports_resources.rs` (351→114 lines) → `imports_resources_file.rs` (`file-handle` WIT impl), `imports_resources_exec.rs` (`execution-handle` WIT impl + llm-connector stream glue); shared `push_closed_fallback` helper made `pub(crate)`.
+  7. `src/config.rs` (346→181 lines) → `config/merge.rs` (JSONC parse + recursive value merge), `config/load.rs` (config discovery/layered loading, `Config::apply_env_overrides`); `load_config` re-exported so `crate::config::load_config` call sites are unchanged.
+  8. `ext/llm-connector/src/lib.rs` (337→28 lines) → `serialize_types.rs` (wire structs), `event_stream.rs` (SSE parsing + `GuestEventStream` impl), `connector.rs` (`ConnectorImpl`/`Guest` impl).
+  9. `src/process.rs` (315→158 lines) → `process_child.rs` (`StdioChild`/`ChildKiller` glue + reader-thread helper), `process_running.rs` (`RunningProcess`, re-exported so `crate::process::RunningProcess` is unchanged).
+  10. `ext/rad-orchestrator/src/orchestrator/runner.rs` (315→59 lines) → `runner/done.rs` (`handle_done`, the Done-event finalizer), `runner/inline_tool_calls.rs` (plain-text tool-call fallback parser); `handle_done` re-exported so `orchestrator.rs`'s import is unchanged.
+- **Bugs hit and fixed during the split** (all caught by the user's `build_all.sh` runs, none reached `main`):
+  - `wit_bindgen::generate!`'s `export!` macro only accepts a plain identifier, not a path — `export!(connector::ConnectorImpl)` failed to compile; fixed by `use connector::ConnectorImpl;` then `export!(ConnectorImpl);`.
+  - `src/process/tests.rs` used `thread::sleep` via `use super::*`, relying on `process.rs`'s top-level `use std::thread;` which moved to `process_running.rs` in the split; added an explicit `use std::thread;` to the test file.
+  - `src/config.rs`'s re-export of `merge_json_value`/`parse_jsonc` (added only so `config/tests.rs`'s `use super::*` could reach them) was flagged as an unused import in non-test builds, since nothing outside `config/tests.rs` used the re-exported path; removed the re-export and had the test file import directly from `super::merge::{..}` instead.
+  - Clippy's `empty_line_after_doc_comments` (denied via `-D warnings`) fired on `config/merge.rs`, whose file-header note used `///` (a doc comment) followed by a blank line before the next doc comment block. The same header-comment pattern (`/// ... split out of ... 300-line limit.`) existed verbatim at the top of all 20 new/touched files from this AWU; rather than fix one and wait for the next to surface on a future build, converted all 20 headers from `///` to plain `//` in one pass, since they document the file's split-provenance for humans, not a specific downstream item for rustdoc.
+- **Scope**: 10 original files edited (trimmed to dispatchers or "core" pieces), 22 new files created, plus `src/wasm.rs`, `src/lib.rs`, `ext/mcp-tool-provider/src/lib.rs`, `ext/llm-connector/src/lib.rs` updated with the corresponding `mod`/re-export declarations, and `src/config/tests.rs`/`src/process/tests.rs` fixed for the import fallout above.
+- **Definition of Done (DoD)**: Every `.rs` file in the workspace (including test files) at or under 300 lines; all tests + Clippy (`-D warnings`) pass under `./scripts/build_all.sh`.
+- **Result**: Success. Verified via `find src ext -name "*.rs" | xargs wc -l` that no file exceeds 300 lines. User confirmed a clean `./scripts/build_all.sh` run (build, all unit/integration tests, Clippy audit, binary reinstall) after the three follow-up fixes above.
 
 ---
 

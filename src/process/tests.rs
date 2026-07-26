@@ -1,5 +1,6 @@
 use super::*;
 use nix::unistd::getpgid;
+use std::thread;
 use std::time::Duration;
 
 #[test]

@@ -21,6 +21,8 @@ struct ToolProviderImpl;
 
 mod client;
 mod default_tools;
+mod mcp_config;
+mod mcp_transport;
 
 use client::{MCP_SERVERS, MCP_TOOL_MAPPING, diag, init_mcp_servers, mcp_request};
 use default_tools::{FunctionDefinition, Tool};

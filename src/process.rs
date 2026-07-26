@@ -1,12 +1,15 @@
+use crate::process_child::{StdioChild, spawn_reader_thread};
 use crate::sys::Pid;
 use parking_lot::Mutex;
-use portable_pty::{Child, ExitStatus};
-use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::sync::mpsc;
+use std::time::Instant;
+
+// `StdioChild`/`ChildKiller` glue and the reader-thread helper live in
+// `process_child.rs`; `RunningProcess` lives in `process_running.rs` (both
+// re-exported below) to keep this file under the 300-line limit.
+pub use crate::process_running::RunningProcess;
 
 #[cfg(test)]
 mod tests;
@@ -132,172 +135,12 @@ impl ProcessManager {
     }
 }
 
-use portable_pty::ChildKiller;
-
-#[derive(Debug)]
-struct StdioChild {
-    child: std::process::Child,
-}
-
-#[derive(Debug, Clone)]
-struct StdioChildKiller {
-    pid: u32,
-}
-
-impl ChildKiller for StdioChildKiller {
-    fn kill(&mut self) -> std::io::Result<()> {
-        let pid = i32::try_from(self.pid).map_err(std::io::Error::other)?;
-        let _ = crate::sys::kill_process_group(Pid::from_raw(pid));
-        Ok(())
-    }
-
-    fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
-        Box::new(self.clone())
-    }
-}
-
-impl ChildKiller for StdioChild {
-    fn kill(&mut self) -> std::io::Result<()> {
-        self.child.kill()
-    }
-
-    fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
-        Box::new(StdioChildKiller {
-            pid: self.child.id(),
-        })
-    }
-}
-
-impl Child for StdioChild {
-    fn try_wait(&mut self) -> std::io::Result<Option<ExitStatus>> {
-        let status = self.child.try_wait()?;
-        Ok(status.map(|s| ExitStatus::with_exit_code(u32::try_from(s.code().unwrap_or(0)).unwrap_or(0))))
-    }
-
-    fn wait(&mut self) -> std::io::Result<ExitStatus> {
-        let status = self.child.wait()?;
-        Ok(ExitStatus::with_exit_code(u32::try_from(status.code().unwrap_or(0)).unwrap_or(0)))
-    }
-
-    fn process_id(&self) -> Option<u32> {
-        Some(self.child.id())
-    }
-}
-
 impl Drop for ProcessManager {
     fn drop(&mut self) {
         let pgids = self.active_pgids.lock();
         for pgid in pgids.iter() {
             let _ = crate::sys::kill_process_group(*pgid);
         }
-    }
-}
-
-fn spawn_reader_thread<R: Read + Send + 'static>(mut reader: R, tx: mpsc::Sender<Vec<u8>>) {
-    thread::spawn(move || {
-        let mut buf = [0; 1024];
-        while let Ok(n) = reader.read(&mut buf) {
-            if n == 0 {
-                break;
-            }
-            if tx.send(buf[..n].to_vec()).is_err() {
-                break;
-            }
-        }
-    });
-}
-
-pub struct RunningProcess {
-    pub child: Box<dyn Child + Send + Sync>,
-    pgid: Pid,
-    pub stdout_rx: Option<Receiver<Vec<u8>>>,
-    pub stderr_rx: Option<Receiver<Vec<u8>>>,
-    pub stdin_tx: Option<Mutex<Box<dyn std::io::Write + Send>>>,
-    pub last_activity: Instant,
-    active_pgids: Arc<Mutex<Vec<Pid>>>,
-    pub timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
-    pub call_id: String,
-    pub name: String,
-    pub arguments: String,
-}
-
-impl RunningProcess {
-    #[must_use]
-    pub fn pgid(&self) -> Pid {
-        self.pgid
-    }
-
-    /// Read any available stdout/stderr without blocking.
-    /// Returns (stdout, stderr).
-    pub fn read_available(&mut self) -> (Vec<u8>, Vec<u8>) {
-        let mut stdout = Vec::new();
-        if let Some(ref rx) = self.stdout_rx {
-            while let Ok(mut chunk) = rx.try_recv() {
-                stdout.append(&mut chunk);
-            }
-        }
-
-        let mut stderr = Vec::new();
-        if let Some(ref rx) = self.stderr_rx {
-            while let Ok(mut chunk) = rx.try_recv() {
-                stderr.append(&mut chunk);
-            }
-        }
-
-        if !stdout.is_empty() || !stderr.is_empty() {
-            self.last_activity = Instant::now();
-        }
-
-        (stdout, stderr)
-    }
-
-    /// Wait for process completion or timeout.
-    /// If timeout is exceeded, kills the process group and returns an error.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if `try_wait` fails or if execution times out.
-    pub fn wait_with_timeout(&mut self, timeout: Duration) -> Result<ExitStatus, String> {
-        let start = Instant::now();
-        loop {
-            if let Some(status) = self
-                .child
-                .try_wait()
-                .map_err(|e| format!("try_wait error: {e}"))?
-            {
-                self.unregister_pgid();
-                return Ok(status);
-            }
-
-            if self.last_activity.elapsed() > timeout {
-                self.kill_group();
-                return Err("Process execution timed out due to inactivity".to_string());
-            }
-
-            // Fallback upper limit (e.g. 2x timeout) to avoid infinite loops if thread gets stuck
-            if start.elapsed() > timeout * 2 {
-                self.kill_group();
-                return Err("Process execution exceeded maximum timeout limit".to_string());
-            }
-
-            thread::sleep(Duration::from_millis(50));
-        }
-    }
-
-    pub fn kill_group(&mut self) {
-        let _ = crate::sys::kill_process_group(self.pgid);
-        self.unregister_pgid();
-    }
-
-    pub fn unregister_pgid(&mut self) {
-        let mut pgids = self.active_pgids.lock();
-        pgids.retain(|&x| x != self.pgid);
-    }
-}
-
-impl Drop for RunningProcess {
-    fn drop(&mut self) {
-        self.kill_group();
     }
 }
 

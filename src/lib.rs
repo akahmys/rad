@@ -9,6 +9,8 @@ pub mod ipc;
 pub mod mcp;
 pub mod orchestrator;
 pub mod process;
+mod process_child;
+mod process_running;
 pub mod repo_map;
 pub mod session;
 pub mod subsystems;

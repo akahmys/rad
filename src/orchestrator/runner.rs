@@ -1,13 +1,16 @@
 use super::Orchestrator;
 use crate::git;
-use crate::ipc::{RasCoreEvent, route_event_to_terminal};
-use crate::wasm::WasmRuntime;
-use parking_lot::Mutex;
-use std::collections::HashMap;
+use crate::ipc::RasCoreEvent;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::channel;
+
+// Runtime lifecycle (get_or_init_runtimes/clear_runtimes) and the RPC
+// verification / event-dispatch loop live in sibling files to keep this one
+// under the 300-line limit.
+mod events;
+mod runtimes;
 
 impl Orchestrator {
     /// Spawns the autonomous execution loop in a background thread.
@@ -194,173 +197,6 @@ impl Orchestrator {
             return Err("Wasm execution failed after maximum recovery attempts".to_string());
         }
 
-        Ok(())
-    }
-
-    pub fn get_or_init_runtimes(
-        self: &Arc<Self>,
-        event_tx: &Sender<RasCoreEvent>,
-    ) -> Result<HashMap<String, Arc<Mutex<WasmRuntime>>>, String> {
-        let (extensions, hitl_enabled) = {
-            let config_guard = self.config.lock();
-            (config_guard.extensions.clone(), config_guard.core.hitl_enabled)
-        };
-
-        for ext in &extensions {
-            if !ext.enabled {
-                continue;
-            }
-            {
-                let guard = self.wasm_runtime.lock();
-                if guard.contains_key(&ext.name) {
-                    continue;
-                }
-            }
-
-            let permissions = ext.permissions.clone().unwrap_or_default();
-            let wasm_path_buf = crate::config::expand_tilde(&ext.source);
-            let wasm_path = wasm_path_buf.as_path();
-            if wasm_path.exists() {
-                let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl {
-                    dag: self.dag.clone(),
-                });
-                let network_subsystem = Arc::new(crate::http::HttpManager);
-                let mut runtime = WasmRuntime::new(
-                    ext.name.clone(),
-                    wasm_path,
-                    ext.role.clone(),
-                    permissions.clone(),
-                    self.sandbox.clone() as Arc<dyn crate::subsystems::FsSubsystem>,
-                    self.process_manager.clone() as Arc<dyn crate::subsystems::ProcessSubsystem>,
-                    dag_subsystem.clone(),
-                    network_subsystem.clone(),
-                    self.active_processes.clone(),
-                    event_tx.clone(),
-                    Some(Arc::downgrade(self)),
-                    hitl_enabled,
-                )?;
-
-                if runtime.tool_provider.is_some() {
-                    match runtime.get_tools() {
-                        Ok(json_str) => {
-                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
-                                && let Some(arr) = val.as_array()
-                            {
-                                if arr.is_empty() {
-                                    println!(
-                                        "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools. See [MCP Diagnostic] lines above for the actual cause.\x1b[0m",
-                                        ext.name
-                                    );
-                                } else {
-                                    println!(
-                                        "\x1b[32m[OK] Verified {} tools from extension '{}'\x1b[0m",
-                                        arr.len(),
-                                        ext.name
-                                    );
-                                }
-                            } else {
-                                println!(
-                                    "\x1b[31m[FAILED] Extension '{}' returned invalid JSON from get_tools: {}\x1b[0m",
-                                    ext.name, json_str
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            println!("\x1b[31m[FAILED] Extension '{}' get_tools error: {e}\x1b[0m", ext.name);
-                        }
-                    }
-                }
-
-                let mut guard = self.wasm_runtime.lock();
-                guard.insert(ext.name.clone(), Arc::new(Mutex::new(runtime)));
-            }
-        }
-
-        let guard = self.wasm_runtime.lock();
-        Ok(guard.clone())
-    }
-
-    fn clear_runtimes(&self) -> Result<(), String> {
-        let mut guard = self.wasm_runtime.lock();
-        guard.clear();
-        Ok(())
-    }
-
-    /// Verifies an RPC request across all active extensions EXCEPT the calling one.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if any extension rejects the operation.
-    pub fn verify_rpc_exclude(
-        &self,
-        exclude_name: &str,
-        _request: &crate::ipc::RasRpcRequest,
-        req_bytes: &[u8],
-    ) -> Result<(), String> {
-        crate::log_host!(
-            "[HOST] verify_rpc_exclude started (exclude: {})",
-            exclude_name
-        );
-        let runtimes = {
-            let guard = self.wasm_runtime.lock();
-            guard.clone()
-        };
-
-        for (name, runtime_arc) in runtimes {
-            if name == exclude_name {
-                crate::log_host!(
-                    "[HOST] verify_rpc_exclude: skipping excluded extension '{}'",
-                    name
-                );
-                continue;
-            }
-            crate::log_host!("[HOST] verify_rpc_exclude: try_locking '{}'", name);
-            let Some(mut runtime) = runtime_arc.try_lock() else {
-                crate::log_host!(
-                    "[HOST] verify_rpc_exclude: skipping currently locked extension '{}' (already in call chain)",
-                    name
-                );
-                continue;
-            };
-            crate::log_host!(
-                "[HOST] verify_rpc_exclude: locked '{}', calling verify_rpc",
-                name
-            );
-            let res = runtime.verify_rpc(req_bytes);
-            crate::log_host!(
-                "[HOST] verify_rpc_exclude: verify_rpc for '{}' returned: {:?}",
-                name,
-                res
-            );
-            if let Err(e) = res {
-                return Err(format!("Operation rejected by extension '{name}': {e}"));
-            }
-        }
-        crate::log_host!("[HOST] verify_rpc_exclude completed successfully");
-        Ok(())
-    }
-
-    fn process_event_loop(
-        &self,
-        event_rx: &Receiver<RasCoreEvent>,
-        wasm_runtimes: &HashMap<String, Arc<Mutex<WasmRuntime>>>,
-    ) -> Result<(), String> {
-        while let Ok(event) = event_rx.recv() {
-            if self.abort_flag.load(Ordering::SeqCst) {
-                break;
-            }
-
-            let _ = route_event_to_terminal(&event);
-
-            if let RasCoreEvent::TaskCompleted = event {
-                break;
-            }
-
-            for runtime_arc in wasm_runtimes.values() {
-                let mut runtime = runtime_arc.lock();
-                runtime.on_event(&event)?;
-            }
-        }
         Ok(())
     }
 }
