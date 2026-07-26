@@ -1,19 +1,21 @@
 #![deny(clippy::pedantic)]
-#![allow(
-    unsafe_op_in_unsafe_fn,
-    clippy::too_many_lines,
-    clippy::collapsible_if,
-    clippy::uninlined_format_args,
-    clippy::single_match_else,
-    clippy::manual_assert,
-    clippy::same_length_and_capacity,
-    clippy::needless_pass_by_value
-)]
 
-wit_bindgen::generate!({
-    path: "../../wit/rad.wit",
-    world: "rad-orchestrator",
-});
+#[allow(
+    unsafe_op_in_unsafe_fn,
+    clippy::same_length_and_capacity,
+    clippy::pedantic
+)]
+mod bindings {
+    wit_bindgen::generate!({
+        path: "../../wit/rad.wit",
+        world: "rad-orchestrator",
+    });
+
+    use super::ExtensionImpl;
+    export!(ExtensionImpl);
+}
+
+pub use bindings::*;
 
 use rad_models::{RasCoreEvent as CoreCoreEvent, RasRpcCommand as CoreRpcCommand};
 
@@ -33,8 +35,6 @@ impl Guest for ExtensionImpl {
         orchestrator::handle_event(core_event)
     }
 }
-
-export!(ExtensionImpl);
 
 pub(crate) fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, String> {
     let wit_cmd = wit::RasRpcCommand::from(command);

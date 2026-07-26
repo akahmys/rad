@@ -3,20 +3,21 @@ use crate::call_host;
 use crate::tool::{Message, get_available_tools};
 use crate::types::{Dag, RasRpcCommand};
 
+fn read_rule_file(p: &str) -> Option<String> {
+    let val = call_host(RasRpcCommand::FileRead { path: std::path::PathBuf::from(p) }).ok()?;
+    let bytes = serde_json::from_value::<Vec<u8>>(val).ok()?;
+    String::from_utf8(bytes).ok()
+}
+
 fn load_local_agent_rules() -> String {
     let paths = [".agents/AGENTS.md", "AGENTS.md"];
     let mut combined = String::new();
     for p in &paths {
-        let path_buf = std::path::PathBuf::from(p);
-        if let Ok(val) = call_host(RasRpcCommand::FileRead { path: path_buf }) {
-            if let Ok(bytes) = serde_json::from_value::<Vec<u8>>(val) {
-                if let Ok(content) = String::from_utf8(bytes) {
-                    if !combined.is_empty() {
-                        combined.push_str("\n\n");
-                    }
-                    let _ = write!(combined, "### Local Project Rules ({p}):\n{content}");
-                }
+        if let Some(content) = read_rule_file(p) {
+            if !combined.is_empty() {
+                combined.push_str("\n\n");
             }
+            let _ = write!(combined, "### Local Project Rules ({p}):\n{content}");
         }
     }
     if combined.is_empty() {
@@ -66,12 +67,9 @@ fn filter_orphaned_tool_messages(messages: Vec<Message>) -> Vec<Message> {
     filtered
 }
 
-pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
-    let dag_val = call_host(RasRpcCommand::GetDag)?;
-    let dag: Dag =
-        serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
+fn traverse_dag_messages(dag: &Dag) -> Vec<Message> {
     let mut messages = Vec::new();
-    let mut current_id = dag.current_node_id;
+    let mut current_id = dag.current_node_id.clone();
 
     while let Some(ref id) = current_id {
         if let Some(node) = dag.nodes.get(id) {
@@ -109,6 +107,14 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
     }
 
     messages.reverse();
+    messages
+}
+
+pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
+    let dag_val = call_host(RasRpcCommand::GetDag)?;
+    let dag: Dag =
+        serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
+    let messages = traverse_dag_messages(&dag);
 
     // Count-based history windowing is handled by the `context-tools`
     // extension's `optimize` call below (alongside role-based compaction),
@@ -157,40 +163,40 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
     };
 
     if let Ok(req_json) = serde_json::to_string(&ct_req) {
-        if let Ok(res_val) = call_host(RasRpcCommand::CallExtension {
+        let res_val = call_host(RasRpcCommand::CallExtension {
             extension_id: "context-tools".to_string(),
             method: "optimize".to_string(),
             arguments: req_json,
-        }) {
-            if let Some(res_str) = res_val.as_str() {
-                if let Ok(ct_resp) = serde_json::from_str::<CtOptimizationResponse>(res_str) {
-                    let mut temp_msgs = Vec::new();
-                    for m in ct_resp.optimized_messages {
-                        if let Ok(parsed) = serde_json::from_str::<Message>(&m.content) {
-                            temp_msgs.push(parsed);
-                        } else {
-                            temp_msgs.push(Message {
-                                role: m.role,
-                                content: Some(m.content),
-                                name: None,
-                                tool_call_id: None,
-                                tool_calls: None,
-                            });
-                        }
-                    }
-                    // context-tools' windowing is positional and can split
-                    // an assistant/tool_call pair across the boundary;
-                    // re-filter before trusting the result.
-                    let temp_msgs = filter_orphaned_tool_messages(temp_msgs);
-                    if !temp_msgs.is_empty() {
-                        let _ = call_host(RasRpcCommand::WriteStdout {
-                            text: format!(
-                                "\n\x1b[2m[Context optimized: {}]\x1b[0m\n",
-                                ct_resp.summary
-                            ),
+        });
+        if let Ok(res_val) = res_val {
+            let res_str = res_val.as_str().unwrap_or("");
+            if let Ok(ct_resp) = serde_json::from_str::<CtOptimizationResponse>(res_str) {
+                let mut temp_msgs = Vec::new();
+                for m in ct_resp.optimized_messages {
+                    if let Ok(parsed) = serde_json::from_str::<Message>(&m.content) {
+                        temp_msgs.push(parsed);
+                    } else {
+                        temp_msgs.push(Message {
+                            role: m.role,
+                            content: Some(m.content),
+                            name: None,
+                            tool_call_id: None,
+                            tool_calls: None,
                         });
-                        optimized_non_system = temp_msgs;
                     }
+                }
+                // context-tools' windowing is positional and can split
+                // an assistant/tool_call pair across the boundary;
+                // re-filter before trusting the result.
+                let temp_msgs = filter_orphaned_tool_messages(temp_msgs);
+                if !temp_msgs.is_empty() {
+                    let _ = call_host(RasRpcCommand::WriteStdout {
+                        text: format!(
+                            "\n\x1b[2m[Context optimized: {}]\x1b[0m\n",
+                            ct_resp.summary
+                        ),
+                    });
+                    optimized_non_system = temp_msgs;
                 }
             }
         }
@@ -205,7 +211,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
     Ok(final_messages)
 }
 
-pub fn trigger_llm_stream(messages: Vec<Message>) -> Result<(), String> {
+pub fn trigger_llm_stream(messages: &[Message]) -> Result<(), String> {
     crate::log_trace("session", "Getting available tools...");
     let tools = get_available_tools().unwrap_or_default();
     crate::log_trace("session", &format!("Got {} available tools. Serializing...", tools.len()));

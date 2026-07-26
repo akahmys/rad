@@ -1,17 +1,25 @@
 #![deny(clippy::pedantic)]
-#![allow(unsafe_op_in_unsafe_fn)]
-#![allow(clippy::same_length_and_capacity)]
 
-wit_bindgen::generate!({
-    path: "../../wit/context-tools.wit",
-    world: "context-tools-extension",
-});
+#[allow(
+    unsafe_op_in_unsafe_fn,
+    clippy::same_length_and_capacity,
+    clippy::pedantic
+)]
+mod bindings {
+    wit_bindgen::generate!({
+        path: "../../wit/context-tools.wit",
+        world: "context-tools-extension",
+    });
 
-use crate::exports::radcomp::context_tools::context_tools::{
+    use super::MyContextTools;
+    export!(MyContextTools);
+}
+
+use self::bindings::exports::radcomp::context_tools::context_tools::{
     Guest, Message, OptimizationRequest, OptimizationResponse,
 };
-use crate::radcomp::context_tools::host_rpc;
-use crate::radcomp::context_tools::types::RasRpcCommand;
+use self::bindings::radcomp::context_tools::host_rpc;
+use self::bindings::radcomp::context_tools::types::RasRpcCommand;
 
 struct MyContextTools;
 
@@ -100,12 +108,10 @@ impl Guest for MyContextTools {
     }
 }
 
-export!(MyContextTools);
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exports::radcomp::context_tools::context_tools::Message;
+    use self::bindings::exports::radcomp::context_tools::context_tools::Message;
 
     fn msg(id: &str, role: &str, content: &str) -> Message {
         Message {

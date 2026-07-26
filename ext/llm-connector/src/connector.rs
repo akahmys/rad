@@ -84,10 +84,8 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
             .or_else(|_| std::env::var("OPENAI_API_KEY"))
             .ok();
 
-        if let Some(ref key) = api_key {
-            if !key.trim().is_empty() {
-                headers.push(("Authorization".to_string(), format!("Bearer {}", key.trim())));
-            }
+        if let Some(key) = api_key.as_ref().filter(|k| !k.trim().is_empty()) {
+            headers.push(("Authorization".to_string(), format!("Bearer {}", key.trim())));
         }
 
         let base_url_env = std::env::var("LLM_BASE_URL")
@@ -96,7 +94,7 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
             .ok();
 
         let url = if let Ok(test_port) = std::env::var("RAD_TEST_PORT") {
-            format!("http://127.0.0.1:{}/v1/chat/completions", test_port)
+            format!("http://127.0.0.1:{test_port}/v1/chat/completions")
         } else if let Some(base_url) = base_url_env {
             let trimmed = base_url.trim().trim_end_matches('/');
             if trimmed.ends_with("/chat/completions") {

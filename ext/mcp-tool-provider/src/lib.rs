@@ -1,15 +1,21 @@
 #![deny(clippy::pedantic)]
-#![allow(
-    unsafe_op_in_unsafe_fn,
-    clippy::collapsible_if,
-    clippy::same_length_and_capacity,
-    clippy::too_many_lines
-)]
 
-wit_bindgen::generate!({
-    path: "../../wit/rad.wit",
-    world: "rad-tool-provider",
-});
+#[allow(
+    unsafe_op_in_unsafe_fn,
+    clippy::same_length_and_capacity,
+    clippy::pedantic
+)]
+mod bindings {
+    wit_bindgen::generate!({
+        path: "../../wit/rad.wit",
+        world: "rad-tool-provider",
+    });
+
+    use super::ToolProviderImpl;
+    export!(ToolProviderImpl);
+}
+
+pub use bindings::*;
 
 use self::radcomp::extension::types as wit;
 
@@ -90,31 +96,29 @@ impl Guest for ToolProviderImpl {
                     if let Some(err) = res.get("error") {
                         diag(&format!("tools/list returned JSON-RPC error for '{server_name}': {err}"));
                     }
-                    if let Some(result) = res.get("result") {
-                        if let Some(mcp_tools) = result.get("tools").and_then(|t| t.as_array()) {
-                            diag(&format!("'{server_name}' returned {} tool(s)", mcp_tools.len()));
-                            for t in mcp_tools {
-                                if let Some(name) = t.get("name").and_then(|n| n.as_str()) {
-                                    mapping.insert(name.to_string(), server_name.clone());
-                                    let description = t
-                                        .get("description")
-                                        .and_then(|d| d.as_str())
-                                        .map(ToString::to_string);
-                                    let parameters = t.get("inputSchema").cloned().unwrap_or(
-                                        serde_json::json!({
-                                            "type": "object",
-                                            "properties": {}
-                                        }),
-                                    );
-                                    tools.push(Tool {
-                                        tool_type: "function".to_string(),
-                                        function: FunctionDefinition {
-                                            name: name.to_string(),
-                                            description,
-                                            parameters,
-                                        },
-                                    });
-                                }
+                    if let Some(mcp_tools) = res.get("result").and_then(|r| r.get("tools")).and_then(|t| t.as_array()) {
+                        diag(&format!("'{server_name}' returned {} tool(s)", mcp_tools.len()));
+                        for t in mcp_tools {
+                            if let Some(name) = t.get("name").and_then(|n| n.as_str()) {
+                                mapping.insert(name.to_string(), server_name.clone());
+                                let description = t
+                                    .get("description")
+                                    .and_then(|d| d.as_str())
+                                    .map(ToString::to_string);
+                                let parameters = t.get("inputSchema").cloned().unwrap_or(
+                                    serde_json::json!({
+                                        "type": "object",
+                                        "properties": {}
+                                    }),
+                                );
+                                tools.push(Tool {
+                                    tool_type: "function".to_string(),
+                                    function: FunctionDefinition {
+                                        name: name.to_string(),
+                                        description,
+                                        parameters,
+                                    },
+                                });
                             }
                         }
                     }
@@ -184,18 +188,14 @@ impl Guest for ToolProviderImpl {
             .and_then(|m| m.as_str())
         {
             result_text = format!("Error from MCP server: {err}");
-        } else if let Some(result) = res.get("result") {
-            if let Some(content) = result.get("content").and_then(|c| c.as_array()) {
-                let mut texts = Vec::new();
-                for item in content {
-                    if item.get("type").and_then(|t| t.as_str()) == Some("text") {
-                        if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
-                            texts.push(text.to_string());
-                        }
-                    }
+        } else if let Some(content) = res.get("result").and_then(|r| r.get("content")).and_then(|c| c.as_array()) {
+            let mut texts = Vec::new();
+            for item in content {
+                if let Some(text) = item.get("text").filter(|_| item.get("type").and_then(|t| t.as_str()) == Some("text")).and_then(|t| t.as_str()) {
+                    texts.push(text.to_string());
                 }
-                result_text = texts.join("\n");
             }
+            result_text = texts.join("\n");
         }
         if result_text.is_empty() {
             result_text = "No content returned from MCP server.".to_string();
@@ -205,7 +205,5 @@ impl Guest for ToolProviderImpl {
         open_process(&format!("echo -n '{escaped_result}'"))
     }
 }
-
-export!(ToolProviderImpl);
 
 

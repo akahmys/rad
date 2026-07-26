@@ -25,8 +25,8 @@ impl EventStreamImpl {
                 continue;
             }
 
-            if line.starts_with("data:") {
-                let data_str = line["data:".len()..].trim();
+            if let Some(rest) = line.strip_prefix("data:") {
+                let data_str = rest.trim();
                 if data_str == "[DONE]" {
                     *self.done.borrow_mut() = true;
                     break;
@@ -53,10 +53,12 @@ impl EventStreamImpl {
                         .and_then(serde_json::Value::as_array)
                     {
                         for tc in tool_calls {
-                            let index = tc
-                                .get("index")
-                                .and_then(serde_json::Value::as_u64)
-                                .unwrap_or(0) as u32;
+                            let index = u32::try_from(
+                                tc.get("index")
+                                    .and_then(serde_json::Value::as_u64)
+                                    .unwrap_or(0),
+                            )
+                            .unwrap_or(0);
                             let id = tc
                                 .get("id")
                                 .and_then(serde_json::Value::as_str)
@@ -84,14 +86,20 @@ impl EventStreamImpl {
 
                     // 3. Usage Info
                     if let Some(usage) = val.get("usage") {
-                        let prompt_tokens = usage
-                            .get("prompt_tokens")
-                            .and_then(serde_json::Value::as_u64)
-                            .unwrap_or(0) as u32;
-                        let completion_tokens = usage
-                            .get("completion_tokens")
-                            .and_then(serde_json::Value::as_u64)
-                            .unwrap_or(0) as u32;
+                        let prompt_tokens = u32::try_from(
+                            usage
+                                .get("prompt_tokens")
+                                .and_then(serde_json::Value::as_u64)
+                                .unwrap_or(0),
+                        )
+                        .unwrap_or(0);
+                        let completion_tokens = u32::try_from(
+                            usage
+                                .get("completion_tokens")
+                                .and_then(serde_json::Value::as_u64)
+                                .unwrap_or(0),
+                        )
+                        .unwrap_or(0);
                         if prompt_tokens > 0 || completion_tokens > 0 {
                             queue.push_back(conn_types::LlmEvent::CompletionComplete(
                                 conn_types::CompletionUsage {

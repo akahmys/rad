@@ -35,18 +35,16 @@ pub fn diag(msg: &str) {
 
 pub fn init_mcp_servers() -> Result<(), String> {
     let mut servers_guard = MCP_SERVERS.lock().map_err(|e| e.to_string())?;
-    if let Some(ref active) = *servers_guard {
-        if !active.is_empty() {
-            let mut valid = true;
-            for server in active.values() {
-                if server.stdin.write(b"").is_err() {
-                    valid = false;
-                    break;
-                }
+    if let Some(active) = servers_guard.as_ref().filter(|s| !s.is_empty()) {
+        let mut valid = true;
+        for server in active.values() {
+            if server.stdin.write(b"").is_err() {
+                valid = false;
+                break;
             }
-            if valid {
-                return Ok(());
-            }
+        }
+        if valid {
+            return Ok(());
         }
     }
 

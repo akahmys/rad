@@ -9,7 +9,7 @@ use std::sync::Mutex;
 
 pub static STATE: Mutex<Option<OrchestratorState>> = Mutex::new(None);
 
-fn handle_human_input(text: String) -> Result<(), String> {
+fn handle_human_input(text: &str) -> Result<(), String> {
     {
         let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
         *state_guard = Some(OrchestratorState {
@@ -36,7 +36,7 @@ fn handle_human_input(text: String) -> Result<(), String> {
         .ok_or("Failed to get node id as string")?;
     call_host(RasRpcCommand::SetNodeText {
         node_id: user_node_id.to_string(),
-        text: text.clone(),
+        text: text.to_string(),
     })?;
 
     if debug_enabled() {
@@ -49,12 +49,68 @@ fn handle_human_input(text: String) -> Result<(), String> {
     crate::log_trace("session", "Loading messages from DAG...");
     let messages = crate::llm::load_messages_from_dag()?;
     crate::log_trace("session", "Triggering LLM stream...");
-    crate::llm::trigger_llm_stream(messages)
+    crate::llm::trigger_llm_stream(&messages)
+}
+
+fn handle_rehydrate(active_calls: Vec<rad_models::PendingToolCallInfo>) -> Result<(), String> {
+    let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
+    let state = OrchestratorState {
+        assistant: String::new(),
+        is_reasoning: false,
+        reasoning_buffered: String::new(),
+        tool_calls: HashMap::new(),
+        max_history_messages: Some(50),
+        max_tool_output_chars: Some(2000),
+        is_rehydrated: true,
+    };
+    *state_guard = Some(state);
+    drop(state_guard);
+
+    if !active_calls.is_empty() {
+        for call in active_calls {
+            let result_raw = match crate::tool::execute_tool_sync(&call.name, &call.arguments) {
+                Ok(res) => res,
+                Err(e) => format!("Error: {e}"),
+            };
+            let result_content = trim_large_output(&result_raw);
+
+            let tool_msg = crate::tool::Message {
+                role: "tool".to_string(),
+                content: Some(result_content),
+                name: Some(call.name.clone()),
+                tool_call_id: Some(call.id.clone()),
+                tool_calls: None,
+            };
+            let tool_text = serde_json::to_string(&tool_msg)
+                .map_err(|e| format!("Failed to serialize tool message: {e}"))?;
+
+            let dag_val = call_host(RasRpcCommand::GetDag)?;
+            let dag: rad_models::Dag = serde_json::from_value(dag_val)
+                .map_err(|e| format!("Failed to parse Dag: {e}"))?;
+            let current_parent = dag.current_node_id.unwrap_or_default();
+
+            let node_id_val = call_host(RasRpcCommand::CreateNode {
+                parent_id: current_parent,
+                node_type: "tool".to_string(),
+            })?;
+            let node_id = node_id_val
+                .as_str()
+                .ok_or("Failed to get node id as string")?;
+            call_host(RasRpcCommand::SetNodeText {
+                node_id: node_id.to_string(),
+                text: tool_text,
+            })?;
+        }
+
+        let messages = crate::llm::load_messages_from_dag()?;
+        crate::llm::trigger_llm_stream(&messages)?;
+    }
+    Ok(())
 }
 
 pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
     match event {
-        RasCoreEvent::HumanInputReceived { text } => handle_human_input(text),
+        RasCoreEvent::HumanInputReceived { text } => handle_human_input(&text),
         RasCoreEvent::LlmConnectorEvent { event: event_json } => {
             let raw: RawEvent = serde_json::from_str(&event_json).map_err(|e| {
                 format!("Failed to parse LlmConnectorEvent JSON: {e} (raw={event_json})")
@@ -92,7 +148,7 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
                     }
                     if debug_enabled() {
                         let _ = call_host(RasRpcCommand::WriteStdout {
-                            text: format!("\x1b[2m{}\x1b[0m", reasoning),
+                            text: format!("\x1b[2m{reasoning}\x1b[0m"),
                         });
                     }
                     state.reasoning_buffered.push_str(reasoning);
@@ -109,13 +165,11 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
                     entry.arguments.push_str(&tc.arguments_chunk);
                 }
 
-                if let Some(ref usage) = raw.completion_complete {
-                    if usage.prompt_tokens > 0 || usage.completion_tokens > 0 {
-                        let _ = call_host(RasRpcCommand::ReportTokenUsage {
-                            prompt_tokens: usage.prompt_tokens,
-                            completion_tokens: usage.completion_tokens,
-                        });
-                    }
+                if let Some(usage) = raw.completion_complete.filter(|u| u.prompt_tokens > 0 || u.completion_tokens > 0) {
+                    let _ = call_host(RasRpcCommand::ReportTokenUsage {
+                        prompt_tokens: usage.prompt_tokens,
+                        completion_tokens: usage.completion_tokens,
+                    });
                 }
 
                 if let Some(ref message) = raw.error {
@@ -131,64 +185,7 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
             }
             Ok(())
         }
-        RasCoreEvent::Rehydrate { active_calls } => {
-            let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
-            let state = OrchestratorState {
-                assistant: String::new(),
-                is_reasoning: false,
-                reasoning_buffered: String::new(),
-                tool_calls: std::collections::HashMap::new(),
-                max_history_messages: Some(50),
-                max_tool_output_chars: Some(2000),
-                is_rehydrated: true,
-            };
-            *state_guard = Some(state);
-            drop(state_guard);
-
-            // Re-execute rehydrated active tool calls
-            if !active_calls.is_empty() {
-                for call in active_calls {
-                    let result_raw =
-                        match crate::tool::execute_tool_sync(&call.name, &call.arguments) {
-                            Ok(res) => res,
-                            Err(e) => format!("Error: {e}"),
-                        };
-                    let result_content = trim_large_output(&result_raw);
-
-                    let tool_msg = crate::tool::Message {
-                        role: "tool".to_string(),
-                        content: Some(result_content),
-                        name: Some(call.name.clone()),
-                        tool_call_id: Some(call.id.clone()),
-                        tool_calls: None,
-                    };
-                    let tool_text = serde_json::to_string(&tool_msg)
-                        .map_err(|e| format!("Failed to serialize tool message: {e}"))?;
-
-                    let dag_val = call_host(RasRpcCommand::GetDag)?;
-                    let dag: rad_models::Dag = serde_json::from_value(dag_val)
-                        .map_err(|e| format!("Failed to parse Dag: {e}"))?;
-                    let current_parent = dag.current_node_id.unwrap_or_default();
-
-                    let node_id_val = call_host(RasRpcCommand::CreateNode {
-                        parent_id: current_parent,
-                        node_type: "tool".to_string(),
-                    })?;
-                    let node_id = node_id_val
-                        .as_str()
-                        .ok_or("Failed to get node id as string")?;
-                    call_host(RasRpcCommand::SetNodeText {
-                        node_id: node_id.to_string(),
-                        text: tool_text,
-                    })?;
-                }
-
-                // Continue stream
-                let messages = crate::llm::load_messages_from_dag()?;
-                crate::llm::trigger_llm_stream(messages)?;
-            }
-            Ok(())
-        }
+        RasCoreEvent::Rehydrate { active_calls } => handle_rehydrate(active_calls),
         _ => Ok(()),
     }
 }

@@ -1,14 +1,21 @@
 #![deny(clippy::pedantic)]
-#![allow(
+
+#[allow(
     unsafe_op_in_unsafe_fn,
     clippy::same_length_and_capacity,
-    clippy::collapsible_match
+    clippy::pedantic
 )]
+mod bindings {
+    wit_bindgen::generate!({
+        path: "../../wit/rad.wit",
+        world: "rad-security-guard",
+    });
 
-wit_bindgen::generate!({
-    path: "../../wit/rad.wit",
-    world: "rad-security-guard",
-});
+    use super::SecurityGuardImpl;
+    export!(SecurityGuardImpl);
+}
+
+pub use bindings::*;
 
 use self::radcomp::extension::types as wit;
 use rad_models::RasRpcCommand as CoreRpcCommand;
@@ -19,28 +26,16 @@ impl Guest for SecurityGuardImpl {
     fn verify_rpc(command: wit::RasRpcCommand) -> bool {
         let rpc_cmd = CoreRpcCommand::from(command);
         match rpc_cmd {
-            CoreRpcCommand::FileWrite { path, .. } => {
-                if path.to_string_lossy().contains("blocked.txt") {
-                    return false;
-                }
-            }
-            CoreRpcCommand::SpawnBashProcess { command } => {
-                if command.contains("blocked_command") || command.contains("blocked.txt") {
-                    return false;
-                }
-            }
-            CoreRpcCommand::ExecuteTool { arguments, .. } => {
-                if arguments.contains("blocked.txt") || arguments.contains("blocked_command") {
-                    return false;
-                }
-            }
-            _ => {}
+            CoreRpcCommand::FileWrite { path, .. }
+                if path.to_string_lossy().contains("blocked.txt") => false,
+            CoreRpcCommand::SpawnBashProcess { command }
+                if command.contains("blocked_command") || command.contains("blocked.txt") => false,
+            CoreRpcCommand::ExecuteTool { arguments, .. }
+                if arguments.contains("blocked.txt") || arguments.contains("blocked_command") => false,
+            _ => true,
         }
-        true
     }
 }
-
-export!(SecurityGuardImpl);
 
 // Converters
 impl From<wit::Target> for rad_models::Target {

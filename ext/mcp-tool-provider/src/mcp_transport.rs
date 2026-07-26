@@ -30,13 +30,8 @@ pub(crate) fn read_line(stdout: &wit::StreamHandle) -> Result<String, String> {
                 }
             }
             Err(e) => {
-                if !buffer.is_empty() {
-                    if let Ok(line) = String::from_utf8(buffer.clone()) {
-                        let trimmed = line.trim();
-                        if !trimmed.is_empty() {
-                            return Ok(trimmed.to_string());
-                        }
-                    }
+                if let Some(trimmed) = String::from_utf8(buffer.clone()).ok().filter(|_| !buffer.is_empty()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+                    return Ok(trimmed);
                 }
                 return Err(format!("Stream error reading from MCP server: {e}"));
             }

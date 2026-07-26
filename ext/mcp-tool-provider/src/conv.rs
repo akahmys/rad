@@ -23,57 +23,107 @@ impl From<wit::TimeoutPolicy> for rad_models::TimeoutPolicy {
     }
 }
 
+fn convert_fs_cmd(cmd: CoreRpcCommand) -> Option<wit::RasRpcCommand> {
+    match cmd {
+        CoreRpcCommand::FileRead { path } => {
+            Some(wit::RasRpcCommand::FileRead(path.to_string_lossy().to_string()))
+        }
+        CoreRpcCommand::FileWrite { path, data } => {
+            Some(wit::RasRpcCommand::FileWrite(wit::FileWritePayload {
+                path: path.to_string_lossy().to_string(),
+                data,
+            }))
+        }
+        CoreRpcCommand::FileEditPatch { path, diff } => {
+            Some(wit::RasRpcCommand::FileEditPatch(wit::FilePatchPayload {
+                path: path.to_string_lossy().to_string(),
+                diff,
+            }))
+        }
+        _ => None,
+    }
+}
+
+fn convert_dag_cmd(cmd: CoreRpcCommand) -> Option<wit::RasRpcCommand> {
+    match cmd {
+        CoreRpcCommand::CreateNode {
+            parent_id,
+            node_type,
+        } => Some(wit::RasRpcCommand::CreateNode(wit::CreateNodePayload {
+            parent_id,
+            node_type,
+        })),
+        CoreRpcCommand::SetNodeText { node_id, text } => {
+            Some(wit::RasRpcCommand::SetNodeText(wit::SetNodeTextPayload { node_id, text }))
+        }
+        CoreRpcCommand::MergeNodes {
+            node_ids,
+            summary_text,
+        } => Some(wit::RasRpcCommand::MergeNodes(wit::MergeNodesPayload {
+            node_ids,
+            summary_text,
+        })),
+        CoreRpcCommand::DeleteNode { node_id } => Some(wit::RasRpcCommand::DeleteNode(node_id)),
+        CoreRpcCommand::TakeSnapshot {
+            node_id,
+            target_paths,
+        } => Some(wit::RasRpcCommand::TakeSnapshot(wit::TakeSnapshotPayload {
+            node_id,
+            target_paths: target_paths
+                .into_iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect(),
+        })),
+        CoreRpcCommand::CheckoutSnapshot { node_id } => {
+            Some(wit::RasRpcCommand::CheckoutSnapshot(node_id))
+        }
+        CoreRpcCommand::GetDag => Some(wit::RasRpcCommand::GetDag),
+        _ => None,
+    }
+}
+
+fn convert_mcp_cmd(cmd: CoreRpcCommand) -> Option<wit::RasRpcCommand> {
+    match cmd {
+        CoreRpcCommand::SpawnMcpServer {
+            name,
+            command,
+            args,
+        } => Some(wit::RasRpcCommand::SpawnMcpServer(wit::SpawnMcpServerPayload {
+            name,
+            command,
+            args,
+        })),
+        CoreRpcCommand::SendMcpRequest { name, message } => {
+            Some(wit::RasRpcCommand::SendMcpRequest(wit::SendMcpRequestPayload { name, message }))
+        }
+        CoreRpcCommand::GetTools => Some(wit::RasRpcCommand::GetTools),
+        CoreRpcCommand::ExecuteTool {
+            call_id,
+            name,
+            arguments,
+        } => Some(wit::RasRpcCommand::ExecuteTool(wit::ExecuteToolPayload {
+            call_id,
+            name,
+            arguments,
+        })),
+        _ => None,
+    }
+}
+
 impl From<CoreRpcCommand> for wit::RasRpcCommand {
     fn from(cmd: CoreRpcCommand) -> Self {
+        if let Some(res) = convert_fs_cmd(cmd.clone()) {
+            return res;
+        }
+        if let Some(res) = convert_dag_cmd(cmd.clone()) {
+            return res;
+        }
+        if let Some(res) = convert_mcp_cmd(cmd.clone()) {
+            return res;
+        }
         match cmd {
-            CoreRpcCommand::FileRead { path } => {
-                wit::RasRpcCommand::FileRead(path.to_string_lossy().to_string())
-            }
-            CoreRpcCommand::FileWrite { path, data } => {
-                wit::RasRpcCommand::FileWrite(wit::FileWritePayload {
-                    path: path.to_string_lossy().to_string(),
-                    data,
-                })
-            }
-            CoreRpcCommand::FileEditPatch { path, diff } => {
-                wit::RasRpcCommand::FileEditPatch(wit::FilePatchPayload {
-                    path: path.to_string_lossy().to_string(),
-                    diff,
-                })
-            }
             CoreRpcCommand::SpawnBashProcess { command } => {
                 wit::RasRpcCommand::SpawnBashProcess(command)
-            }
-            CoreRpcCommand::CreateNode {
-                parent_id,
-                node_type,
-            } => wit::RasRpcCommand::CreateNode(wit::CreateNodePayload {
-                parent_id,
-                node_type,
-            }),
-            CoreRpcCommand::SetNodeText { node_id, text } => {
-                wit::RasRpcCommand::SetNodeText(wit::SetNodeTextPayload { node_id, text })
-            }
-            CoreRpcCommand::MergeNodes {
-                node_ids,
-                summary_text,
-            } => wit::RasRpcCommand::MergeNodes(wit::MergeNodesPayload {
-                node_ids,
-                summary_text,
-            }),
-            CoreRpcCommand::DeleteNode { node_id } => wit::RasRpcCommand::DeleteNode(node_id),
-            CoreRpcCommand::TakeSnapshot {
-                node_id,
-                target_paths,
-            } => wit::RasRpcCommand::TakeSnapshot(wit::TakeSnapshotPayload {
-                node_id,
-                target_paths: target_paths
-                    .into_iter()
-                    .map(|p| p.to_string_lossy().to_string())
-                    .collect(),
-            }),
-            CoreRpcCommand::CheckoutSnapshot { node_id } => {
-                wit::RasRpcCommand::CheckoutSnapshot(node_id)
             }
             CoreRpcCommand::OpenHttpStream { url, headers, body } => {
                 wit::RasRpcCommand::OpenHttpStream(wit::OpenHttpStreamPayload {
@@ -104,7 +154,6 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
             }
             CoreRpcCommand::WriteStdout { text } => wit::RasRpcCommand::WriteStdout(text),
             CoreRpcCommand::CompleteTask => wit::RasRpcCommand::CompleteTask,
-            CoreRpcCommand::GetDag => wit::RasRpcCommand::GetDag,
             CoreRpcCommand::AskHumanApproval { prompt } => {
                 wit::RasRpcCommand::AskHumanApproval(prompt)
             }
@@ -115,29 +164,7 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
                 prompt_tokens,
                 completion_tokens,
             }),
-            CoreRpcCommand::SpawnMcpServer {
-                name,
-                command,
-                args,
-            } => wit::RasRpcCommand::SpawnMcpServer(wit::SpawnMcpServerPayload {
-                name,
-                command,
-                args,
-            }),
-            CoreRpcCommand::SendMcpRequest { name, message } => {
-                wit::RasRpcCommand::SendMcpRequest(wit::SendMcpRequestPayload { name, message })
-            }
             CoreRpcCommand::GetRepoMap => wit::RasRpcCommand::GetRepoMap,
-            CoreRpcCommand::GetTools => wit::RasRpcCommand::GetTools,
-            CoreRpcCommand::ExecuteTool {
-                call_id,
-                name,
-                arguments,
-            } => wit::RasRpcCommand::ExecuteTool(wit::ExecuteToolPayload {
-                call_id,
-                name,
-                arguments,
-            }),
             CoreRpcCommand::OpenFile { .. } | CoreRpcCommand::OpenProcess { .. } => {
                 panic!("OpenFile and OpenProcess are now directly imported capabilities")
             }
@@ -162,6 +189,7 @@ impl From<CoreRpcCommand> for wit::RasRpcCommand {
             CoreRpcCommand::LogTracedEvent { .. } => {
                 panic!("LogTracedEvent serialization arm")
             }
+            _ => unreachable!(),
         }
     }
 }

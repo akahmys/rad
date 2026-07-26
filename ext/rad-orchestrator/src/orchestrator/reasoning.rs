@@ -98,7 +98,7 @@ fn handle_reasoning_text(state: &mut OrchestratorState, text: &str) {
             if !thought_content.is_empty() {
                 if debug_enabled() {
                     let _ = call_host(RasRpcCommand::WriteStdout {
-                        text: format!("\x1b[2m{}\x1b[0m", thought_content),
+                        text: format!("\x1b[2m{thought_content}\x1b[0m"),
                     });
                 }
                 state.reasoning_buffered.push_str(thought_content);
@@ -120,7 +120,7 @@ fn handle_reasoning_text(state: &mut OrchestratorState, text: &str) {
     } else {
         if debug_enabled() {
             let _ = call_host(RasRpcCommand::WriteStdout {
-                text: format!("\x1b[2m{}\x1b[0m", text),
+                text: format!("\x1b[2m{text}\x1b[0m"),
             });
         }
         state.reasoning_buffered.push_str(text);

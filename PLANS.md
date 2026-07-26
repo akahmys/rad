@@ -34,6 +34,42 @@
 - [✅] Phase 40: Post-Consolidation Audit Fixes — Orphan-Filter Ordering & CallExtension Deadlock Risk (v0.45.0)
 - [✅] Phase 41: Second Audit Pass — Unsafe Tool-Call Squashing, File-Size Limit, Production Unwrap (v0.46.0)
 - [✅] Phase 42: Full File-Size Limit Compliance — Split All Remaining 300+ Line Files (v0.47.0)
+- [✅] Phase 43: Extension Crates Clippy Audit & Hand-Written Allow Cleanup (v0.48.0)
+- [🔄] Phase 44: Release Build, Verification Audit & Push to Main (v0.49.0)
+
+---
+
+## 🛠️ Short-Term Plan: Phase 44
+
+### 💡 Current AWU Status
+- [🔄] AWU 913: Commit and Push Phase 43 Extension Crates Cleanups to Main (In Progress)
+
+### 📝 AWU Details
+
+#### AWU 913: Commit and Push Phase 43 Extension Crates Cleanups to Main
+- **Trigger**: User requested pushing completed Phase 43 changes to `main`.
+- **Scope**: All modified workspace files in `ext/` and `PLANS.md`.
+- **Definition of Done (DoD)**: All changes committed cleanly with descriptive commit message and pushed to `origin/main`.
+- **Result**: In progress.
+
+---
+
+## 🛠️ Short-Term Plan: Phase 43
+
+### 💡 Current AWU Status
+- [✅] AWU 912: Remove Hand-Written Clippy Allows in Extension Crates & Fix Warnings (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 912: Remove Hand-Written Clippy Allows in Extension Crates & Fix Warnings
+- **Trigger**: User requested completely eliminating crate-level `#![allow(...)]` attributes by scoping necessary macro-generated allowances strictly to generated modules.
+- **Changes**:
+  1. **Zero Crate-Level Allow Directives**: Removed all crate-wide `#![allow(...)]` attributes from `lib.rs` across all 5 extension crates (`ext/context-tools`, `ext/llm-connector`, `ext/mcp-tool-provider`, `ext/rad-orchestrator`, `ext/security-guard`), leaving only `#![deny(clippy::pedantic)]` at crate root.
+  2. **Scoped Macro Encapsulation**: Encapsulated `wit_bindgen::generate!` and `export!(...)` inside a dedicated `mod bindings` module annotated with `#[allow(unsafe_op_in_unsafe_fn, clippy::same_length_and_capacity, clippy::pedantic)]`, re-exporting via `pub use bindings::*;`. This ensures `wit_bindgen` generated code warnings are isolated to the generated module alone, while all hand-written code is strictly checked under `#![deny(clippy::pedantic)]`.
+  3. **Code Fixes**: Resolved all hand-written Clippy warnings across extension crates (collapsible_if, uninlined_format_args, manual_strip, cast_possible_truncation, too_many_lines, single_match_else, manual_assert, collapsible_match).
+- **Scope**: `ext/llm-connector/src/{lib.rs, connector.rs, event_stream.rs}`, `ext/mcp-tool-provider/src/{lib.rs, client.rs, conv.rs, mcp_config.rs, mcp_transport.rs}`, `ext/rad-orchestrator/src/{lib.rs, conv/rpc.rs, llm.rs, orchestrator.rs, tool.rs, orchestrator/reasoning.rs, orchestrator/runner/done.rs}`, `ext/security-guard/src/lib.rs`, `ext/context-tools/src/lib.rs`.
+- **Definition of Done (DoD)**: Zero `#![allow(...)]` attributes at crate root; generated code warnings scoped strictly to `mod bindings`; all extension crates build cleanly under `wasm32-wasip1` with zero Clippy warnings; all workspace unit/integration tests and `./scripts/build_all.sh` pass cleanly.
+- **Result**: Success. Verified via `cargo clippy --target wasm32-wasip1 -p <ext>` for all 5 extension crates, `cargo clippy --workspace --all-targets` (0 warnings), and full `./scripts/build_all.sh` run.
 
 ---
 
