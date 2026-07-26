@@ -1,18 +1,13 @@
+pub(crate) mod reasoning;
 pub(crate) mod runner;
 
 use crate::types::{Dag, OrchestratorState, RasCoreEvent, RasRpcCommand};
+use reasoning::{RawEvent, debug_enabled, handle_content_token};
 use runner::{call_host, handle_done, trim_large_output};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 pub static STATE: Mutex<Option<OrchestratorState>> = Mutex::new(None);
-
-/// Reasoning trace markers ([Thinking...]/[Thought End]) and the dimmed
-/// `<thought>` content itself are silent by default; set `RAD_DEBUG=1` to
-/// show them alongside the final answer.
-fn debug_enabled() -> bool {
-    std::env::var("RAD_DEBUG").is_ok()
-}
 
 fn handle_human_input(text: String) -> Result<(), String> {
     {
@@ -55,125 +50,6 @@ fn handle_human_input(text: String) -> Result<(), String> {
     let messages = crate::llm::load_messages_from_dag()?;
     crate::log_trace("session", "Triggering LLM stream...");
     crate::llm::trigger_llm_stream(messages)
-}
-
-#[derive(serde::Deserialize)]
-struct ToolCallChunkEvent {
-    index: u32,
-    id: Option<String>,
-    name: Option<String>,
-    #[serde(alias = "arguments-chunk")]
-    arguments_chunk: String,
-}
-
-#[derive(serde::Deserialize)]
-struct CompletionUsageEvent {
-    #[serde(alias = "prompt-tokens")]
-    prompt_tokens: u32,
-    #[serde(alias = "completion-tokens")]
-    completion_tokens: u32,
-}
-
-#[derive(serde::Deserialize)]
-struct RawEvent {
-    #[serde(rename = "type")]
-    event_type: Option<String>,
-    payload: Option<String>,
-
-    #[serde(rename = "ContentChunk")]
-    content_chunk: Option<String>,
-    #[serde(rename = "ReasoningChunk")]
-    reasoning_chunk: Option<String>,
-    #[serde(rename = "ToolCallChunk")]
-    tool_call_chunk: Option<ToolCallChunkEvent>,
-    #[serde(rename = "CompletionComplete")]
-    completion_complete: Option<CompletionUsageEvent>,
-    #[serde(rename = "Error")]
-    error: Option<String>,
-}
-
-fn handle_content_token(state: &mut OrchestratorState, content: &str) {
-    if state.is_reasoning && !content.contains("<thought>") && !content.contains("</thought>") {
-        if debug_enabled() {
-            let _ = call_host(RasRpcCommand::WriteStdout {
-                text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
-            });
-        }
-        state.is_reasoning = false;
-    }
-
-    let mut text = content.to_string();
-    if text.contains("<thought>") {
-        text = handle_thought_start_tag(state, &text);
-    }
-
-    if state.is_reasoning {
-        handle_reasoning_text(state, &text);
-    } else {
-        let _ = call_host(RasRpcCommand::WriteStdout { text: text.clone() });
-        state.assistant.push_str(&text);
-    }
-}
-
-fn handle_thought_start_tag(state: &mut OrchestratorState, text: &str) -> String {
-    if let Some(pos) = text.find("<thought>") {
-        let before = &text[..pos];
-        if !before.is_empty() {
-            if state.is_reasoning && debug_enabled() {
-                let _ = call_host(RasRpcCommand::WriteStdout {
-                    text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
-                });
-            }
-            let _ = call_host(RasRpcCommand::WriteStdout {
-                text: before.to_string(),
-            });
-            state.assistant.push_str(before);
-        }
-        if debug_enabled() {
-            let _ = call_host(RasRpcCommand::WriteStdout {
-                text: "\n\x1b[2m[Thinking]\x1b[0m\n".to_string(),
-            });
-        }
-        state.is_reasoning = true;
-        return text[pos + "<thought>".len()..].to_string();
-    }
-    text.to_string()
-}
-
-fn handle_reasoning_text(state: &mut OrchestratorState, text: &str) {
-    if text.contains("</thought>") {
-        if let Some(pos) = text.find("</thought>") {
-            let thought_content = &text[..pos];
-            if !thought_content.is_empty() {
-                if debug_enabled() {
-                    let _ = call_host(RasRpcCommand::WriteStdout {
-                        text: format!("\x1b[2m{}\x1b[0m", thought_content),
-                    });
-                }
-                state.reasoning_buffered.push_str(thought_content);
-            }
-            if debug_enabled() {
-                let _ = call_host(RasRpcCommand::WriteStdout {
-                    text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
-                });
-            }
-            state.is_reasoning = false;
-            let after = &text[pos + "</thought>".len()..];
-            if !after.is_empty() {
-                let _ = call_host(RasRpcCommand::WriteStdout {
-                    text: after.to_string(),
-                });
-                state.assistant.push_str(after);
-            }
-        }
-    } else {
-        if debug_enabled() {
-            let _ = call_host(RasRpcCommand::WriteStdout {
-                text: format!("\x1b[2m{}\x1b[0m", text),
-            });
-        }
-        state.reasoning_buffered.push_str(text);
-    }
 }
 
 pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {

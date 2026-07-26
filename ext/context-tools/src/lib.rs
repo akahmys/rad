@@ -53,48 +53,22 @@ impl MyContextTools {
 
         trimmed
     }
-
-    /// Role-based squashing: collapses consecutive runs of non-user/assistant
-    /// messages (e.g. tool results) into the last message of the run.
-    fn compress_messages(messages: &[Message], summary_parts: &mut Vec<String>) -> Vec<Message> {
-        let mut optimized_messages = Vec::new();
-        let mut i = 0;
-
-        while i < messages.len() {
-            let role = messages[i].role.as_str();
-            if role == "user" || role == "assistant" {
-                optimized_messages.push(messages[i].clone());
-                i += 1;
-            } else {
-                let mut j = i;
-                while j < messages.len()
-                    && messages[j].role != "user"
-                    && messages[j].role != "assistant"
-                {
-                    j += 1;
-                }
-
-                let count = j - i;
-                if count > 1 {
-                    let last_msg = &messages[j - 1];
-                    summary_parts.push(format!(
-                        "Compressed {} messages (role: '{}') into one.",
-                        count, last_msg.role
-                    ));
-                    optimized_messages.push(last_msg.clone());
-                } else {
-                    optimized_messages.push(messages[i].clone());
-                }
-                i = j;
-            }
-        }
-
-        optimized_messages
-    }
 }
 
 impl Guest for MyContextTools {
     fn optimize(request: OptimizationRequest) -> Result<OptimizationResponse, String> {
+        // NOTE: this used to also role-squash consecutive runs of
+        // non-user/assistant messages down to the last one in the run. In
+        // this system the only role that is ever valid outside `user` /
+        // `assistant` / `system` is `tool` (see llm.rs's DAG walk), and a
+        // single `assistant` turn can carry multiple parallel `tool_calls`,
+        // each answered by its own consecutive `tool` message. Squashing
+        // those down to one silently drops tool results that the
+        // `assistant` message's `tool_calls` array still references,
+        // producing a request the LLM API will reject. There is no role in
+        // this system for which squashing is safe, so it was removed rather
+        // than left in as dead/unsafe code. Count-based windowing below is
+        // the only compaction strategy.
         if request.messages.is_empty() {
             return Ok(OptimizationResponse {
                 optimized_messages: Vec::new(),
@@ -104,9 +78,8 @@ impl Guest for MyContextTools {
 
         let mut summary_parts = Vec::new();
 
-        let windowed =
+        let optimized_messages =
             Self::apply_history_window(request.messages, request.max_history, &mut summary_parts);
-        let optimized_messages = Self::compress_messages(&windowed, &mut summary_parts);
 
         let summary = if summary_parts.is_empty() {
             "No messages were compressed.".to_string()
@@ -154,7 +127,11 @@ mod tests {
     }
 
     #[test]
-    fn test_optimize_with_compression() {
+    fn test_optimize_does_not_squash_parallel_tool_results() {
+        // An assistant turn with 2 parallel tool_calls produces 2 consecutive
+        // `tool` messages. Both must survive intact: dropping either would
+        // leave the assistant message's tool_calls array referencing a
+        // tool_call_id with no matching reply, which real LLM APIs reject.
         let request = OptimizationRequest {
             messages: vec![
                 msg("1", "user", "Hello"),
@@ -165,13 +142,10 @@ mod tests {
             max_history: None,
         };
         let result = MyContextTools::optimize(request).unwrap();
-        assert_eq!(result.optimized_messages.len(), 3);
-        assert!(
-            result
-                .summary
-                .contains("Compressed 2 messages (role: 'tool') into one.")
-        );
-        assert_eq!(result.optimized_messages[1].content, "Second tool result");
+        assert_eq!(result.optimized_messages.len(), 4);
+        assert_eq!(result.optimized_messages[1].content, "First tool result");
+        assert_eq!(result.optimized_messages[2].content, "Second tool result");
+        assert_eq!(result.summary, "No messages were compressed.");
     }
 
     #[test]
@@ -207,9 +181,9 @@ mod tests {
     }
 
     #[test]
-    fn test_optimize_windowing_then_compression() {
-        // Goal + alternating tool/assistant turns; windowing first trims the
-        // list, then role-squashing collapses any remaining tool runs.
+    fn test_optimize_windowing_preserves_tool_pairs_in_window() {
+        // Goal + a turn with 2 parallel tool_calls; windowing trims the
+        // list but must not further collapse the surviving tool pair.
         let messages = vec![
             msg("0", "user", "goal"),
             msg("1", "tool", "old result"),
@@ -223,17 +197,14 @@ mod tests {
             max_history: Some(4),
         };
         let result = MyContextTools::optimize(request).unwrap();
-        // Window keeps [goal, result A, result B, final reply] (4 messages),
-        // then compression squashes the two consecutive tool messages into one.
-        assert_eq!(result.optimized_messages.len(), 3);
+        // Window keeps [goal, result A, result B, final reply] (4 messages);
+        // both tool results in the surviving pair remain, unsquashed.
+        assert_eq!(result.optimized_messages.len(), 4);
         assert_eq!(result.optimized_messages[0].node_id.as_deref(), Some("0"));
-        assert_eq!(result.optimized_messages[1].content, "result B");
-        assert_eq!(result.optimized_messages[2].content, "final reply");
+        assert_eq!(result.optimized_messages[1].content, "result A");
+        assert_eq!(result.optimized_messages[2].content, "result B");
+        assert_eq!(result.optimized_messages[3].content, "final reply");
         assert!(result.summary.contains("Windowed history from 6 to 4"));
-        assert!(
-            result
-                .summary
-                .contains("Compressed 2 messages (role: 'tool') into one.")
-        );
+        assert!(!result.summary.contains("Compressed"));
     }
 }

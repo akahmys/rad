@@ -2,6 +2,11 @@
 
 Last Updated: 2026-07-06
 
+> **Superseded**: Detailed work tracking moved to `PLANS.md` (AWU numbering
+> restarted there around AWU 852). This file is kept as historical record
+> per `AUDITING.md`'s "no deletion of past logs" rule and is no longer
+> updated for new work.
+
 ## Completed Milestones
 - [x] Initial Setup, Configuration & Architecture (v0.0)
 - [x] Core Subsystems: Process, FS, DAG, Wasm, PTY, HTTP, CI (v0.1)
@@ -240,5 +245,5 @@ Last Updated: 2026-07-06
 - [x] AWU 202: Split `src/wasm/imports.rs` & eliminate unsafe patterns
 - [x] AWU 203: Split `src/wasm/bindings.rs`
 - [x] AWU 204: Complete Tool Execution Delegation
-- [ ] AWU 205: Configuration & cleanup
+- [~] AWU 205: ~~Configuration & cleanup~~ (Abandoned — file superseded by `PLANS.md` before this item was picked up; no record of its intended scope)
 

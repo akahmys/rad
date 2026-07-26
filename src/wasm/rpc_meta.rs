@@ -262,7 +262,18 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                             let mut connector = connector_arc_clone.lock();
                             let connector_ref = &mut *connector;
                             let store = &mut connector_ref.store;
-                            let conn_bindings = connector_ref.llm_connector.as_ref().unwrap();
+                            let Some(conn_bindings) = connector_ref.llm_connector.as_ref() else {
+                                let _ = event_tx_clone.send(
+                                    crate::ipc::RasCoreEvent::LlmConnectorEvent {
+                                        event: serde_json::json!({
+                                            "type": "error",
+                                            "payload": "LLM Connector bindings missing while polling stream"
+                                        })
+                                        .to_string(),
+                                    },
+                                );
+                                break;
+                            };
 
                             conn_bindings
                                 .radcomp_connector_producer()
