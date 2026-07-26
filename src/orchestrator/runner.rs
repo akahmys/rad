@@ -38,7 +38,7 @@ impl Orchestrator {
     }
 
     fn run_task_internal(self: &Arc<Self>, instruction: &str) -> Result<(), String> {
-        eprintln!("[DEBUG] Starting run_task_internal: instruction = '{instruction}'");
+        crate::log_host!("[DEBUG] Starting run_task_internal: instruction = '{instruction}'");
         let config = self.config.lock().clone();
         let workspace_path = Path::new(&config.core.workspace);
         let session_id = self.session_id.lock().clone();
@@ -75,9 +75,9 @@ impl Orchestrator {
             }
             let (event_tx, event_rx) = channel::<RasCoreEvent>();
 
-            eprintln!("[DEBUG] Initializing WASM runtimes...");
+            crate::log_host!("[DEBUG] Initializing WASM runtimes...");
             let wasm_runtimes = self.get_or_init_runtimes(&event_tx)?;
-            eprintln!("[DEBUG] Initialized {} WASM runtimes.", wasm_runtimes.len());
+            crate::log_host!("[DEBUG] Initialized {} WASM runtimes.", wasm_runtimes.len());
             for runtime_arc in wasm_runtimes.values() {
                 let mut runtime = runtime_arc.lock();
                 runtime.set_event_tx(event_tx.clone());
@@ -119,10 +119,10 @@ impl Orchestrator {
                 text: instruction.to_string(),
             };
             if wasm_runtimes.is_empty() {
-                eprintln!("[DEBUG] No WASM runtimes found, sending init_event to event_tx");
+                crate::log_host!("[DEBUG] No WASM runtimes found, sending init_event to event_tx");
                 let _ = event_tx.send(init_event);
             } else {
-                eprintln!("[DEBUG] Dispatching HumanInputReceived to {} runtimes...", wasm_runtimes.len());
+                crate::log_host!("[DEBUG] Dispatching HumanInputReceived to {} runtimes...", wasm_runtimes.len());
                 for (name, runtime_arc) in &wasm_runtimes {
                     let is_orchestrator = {
                         let runtime = runtime_arc.lock();
@@ -131,14 +131,14 @@ impl Orchestrator {
                     if !is_orchestrator {
                         continue;
                     }
-                    eprintln!("[DEBUG] Calling on_event on runtime '{name}'...");
+                    crate::log_host!("[DEBUG] Calling on_event on runtime '{name}'...");
                     let mut runtime = runtime_arc.lock();
                     if let Err(e) = runtime.on_event(&init_event) {
                         println!("Wasm execution error on {name}: {e}. Recovering...");
                         success = false;
                         break;
                     }
-                    eprintln!("[DEBUG] on_event on runtime '{name}' returned OK.");
+                    crate::log_host!("[DEBUG] on_event on runtime '{name}' returned OK.");
                 }
                 if !success {
                     self.clear_runtimes()?;
@@ -147,7 +147,7 @@ impl Orchestrator {
                 }
             }
 
-            eprintln!("[DEBUG] Entering process_event_loop...");
+            crate::log_host!("[DEBUG] Entering process_event_loop...");
 
             match self.process_event_loop(&event_rx, &wasm_runtimes) {
                 Ok(()) => {

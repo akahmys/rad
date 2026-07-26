@@ -7,6 +7,13 @@ use std::sync::Mutex;
 
 pub static STATE: Mutex<Option<OrchestratorState>> = Mutex::new(None);
 
+/// Reasoning trace markers ([Thinking...]/[Thought End]) and the dimmed
+/// `<thought>` content itself are silent by default; set `RAD_DEBUG=1` to
+/// show them alongside the final answer.
+fn debug_enabled() -> bool {
+    std::env::var("RAD_DEBUG").is_ok()
+}
+
 fn handle_human_input(text: String) -> Result<(), String> {
     {
         let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
@@ -37,9 +44,11 @@ fn handle_human_input(text: String) -> Result<(), String> {
         text: text.clone(),
     })?;
 
-    let _ = call_host(RasRpcCommand::WriteStdout {
-        text: "\x1b[36m[Thinking...]\x1b[0m\n".to_string(),
-    });
+    if debug_enabled() {
+        let _ = call_host(RasRpcCommand::WriteStdout {
+            text: "\x1b[36m[Thinking...]\x1b[0m\n".to_string(),
+        });
+    }
 
     crate::log_trace("session", &format!("Received human input: {text}"));
     crate::log_trace("session", "Loading messages from DAG...");
@@ -85,9 +94,11 @@ struct RawEvent {
 
 fn handle_content_token(state: &mut OrchestratorState, content: &str) {
     if state.is_reasoning && !content.contains("<thought>") && !content.contains("</thought>") {
-        let _ = call_host(RasRpcCommand::WriteStdout {
-            text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
-        });
+        if debug_enabled() {
+            let _ = call_host(RasRpcCommand::WriteStdout {
+                text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
+            });
+        }
         state.is_reasoning = false;
     }
 
@@ -108,7 +119,7 @@ fn handle_thought_start_tag(state: &mut OrchestratorState, text: &str) -> String
     if let Some(pos) = text.find("<thought>") {
         let before = &text[..pos];
         if !before.is_empty() {
-            if state.is_reasoning {
+            if state.is_reasoning && debug_enabled() {
                 let _ = call_host(RasRpcCommand::WriteStdout {
                     text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
                 });
@@ -118,9 +129,11 @@ fn handle_thought_start_tag(state: &mut OrchestratorState, text: &str) -> String
             });
             state.assistant.push_str(before);
         }
-        let _ = call_host(RasRpcCommand::WriteStdout {
-            text: "\n\x1b[2m[Thinking]\x1b[0m\n".to_string(),
-        });
+        if debug_enabled() {
+            let _ = call_host(RasRpcCommand::WriteStdout {
+                text: "\n\x1b[2m[Thinking]\x1b[0m\n".to_string(),
+            });
+        }
         state.is_reasoning = true;
         return text[pos + "<thought>".len()..].to_string();
     }
@@ -132,14 +145,18 @@ fn handle_reasoning_text(state: &mut OrchestratorState, text: &str) {
         if let Some(pos) = text.find("</thought>") {
             let thought_content = &text[..pos];
             if !thought_content.is_empty() {
-                let _ = call_host(RasRpcCommand::WriteStdout {
-                    text: format!("\x1b[2m{}\x1b[0m", thought_content),
-                });
+                if debug_enabled() {
+                    let _ = call_host(RasRpcCommand::WriteStdout {
+                        text: format!("\x1b[2m{}\x1b[0m", thought_content),
+                    });
+                }
                 state.reasoning_buffered.push_str(thought_content);
             }
-            let _ = call_host(RasRpcCommand::WriteStdout {
-                text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
-            });
+            if debug_enabled() {
+                let _ = call_host(RasRpcCommand::WriteStdout {
+                    text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
+                });
+            }
             state.is_reasoning = false;
             let after = &text[pos + "</thought>".len()..];
             if !after.is_empty() {
@@ -150,9 +167,11 @@ fn handle_reasoning_text(state: &mut OrchestratorState, text: &str) {
             }
         }
     } else {
-        let _ = call_host(RasRpcCommand::WriteStdout {
-            text: format!("\x1b[2m{}\x1b[0m", text),
-        });
+        if debug_enabled() {
+            let _ = call_host(RasRpcCommand::WriteStdout {
+                text: format!("\x1b[2m{}\x1b[0m", text),
+            });
+        }
         state.reasoning_buffered.push_str(text);
     }
 }
@@ -188,14 +207,18 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
 
                 if let Some(ref reasoning) = raw.reasoning_chunk {
                     if !state.is_reasoning {
-                        let _ = call_host(RasRpcCommand::WriteStdout {
-                            text: "\n\x1b[2m[Thinking]\x1b[0m\n".to_string(),
-                        });
+                        if debug_enabled() {
+                            let _ = call_host(RasRpcCommand::WriteStdout {
+                                text: "\n\x1b[2m[Thinking]\x1b[0m\n".to_string(),
+                            });
+                        }
                         state.is_reasoning = true;
                     }
-                    let _ = call_host(RasRpcCommand::WriteStdout {
-                        text: format!("\x1b[2m{}\x1b[0m", reasoning),
-                    });
+                    if debug_enabled() {
+                        let _ = call_host(RasRpcCommand::WriteStdout {
+                            text: format!("\x1b[2m{}\x1b[0m", reasoning),
+                        });
+                    }
                     state.reasoning_buffered.push_str(reasoning);
                 }
 

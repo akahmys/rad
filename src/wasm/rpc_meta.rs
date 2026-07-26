@@ -13,7 +13,7 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             module,
             message,
         } => {
-            println!("\x1b[36m[TRACE {trace_id}]\x1b[0m \x1b[33m[{module}]\x1b[0m {message}");
+            crate::log_host!("\x1b[36m[TRACE {trace_id}]\x1b[0m \x1b[33m[{module}]\x1b[0m {message}");
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::AskHumanApproval { prompt } => {
@@ -163,7 +163,7 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             }
 
             if let Some(orch) = ctx.orchestrator {
-                eprintln!("[DEBUG] Host GenerateLlmStream starting...");
+                crate::log_host!("[DEBUG] Host GenerateLlmStream starting...");
                 let connector_arc = {
                     let runtimes = orch.wasm_runtime.lock();
                     let mut connector_runtime_opt = None;
@@ -180,7 +180,7 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                         "LLM Connector extension not found or not loaded".to_string()
                     })?
                 };
-                eprintln!("[DEBUG] Host found connector_arc.");
+                crate::log_host!("[DEBUG] Host found connector_arc.");
 
                 let mut connector = connector_arc.lock();
                 let connector_ref = &mut *connector;

@@ -181,9 +181,10 @@ pub fn load_mcp_config() -> Option<McpProviderConfig> {
 }
 
 /// Prints a diagnostic line directly to the human-visible terminal output via host RPC.
-/// Silent by default; set `RAD_MCP_DEBUG=1` in the environment to re-enable while troubleshooting.
+/// Silent by default; set `RAD_DEBUG=1` in the environment to re-enable while troubleshooting
+/// (same flag used by the core's [DEBUG]/[TRACE]/[Thinking] output).
 pub fn diag(msg: &str) {
-    if std::env::var("RAD_MCP_DEBUG").is_err() {
+    if std::env::var("RAD_DEBUG").is_err() {
         return;
     }
     let _ = crate::host_rpc(&wit::RasRpcCommand::WriteStdout(format!(
