@@ -63,8 +63,13 @@ impl ProcessManager {
             .collect::<Vec<_>>();
         let first_bin = parts.first().cloned().unwrap_or_default();
         let bin_path = std::path::PathBuf::from(&first_bin);
+        let is_in_path = std::env::var_os("PATH").is_some_and(|paths| {
+            std::env::split_paths(&paths).any(|p| p.join(&first_bin).is_file())
+        });
+        let has_shell_features = command.contains(';') || command.contains('|') || command.contains('>') || command.contains('<') || command.contains('&');
+        let is_direct_executable = (bin_path.is_file() || is_in_path) && !has_shell_features;
 
-        let mut cmd = if bin_path.is_file() {
+        let mut cmd = if is_direct_executable {
             let mut c = Command::new(&first_bin);
             if parts.len() > 1 {
                 c.args(&parts[1..]);

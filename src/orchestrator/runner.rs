@@ -247,49 +247,10 @@ impl Orchestrator {
                                 && let Some(arr) = val.as_array()
                             {
                                 if arr.is_empty() {
-                                    std::thread::sleep(std::time::Duration::from_millis(150));
-                                    // Instantiate a fresh WASM runtime to force guest static state reset
-                                    if let Ok(mut fresh_rt) = WasmRuntime::new(
-                                        ext.name.clone(),
-                                        wasm_path,
-                                        ext.role.clone(),
-                                        permissions.clone(),
-                                        self.sandbox.clone() as Arc<dyn crate::subsystems::FsSubsystem>,
-                                        self.process_manager.clone() as Arc<dyn crate::subsystems::ProcessSubsystem>,
-                                        dag_subsystem.clone(),
-                                        network_subsystem.clone(),
-                                        self.active_processes.clone(),
-                                        event_tx.clone(),
-                                        Some(Arc::downgrade(self)),
-                                        hitl_enabled,
-                                    ) {
-                                        if let Ok(retry_str) = fresh_rt.get_tools()
-                                            && let Ok(retry_val) = serde_json::from_str::<serde_json::Value>(&retry_str)
-                                            && let Some(retry_arr) = retry_val.as_array()
-                                            && !retry_arr.is_empty()
-                                        {
-                                            println!(
-                                                "\x1b[32m[OK] Verified {} tools from extension '{}'\x1b[0m",
-                                                retry_arr.len(),
-                                                ext.name
-                                            );
-                                            runtime = fresh_rt;
-                                        } else {
-                                            let err_detail = fresh_rt.get_tools().unwrap_or_else(|e| format!("RPC err: {e}"));
-                                            println!(
-                                                "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools (Check MCP binary paths or servers). Detail: {}\x1b[0m",
-                                                ext.name,
-                                                err_detail
-                                            );
-                                        }
-                                    } else {
-                                        let err_detail = runtime.get_tools().unwrap_or_else(|e| format!("RPC err: {e}"));
-                                        println!(
-                                            "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools (Check MCP binary paths or servers). Detail: {}\x1b[0m",
-                                            ext.name,
-                                            err_detail
-                                        );
-                                    }
+                                    println!(
+                                        "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools. See [MCP Diagnostic] lines above for the actual cause.\x1b[0m",
+                                        ext.name
+                                    );
                                 } else {
                                     println!(
                                         "\x1b[32m[OK] Verified {} tools from extension '{}'\x1b[0m",
@@ -297,10 +258,15 @@ impl Orchestrator {
                                         ext.name
                                     );
                                 }
+                            } else {
+                                println!(
+                                    "\x1b[31m[FAILED] Extension '{}' returned invalid JSON from get_tools: {}\x1b[0m",
+                                    ext.name, json_str
+                                );
                             }
                         }
                         Err(e) => {
-                            println!("\x1b[31m[FAILED] Tool provider '{}' error: {e}\x1b[0m", ext.name);
+                            println!("\x1b[31m[FAILED] Extension '{}' get_tools error: {e}\x1b[0m", ext.name);
                         }
                     }
                 }

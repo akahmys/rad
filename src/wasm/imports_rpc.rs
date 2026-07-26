@@ -149,8 +149,10 @@ impl bindings::RadExtensionImports for WasmState {
             command: expanded_command.clone(),
         };
 
-        permissions::check_permissions(&cmd, &self.permissions, self.sandbox.workspace_dir())
-            .map_err(|e| format!("Permission denied in extension '{}': {e}", self.name))?;
+        if let Err(ref e) = permissions::check_permissions(&cmd, &self.permissions, self.sandbox.workspace_dir()) {
+            crate::log_host!("[HOST] RPC OpenProcess Perm Failed in extension '{}': {}", self.name, e);
+            return Err(format!("Permission denied in extension '{}': {e}", self.name));
+        }
 
         let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
         if let Some(ref orch) = orchestrator {

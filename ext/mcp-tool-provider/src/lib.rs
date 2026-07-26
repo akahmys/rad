@@ -22,7 +22,7 @@ struct ToolProviderImpl;
 mod client;
 mod default_tools;
 
-use client::{MCP_SERVERS, MCP_TOOL_MAPPING, init_mcp_servers, mcp_request};
+use client::{MCP_SERVERS, MCP_TOOL_MAPPING, diag, init_mcp_servers, mcp_request};
 use default_tools::{FunctionDefinition, Tool};
 
 impl Guest for ToolProviderImpl {
@@ -80,9 +80,17 @@ impl Guest for ToolProviderImpl {
                     "method": "tools/list",
                     "params": {}
                 });
-                if let Ok(res) = mcp_request(&server_name, &req) {
+                match mcp_request(&server_name, &req) {
+                    Err(e) => {
+                        diag(&format!("tools/list request failed for '{server_name}': {e}"));
+                    }
+                    Ok(res) => {
+                    if let Some(err) = res.get("error") {
+                        diag(&format!("tools/list returned JSON-RPC error for '{server_name}': {err}"));
+                    }
                     if let Some(result) = res.get("result") {
                         if let Some(mcp_tools) = result.get("tools").and_then(|t| t.as_array()) {
+                            diag(&format!("'{server_name}' returned {} tool(s)", mcp_tools.len()));
                             for t in mcp_tools {
                                 if let Some(name) = t.get("name").and_then(|n| n.as_str()) {
                                     mapping.insert(name.to_string(), server_name.clone());
@@ -107,6 +115,7 @@ impl Guest for ToolProviderImpl {
                                 }
                             }
                         }
+                    }
                     }
                 }
             }

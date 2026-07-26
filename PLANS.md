@@ -1,5 +1,5 @@
 # Project Work Plan (PLANS.md)
-**Last Updated**: 2026-07-23
+**Last Updated**: 2026-07-26
 
 ## 🗺️ Long-Term Plan (Roadmap)
 - [✅] Phase 10: Codebase Refactoring & Rule Alignment (v0.15.0)
@@ -36,11 +36,56 @@
 ## 🛠️ Short-Term Plan: Phase 38
 
 ### 💡 Current AWU Status
+- [✅] AWU 907: Fix ExecutionHandle Drop Prematurely Killing Spawned MCP Servers (Result: Success)
+- [✅] AWU 906: Fix Non-blocking EOF Handling in MCP Stream Reader (Result: Success)
+- [✅] AWU 905: Unified Canonical Path Resolution in Permissions and Subsystem Gateways (Result: Success)
+- [✅] AWU 904: Standardize WASM Global Config Path Resolution and Clean Diagnostic Pipelines (Result: Success)
+- [✅] AWU 903: Standardize Stdio Pipe Spawning & Executable PATH Lookup in Process Subsystem (Result: Success)
+- [✅] AWU 902: Host Config Synthesis Deep Merge for User Global ~/.rad/config.json and Project Local Configs (Result: Success)
 - [✅] AWU 901: Implement Deep Merge Synthesis in WASM mcp-tool-provider Config Discovery (Result: Success)
 - [✅] AWU 900: Fix verify_rpc_exclude deadlock in nested WASM runtime calls (Result: Success)
 - [✅] AWU 899: Comprehensive codebase audit across ext/mcp-tool-provider, src/process.rs, src/wasm/, and src/orchestrator/ (Result: Success)
 
 ### 📝 AWU Details
+
+#### AWU 907: Fix ExecutionHandle Drop Prematurely Killing Spawned MCP Servers
+- **Trigger**: User reported `rad` reporting "0 tools" for `mcp-tool-provider` in interactive sessions (`~/projects/test` and `~/projects/rad` alike) despite `~/.cargo/bin/core-utilities-mcp` and `~/.cargo/bin/web-access-mcp` both responding correctly to a manual `initialize` -> `notifications/initialized` -> `tools/list` JSON-RPC sequence outside of `rad`.
+- **Root Cause & Discoveries**:
+  1. `RunningProcess` (`src/process.rs`) implements `Drop` to call `kill_group()`, SIGKILLing the process's entire OS process group when the value is dropped.
+  2. In `init_mcp_servers()` (`ext/mcp-tool-provider/src/client.rs`), the `ExecutionHandle` returned by `open_process()` was only used to extract `stdin`/`stdout` stream handles via `.get_stdin()`/`.get_stdout()`, then discarded (never stored in `ActiveMcpServer`). It went out of scope and dropped at the end of each loop iteration, which SIGKILLed the just-spawned MCP server process immediately after the `initialize` handshake completed successfully.
+  3. Consequently, by the time `get_tools()` issued a `tools/list` request, the target process was already dead, and `stdin.write()` failed with `Broken pipe (os error 32)`, silently yielding an empty tool list.
+  4. Diagnosed by temporarily reinstating `[MCP Diagnostic]` instrumentation (previously stripped by AWU 904 during diagnostic cleanup, which is what prevented this bug from surfacing earlier).
+- **Fix**:
+  1. Added an `exec: wit::ExecutionHandle` field to `ActiveMcpServer` and stored the handle there instead of discarding it, keeping the spawned process alive for the life of the connection.
+  2. Restored `[MCP Diagnostic]` instrumentation in `client.rs`/`lib.rs`, gated silent-by-default behind a `RAD_MCP_DEBUG` environment variable so it doesn't clutter normal output but remains available for future troubleshooting.
+- **Scope**: `ext/mcp-tool-provider/src/client.rs`, `ext/mcp-tool-provider/src/lib.rs`.
+- **Definition of Done (DoD)**: `rad` in `~/projects/test` initializes both configured MCP servers and reports `[OK] Verified 18 tools from extension 'mcp-tool-provider'` (15 from `core-utilities-mcp`, 3 from `web-access-mcp`) without diagnostic noise by default.
+- **Result**: Success. Verified live in an interactive `rad` session.
+
+#### AWU 906: Fix Non-blocking EOF Handling in MCP Stream Reader
+- **Objective**: Refactor `read_line` in `ext/mcp-tool-provider/src/client.rs` to process buffered bytes on EOF/stream error and terminate gracefully instead of looping on empty reads until 10s timeout. Rebuild and verify complete suite.
+- **Scope**: `ext/mcp-tool-provider/src/client.rs`.
+- **Definition of Done (DoD)**: `read_line` detects stream errors and EOF gracefully; all 60 workspace unit and integration tests and Clippy audit pass cleanly.
+
+#### AWU 905: Unified Canonical Path Resolution in Permissions and Subsystem Gateways
+- **Objective**: Refactor path resolution logic into a single helper (`canonicalize_path`) in `src/wasm/permissions.rs` used uniformly by `FileRead` RPC and permission gateways. Rebuild and verify complete suite.
+- **Scope**: `src/wasm/permissions.rs`.
+- **Definition of Done (DoD)**: Single unified path resolution gateway handles all raw, relative, and tilde-prefixed paths; all 60 unit/integration tests and Clippy audit pass cleanly.
+
+#### AWU 904: Standardize WASM Global Config Path Resolution and Clean Diagnostic Pipelines
+- **Objective**: Standardize `load_mcp_config` in `ext/mcp-tool-provider/src/client.rs` to query absolute global configuration path (`$HOME/.rad/config.json`) first, clean up diagnostic sub-processes, fix clippy lints, and rebuild/re-install binaries.
+- **Scope**: `ext/mcp-tool-provider/src/client.rs`, `src/config.rs`, `src/process.rs`.
+- **Definition of Done (DoD)**: Clippy passes cleanly without warnings/errors, all automated unit and integration tests pass, and binary is successfully re-installed locally.
+
+#### AWU 903: Standardize Stdio Pipe Spawning & Executable PATH Lookup in Process Subsystem
+- **Objective**: Fix executable PATH lookup in `src/process.rs` for direct binary execution while properly delegating shell-feature commands (pipes, redirects, wildcards) to `bash -c`.
+- **Scope**: `src/process.rs`.
+- **Definition of Done (DoD)**: All 37 workspace unit tests and 23 integration tests pass, stdio piping behavior is clean and stable across all working directories.
+
+#### AWU 902: Host Config Synthesis Deep Merge for User Global ~/.rad/config.json and Project Local Configs
+- **Objective**: Refactor host `load_config()` in `src/config.rs` to always load `~/.rad/config.json` as base configuration and deep-merge project local config files on top, ensuring global extensions and permissions are preserved regardless of working directory.
+- **Scope**: `src/config.rs`.
+- **Definition of Done (DoD)**: `load_config` merges global base and project local configs, all tests pass, and running `rad` in directories without a project `rad.json` (such as `~/projects/test`) correctly inherits global MCP tools and permissions.
 
 #### AWU 901: Implement Deep Merge Synthesis in WASM mcp-tool-provider Config Discovery
 - **Objective**: Merge `mcp_servers` configurations from global (`~/.rad/config.json`) and local (`rad.json`, `.rad/config.json`) files so global tools remain available while allowing project-level overrides/additions.

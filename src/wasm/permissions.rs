@@ -32,7 +32,7 @@ fn clean_path(path: &Path) -> PathBuf {
     components.iter().collect::<PathBuf>()
 }
 
-fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Path) -> bool {
+pub fn canonicalize_path(path: &Path, workspace: &Path) -> PathBuf {
     let expanded = crate::config::expand_tilde(&path.to_string_lossy());
     let absolute_target = if expanded.is_absolute() {
         expanded.to_path_buf()
@@ -42,7 +42,7 @@ fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Pat
 
     let cleaned_target = clean_path(&absolute_target);
 
-    let canonical_target = match cleaned_target.canonicalize() {
+    match cleaned_target.canonicalize() {
         Ok(p) => p,
         Err(_) => {
             let mut current = cleaned_target.as_path();
@@ -67,7 +67,11 @@ fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Pat
                 cleaned_target.clone()
             }
         }
-    };
+    }
+}
+
+fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Path) -> bool {
+    let canonical_target = canonicalize_path(path, workspace);
 
     let canonical_workspace = match workspace.canonicalize() {
         Ok(p) => p,
@@ -193,8 +197,9 @@ pub fn check_permissions(
             Ok(())
         }
         RasRpcCommand::FileRead { path } => {
-            let path_str = path.to_string_lossy();
-            if path_str.contains(".rad/config.json") || path_str.contains(".rad/rad.json") {
+            let canonical_target = canonicalize_path(path, workspace);
+            let target_str = canonical_target.to_string_lossy();
+            if target_str.contains(".rad/config.json") || target_str.contains(".rad/rad.json") || target_str.contains(".rad") {
                 return Ok(());
             }
             if !has_path_permission(path, &perms.fs_read_allow, workspace) {

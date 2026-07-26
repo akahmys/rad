@@ -15,6 +15,12 @@ pub struct McpServerConfig {
 }
 
 pub struct ActiveMcpServer {
+    // Kept alive for the lifetime of the connection: dropping this resource
+    // triggers RunningProcess::drop() -> kill_group() on the host side, which
+    // SIGKILLs the spawned MCP server. Must not be discarded after extracting
+    // stdin/stdout, or the process dies right after the handshake completes.
+    #[allow(dead_code)]
+    pub exec: wit::ExecutionHandle,
     pub stdin: wit::StreamHandle,
     pub stdout: wit::StreamHandle,
 }
@@ -87,6 +93,14 @@ fn read_config_file(path: &str) -> Option<String> {
     let cmd = wit::RasRpcCommand::FileRead(path.to_string());
     if let Ok(res_str) = crate::host_rpc(&cmd) {
         if !res_str.is_empty() && res_str != "null" {
+            // 1. Try deserializing directly as String (if host returned JSON string)
+            if let Ok(s) = serde_json::from_str::<String>(&res_str) {
+                let cleaned = strip_json_comments(&s);
+                if serde_json::from_str::<serde_json::Value>(&cleaned).is_ok() {
+                    return Some(cleaned);
+                }
+            }
+            // 2. Try deserializing as byte array (serde_bytes::Bytes)
             if let Ok(bytes) = serde_json::from_str::<Vec<u8>>(&res_str) {
                 if let Ok(s) = String::from_utf8(bytes) {
                     let cleaned = strip_json_comments(&s);
@@ -95,6 +109,7 @@ fn read_config_file(path: &str) -> Option<String> {
                     }
                 }
             }
+            // 3. Try deserializing as generic Value
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&res_str) {
                 if let Some(s) = val.as_str() {
                     let cleaned = strip_json_comments(s);
@@ -122,21 +137,16 @@ pub fn load_mcp_config() -> Option<McpProviderConfig> {
     let mut merged_servers: HashMap<String, McpServerConfig> = HashMap::new();
     let mut found_any = false;
 
-    // Search paths in reverse precedence (global base first, local overrides last)
-    let mut paths = vec![
-        "~/.rad/config.json".to_string(),
-        ".rad/rad.json".to_string(),
-        "config.json".to_string(),
-        ".rad/config.json".to_string(),
-        "rad.json".to_string(),
-    ];
+    let mut paths = Vec::new();
 
     if let Ok(home) = std::env::var("HOME") {
-        let user_global = format!("{home}/.rad/config.json");
-        if !paths.contains(&user_global) {
-            paths.insert(0, user_global);
-        }
+        paths.push(format!("{home}/.rad/config.json"));
     }
+    paths.push("~/.rad/config.json".to_string());
+    paths.push(".rad/rad.json".to_string());
+    paths.push("config.json".to_string());
+    paths.push(".rad/config.json".to_string());
+    paths.push("rad.json".to_string());
 
     for p in &paths {
         if let Some(c) = read_config_file(p) {
@@ -170,6 +180,17 @@ pub fn load_mcp_config() -> Option<McpProviderConfig> {
     }
 }
 
+/// Prints a diagnostic line directly to the human-visible terminal output via host RPC.
+/// Silent by default; set `RAD_MCP_DEBUG=1` in the environment to re-enable while troubleshooting.
+pub fn diag(msg: &str) {
+    if std::env::var("RAD_MCP_DEBUG").is_err() {
+        return;
+    }
+    let _ = crate::host_rpc(&wit::RasRpcCommand::WriteStdout(format!(
+        "\x1b[36m[MCP Diagnostic] {msg}\x1b[0m"
+    )));
+}
+
 pub fn init_mcp_servers() -> Result<(), String> {
     let mut servers_guard = MCP_SERVERS.lock().map_err(|e| e.to_string())?;
     if let Some(ref active) = *servers_guard {
@@ -191,22 +212,22 @@ pub fn init_mcp_servers() -> Result<(), String> {
 
     let mut active = HashMap::new();
     let Some(config) = load_mcp_config() else {
+        diag("load_mcp_config() returned None: no mcp_servers block found in any discovered config file");
         return Err("load_mcp_config returned None (no mcp_servers config found)".to_string());
     };
 
-    if let Some(servers) = config.mcp_servers {
-        let _ = open_process(&format!("echo '[MCP Diagnostic] Found {} server configs' >&2", servers.len()));
+    if let Some(ref servers) = config.mcp_servers {
+        diag(&format!("Found {} server config(s): {:?}", servers.len(), servers.keys().collect::<Vec<_>>()));
         for (name, cfg) in servers {
             let mut cmd_parts = vec![cfg.command.clone()];
             cmd_parts.extend(cfg.args.clone());
             let command_line = cmd_parts.join(" ");
 
-            let _ = open_process(&format!("echo '[MCP Diagnostic] Spawning {name}: {command_line}' >&2"));
-
+            diag(&format!("Spawning '{name}': {command_line}"));
             let exec = match open_process(&command_line) {
                 Ok(exec) => exec,
                 Err(e) => {
-                    let _ = open_process(&format!("echo '[MCP Diagnostic] Failed to spawn {name}: {e}' >&2"));
+                    diag(&format!("Failed to spawn '{name}': {e}"));
                     continue;
                 }
             };
@@ -229,12 +250,15 @@ pub fn init_mcp_servers() -> Result<(), String> {
             });
             let req_str = format!("{}\n", serde_json::to_string(&init_req).unwrap_or_default());
             if let Err(e) = stdin.write(req_str.as_bytes()) {
-                let _ = open_process(&format!("echo '[MCP Diagnostic] Stdin write failed for {name}: {e}' >&2"));
+                diag(&format!("Stdin write failed for '{name}' during initialize: {e}"));
                 continue;
             }
-            if let Err(e) = read_line(&stdout) {
-                let _ = open_process(&format!("echo '[MCP Diagnostic] Handshake read_line failed for {name}: {e}' >&2"));
-                continue;
+            match read_line(&stdout) {
+                Ok(line) => diag(&format!("Handshake response from '{name}': {line}")),
+                Err(e) => {
+                    diag(&format!("Handshake read_line failed for '{name}': {e}"));
+                    continue;
+                }
             }
 
             let notif = serde_json::json!({
@@ -243,40 +267,64 @@ pub fn init_mcp_servers() -> Result<(), String> {
                 "params": {}
             });
             let notif_str = format!("{}\n", serde_json::to_string(&notif).unwrap_or_default());
-            let _ = stdin.write(notif_str.as_bytes());
+            if let Err(e) = stdin.write(notif_str.as_bytes()) {
+                diag(&format!("Stdin write failed for '{name}' during notifications/initialized: {e}"));
+            }
 
-            active.insert(name, ActiveMcpServer { stdin, stdout });
+            diag(&format!("'{name}' initialized successfully"));
+            active.insert(name.clone(), ActiveMcpServer { exec, stdin, stdout });
         }
+    } else {
+        diag("load_mcp_config() succeeded but mcp_servers field was empty/None");
     }
 
-    if !active.is_empty() {
+    if active.is_empty() {
+        Err(format!(
+            "Failed to initialize active MCP servers (found_any={}, active_count=0)",
+            config.mcp_servers.as_ref().map_or(0, std::collections::HashMap::len)
+        ))
+    } else {
         *servers_guard = Some(active);
+        Ok(())
     }
-    Ok(())
 }
 
 fn read_line(stdout: &wit::StreamHandle) -> Result<String, String> {
     let mut buffer = Vec::new();
     let start = std::time::Instant::now();
     loop {
-        let chunk = stdout.read(1024)?;
-        if chunk.is_empty() {
-            if start.elapsed() > std::time::Duration::from_secs(10) {
-                return Err("Timeout reading from MCP server (10s elapsed)".to_string());
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            continue;
-        }
-        for &b in &chunk {
-            if b == b'\n' {
-                let line = String::from_utf8(buffer.clone()).map_err(|e| e.to_string())?;
-                let trimmed = line.trim();
-                if !trimmed.is_empty() {
-                    return Ok(trimmed.to_string());
+        match stdout.read(1024) {
+            Ok(chunk) => {
+                if chunk.is_empty() {
+                    if start.elapsed() > std::time::Duration::from_secs(10) {
+                        return Err("Timeout reading from MCP server (10s elapsed)".to_string());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
                 }
-                buffer.clear();
-            } else {
-                buffer.push(b);
+                for &b in &chunk {
+                    if b == b'\n' {
+                        let line = String::from_utf8(buffer.clone()).map_err(|e| e.to_string())?;
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty() {
+                            return Ok(trimmed.to_string());
+                        }
+                        buffer.clear();
+                    } else {
+                        buffer.push(b);
+                    }
+                }
+            }
+            Err(e) => {
+                if !buffer.is_empty() {
+                    if let Ok(line) = String::from_utf8(buffer.clone()) {
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty() {
+                            return Ok(trimmed.to_string());
+                        }
+                    }
+                }
+                return Err(format!("Stream error reading from MCP server: {e}"));
             }
         }
     }
