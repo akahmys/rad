@@ -31,13 +31,35 @@
 - [✅] Phase 37: Fast Direct Binary Execution & Robust Read Loop for MCP Server Spawning (v0.42.0)
 - [✅] Phase 38: Deep End-to-End Codebase Audit & Verification of MCP Subsystem (v0.43.0)
 - [✅] Phase 39: Consolidate Context Compaction Logic into `context-tools` Extension (v0.44.0)
+- [✅] Phase 40: Post-Consolidation Audit Fixes — Orphan-Filter Ordering & CallExtension Deadlock Risk (v0.45.0)
 
 ---
 
-## 🛠️ Short-Term Plan: Phase 39
+## 🛠️ Short-Term Plan: Phase 40
 
 ### 💡 Current AWU Status
-- [✅] AWU 908: Consolidate Context Compaction Logic into `context-tools` Extension (Result: Success)
+- [✅] AWU 909: Fix Orphan Tool-Message Filter Ordering & CallExtension Blocking Lock (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 909: Fix Orphan Tool-Message Filter Ordering & CallExtension Blocking Lock
+- **Trigger**: User asked for a general audit of the current code after AWU 908 shipped. Two concrete issues surfaced from reading `ext/rad-orchestrator/src/llm.rs` and `src/wasm/rpc_meta.rs` against the codebase's own documented history (AUDITING.md, CODING.md, PLANS.md archive).
+- **Issue 1 (regression from AWU 908)**: The orphan-`tool`-message filter in `load_messages_from_dag` used to run *after* count-based history windowing, so any orphan the windowing created (by slicing between an `assistant`/`tool_calls` message and its `tool` reply) got cleaned up before the request reached the LLM. AWU 908 moved windowing into `context-tools` and left the filter running *before* it, on the unwindowed list — meaning `context-tools`' purely positional windowing could reintroduce an orphaned `tool` message that never gets filtered out again, recreating the class of bug AWU 78 ("Filter Out Isolated Tool Messages", a 400 Bad Request fix) originally addressed.
+- **Issue 2**: `src/wasm/rpc_meta.rs`'s `CallExtension` RPC handler (the exact path AWU 908's `context-tools` calls go through every turn) held the outer `orch.wasm_runtime` lock for the full duration of the nested extension call and used a blocking `.lock()` on the target runtime, instead of the clone-Arc-then-`try_lock()` pattern used everywhere else in the same file (`GetTools`, `ExecuteTool`) since AWU 900's deadlock fix. Not a confirmed live deadlock, but the same risk class on a hot path.
+- **Fix**:
+  1. `ext/rad-orchestrator/src/llm.rs`: extracted the filter into `filter_orphaned_tool_messages()` and apply it twice — once after DAG reconstruction, once again after parsing `context-tools`' optimized response, before it's trusted.
+  2. `src/wasm/rpc_meta.rs`: `CallExtension` now clones the target `Arc` out of a short-lived `wasm_runtime` lock, then `try_lock()`s the runtime, returning an error instead of blocking if it's busy.
+- **Scope**: `ext/rad-orchestrator/src/llm.rs`, `src/wasm/rpc_meta.rs`.
+- **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass under `./scripts/build_all.sh`.
+- **Result**: Success. One Clippy pedantic fixup needed mid-flight (`clippy::doc_markdown` — backticks around `` `assistant`/`tool_call` `` in a doc comment). Final run: all 5 `context-tools` unit tests + 37 `rad` lib unit tests + 23 integration tests pass, Clippy clean, binary reinstalled.
+
+### 📌 Known Outstanding Issues (not yet actioned)
+Surfaced during the same audit, left for a future AWU:
+- `ext/rad-orchestrator/src/orchestrator.rs` is 318 lines, over CODING.md's 300-line file limit (grew past it via the RAD_DEBUG-unification commit).
+- Crate-level `#![allow(clippy::...)]` in every extension crate technically contradicts CODING.md's "never suppress pedantic lints" rule; longstanding, likely necessary for `wit_bindgen`-generated code, not touched.
+- One production `.unwrap()` in `src/wasm/rpc_meta.rs` (background LLM-stream polling thread, assumes `llm_connector` is always `Some`).
+- `TASKS.md` is stale (last updated 2026-07-06) with an abandoned unfinished item ("AWU 205: Configuration & cleanup").
+- `context-tools`' role-based squashing (`compress_messages`, pre-existing, not part of AWU 908/909) can still drop some `tool` results from a multi-tool-call turn while keeping the `assistant` message's full `tool_calls` list — a related but separate potential source of malformed requests, not yet investigated in depth.
 
 ### 📝 AWU Details
 

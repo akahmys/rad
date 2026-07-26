@@ -441,14 +441,25 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             arguments,
         } => {
             if let Some(orch) = ctx.orchestrator {
-                let runtimes = orch.wasm_runtime.lock();
-                if let Some(runtime_arc) = runtimes.get(extension_id) {
-                    let mut runtime = runtime_arc.lock();
-                    let res_str = runtime.call_extension_method(method, arguments)?;
-                    Ok(serde_json::Value::String(res_str))
-                } else {
-                    Ok(serde_json::Value::Null)
-                }
+                // Clone the Arc out of the outer map lock and drop the guard
+                // immediately, then use try_lock() on the target runtime.
+                // Matches the GetTools/ExecuteTool pattern above; holding
+                // wasm_runtime's lock for the duration of a nested extension
+                // call is exactly the class of bug fixed in AWU 900.
+                let runtime_arc = {
+                    let guard = orch.wasm_runtime.lock();
+                    guard.get(extension_id).cloned()
+                };
+                let Some(runtime_arc) = runtime_arc else {
+                    return Ok(serde_json::Value::Null);
+                };
+                let Some(mut runtime) = runtime_arc.try_lock() else {
+                    return Err(format!(
+                        "Extension '{extension_id}' is busy handling another call"
+                    ));
+                };
+                let res_str = runtime.call_extension_method(method, arguments)?;
+                Ok(serde_json::Value::String(res_str))
             } else {
                 Ok(serde_json::Value::Null)
             }

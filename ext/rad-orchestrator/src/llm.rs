@@ -35,6 +35,37 @@ fn get_system_prompt() -> String {
     prompt
 }
 
+/// Drops `tool` messages that have no matching `assistant` message with a
+/// corresponding `tool_calls` entry earlier in the list. Must be applied
+/// both right after DAG reconstruction (orphans can pre-exist from
+/// rollback/rehydration) and again after `context-tools` optimization,
+/// since count-based windowing there is purely positional and can split an
+/// `assistant`/`tool_call` pair across the window boundary, reintroducing
+/// an orphan (the class of bug AWU 78's original "400 Bad Request" fix
+/// addressed).
+fn filter_orphaned_tool_messages(messages: Vec<Message>) -> Vec<Message> {
+    let mut filtered: Vec<Message> = Vec::new();
+    for msg in messages {
+        if msg.role == "tool" {
+            let has_matching_call = msg.tool_call_id.as_ref().is_some_and(|tid| {
+                filtered.iter().any(|prev_msg| {
+                    prev_msg.role == "assistant"
+                        && prev_msg
+                            .tool_calls
+                            .as_ref()
+                            .is_some_and(|tcalls| tcalls.iter().any(|tc| tc.id == *tid))
+                })
+            });
+            if has_matching_call {
+                filtered.push(msg);
+            }
+        } else {
+            filtered.push(msg);
+        }
+    }
+    filtered
+}
+
 pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
     let dag_val = call_host(RasRpcCommand::GetDag)?;
     let dag: Dag =
@@ -89,32 +120,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
         .and_then(|guard| guard.as_ref().and_then(|s| s.max_history_messages))
         .unwrap_or(30);
 
-    let mut filtered_messages = Vec::new();
-    for msg in messages {
-        if msg.role == "tool" {
-            let has_matching_call = if let Some(ref tid) = msg.tool_call_id {
-                filtered_messages.iter().any(|prev_msg: &Message| {
-                    if prev_msg.role == "assistant" {
-                        if let Some(ref tcalls) = prev_msg.tool_calls {
-                            tcalls.iter().any(|tc| tc.id == *tid)
-                        } else {
-                            false
-                        }
-                    } else {
-                        // Correct type type
-                        false
-                    }
-                })
-            } else {
-                false
-            };
-            if has_matching_call {
-                filtered_messages.push(msg);
-            }
-        } else {
-            filtered_messages.push(msg);
-        }
-    }
+    let filtered_messages = filter_orphaned_tool_messages(messages);
 
     let mut all_messages = vec![Message {
         role: "system".to_string(),
@@ -172,6 +178,10 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
                             });
                         }
                     }
+                    // context-tools' windowing is positional and can split
+                    // an assistant/tool_call pair across the boundary;
+                    // re-filter before trusting the result.
+                    let temp_msgs = filter_orphaned_tool_messages(temp_msgs);
                     if !temp_msgs.is_empty() {
                         let _ = call_host(RasRpcCommand::WriteStdout {
                             text: format!(
