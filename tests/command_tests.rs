@@ -17,8 +17,6 @@ fn parsed(name: &'static str, args: &str) -> ParsedCommand {
 fn test_slash_command_parsing() {
     assert_eq!(CommandParser::parse("/help"), Some(parsed("help", "")));
     assert_eq!(CommandParser::parse("/quit"), Some(parsed("quit", "")));
-    assert_eq!(CommandParser::parse("/status"), Some(parsed("status", "")));
-    assert_eq!(CommandParser::parse("/clear"), Some(parsed("clear", "")));
     assert_eq!(
         CommandParser::parse("/session 1234"),
         Some(parsed("session", "1234"))
@@ -29,6 +27,14 @@ fn test_slash_command_parsing() {
     );
     assert_eq!(CommandParser::parse("/tree"), Some(parsed("tree", "")));
     assert_eq!(CommandParser::parse("/tools"), Some(parsed("tools", "")));
+    assert_eq!(CommandParser::parse("/new"), Some(parsed("new", "")));
+    assert_eq!(CommandParser::parse("/compact"), Some(parsed("compact", "")));
+    // `/status` and `/clear` no longer exist: `/session` absorbed
+    // `/status`'s output, and `/clear` was removed (no external precedent
+    // for it — pi-coding-agent doesn't have one either — and terminals
+    // already provide Ctrl+L).
+    assert_eq!(CommandParser::parse("/status"), None);
+    assert_eq!(CommandParser::parse("/clear"), None);
     assert!(matches!(
         CommandParser::parse("/llm"),
         Some(ParsedCommand { name: "llm", .. })
@@ -74,8 +80,8 @@ fn test_command_execution() {
         None,
     ));
 
-    // 1. Test Status Command on empty DAG
-    let res = CommandManager::execute(&parsed("status", ""), &orchestrator);
+    // 1. Test Session Command (merged /status output) on empty DAG
+    let res = CommandManager::execute(&parsed("session", ""), &orchestrator);
     if let CommandResult::StatusInfo(info) = res {
         assert!(info.contains("Session ID: test_session"));
         assert!(info.contains("Total DAG Nodes: 0"));
@@ -84,7 +90,7 @@ fn test_command_execution() {
         panic!("Expected StatusInfo");
     }
 
-    // 2. Add nodes and test Status Command again
+    // 2. Add nodes and test Session Command again
     {
         let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
@@ -92,7 +98,7 @@ fn test_command_execution() {
         let _n1 = dag_guard.create_node(&n0, "assistant").unwrap();
     }
 
-    let res = CommandManager::execute(&parsed("status", ""), &orchestrator);
+    let res = CommandManager::execute(&parsed("session", ""), &orchestrator);
     if let CommandResult::StatusInfo(info) = res {
         assert!(info.contains("Session ID: test_session"));
         assert!(info.contains("Total DAG Nodes: 2"));
@@ -115,14 +121,6 @@ fn test_command_execution() {
     if let CommandResult::StatusInfo(info) = res {
         assert!(info.contains("Active Permissions:"));
         assert!(info.contains("Available Tools"));
-    } else {
-        panic!("Expected StatusInfo");
-    }
-
-    // 2.7 Test Session Command now reports the real session ID, not an echo
-    let res = CommandManager::execute(&parsed("session", ""), &orchestrator);
-    if let CommandResult::StatusInfo(info) = res {
-        assert_eq!(info, "Current session: test_session");
     } else {
         panic!("Expected StatusInfo");
     }
@@ -169,8 +167,8 @@ fn test_command_execution() {
         _ => panic!("Expected CommandResult::StatusInfo"),
     }
 
-    // 6. Test Reset Command
-    let res = CommandManager::execute(&parsed("reset", ""), &orchestrator);
+    // 6. Test New Command (formerly /reset)
+    let res = CommandManager::execute(&parsed("new", ""), &orchestrator);
     match res {
         CommandResult::StatusInfo(info) => {
             assert!(info.contains("Session reset successfully"));

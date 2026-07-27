@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
+#[cfg(test)]
+mod tests;
+
 impl Orchestrator {
     pub fn get_or_init_runtimes(
         self: &Arc<Self>,
@@ -101,5 +104,18 @@ impl Orchestrator {
         let mut guard = self.wasm_runtime.lock();
         guard.clear();
         Ok(())
+    }
+
+    /// Resolves the extension currently registered for `role` (e.g.
+    /// `"context-tools"`) to its live `WasmRuntime`, via the static
+    /// `role` each extension declares in `~/.rad/config.json` — avoids
+    /// locking every candidate runtime just to inspect its own `.role`
+    /// field while holding the outer `wasm_runtime` lock, the nested-lock
+    /// pattern AWU 900 fixed away from. `None` if no enabled extension
+    /// declares that role, or it hasn't been initialized yet.
+    pub(crate) fn find_extension_arc_by_role(&self, role: &str) -> Option<Arc<Mutex<WasmRuntime>>> {
+        let resolved_name =
+            self.config.lock().extensions.iter().find(|e| e.role == role).map(|e| e.name.clone())?;
+        self.wasm_runtime.lock().get(&resolved_name).cloned()
     }
 }

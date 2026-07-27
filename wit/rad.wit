@@ -108,6 +108,11 @@ interface types {
     }
 
     record call-extension-payload {
+        // Selects the target by its declared *role* (`ExtensionConfig.role`
+        // in `~/.rad/config.json`), not a literal extension name — e.g.
+        // "context-tools". Lets a caller ask for "whichever extension
+        // currently serves this role" without needing to know what a given
+        // deployment happens to have named it.
         extension-id: string,
         method: string,
         arguments: string,

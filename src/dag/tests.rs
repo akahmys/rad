@@ -57,6 +57,41 @@ fn test_merge_nodes() {
 }
 
 #[test]
+fn test_merge_nodes_preserves_current_node_id_when_merging_non_current_nodes() {
+    let mut dag = Dag::new();
+    let root = dag.create_node("", "root").unwrap();
+    let child1 = dag.create_node(&root, "child1").unwrap();
+    let child2 = dag.create_node(&root, "child2").unwrap();
+    let tip = dag.create_node(&child2, "tip").unwrap();
+    // `tip` is current; merging an older, non-current range must not move
+    // the pointer to the new merge node.
+    assert_eq!(dag.current_node_id.as_deref(), Some(tip.as_str()));
+
+    dag.merge_nodes(&[child1, child2], "old history summary").unwrap();
+    assert_eq!(
+        dag.current_node_id.as_deref(),
+        Some(tip.as_str()),
+        "merging historical nodes must not rewind current_node_id"
+    );
+}
+
+#[test]
+fn test_merge_nodes_follows_current_node_id_when_it_is_merged() {
+    let mut dag = Dag::new();
+    let root = dag.create_node("", "root").unwrap();
+    let child1 = dag.create_node(&root, "child1").unwrap();
+    let child2 = dag.create_node(&child1, "child2").unwrap();
+    assert_eq!(dag.current_node_id.as_deref(), Some(child2.as_str()));
+
+    let merge_id = dag.merge_nodes(&[child1, child2], "summary").unwrap();
+    assert_eq!(
+        dag.current_node_id.as_deref(),
+        Some(merge_id.as_str()),
+        "merging the current tip must still follow the pointer, like before"
+    );
+}
+
+#[test]
 fn test_delete_node() {
     let mut dag = Dag::new();
     let root = dag.create_node("", "root").unwrap();

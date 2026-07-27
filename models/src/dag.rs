@@ -70,6 +70,13 @@ impl Dag {
 
         let mut collected_parents = HashSet::new();
         let target_set: HashSet<&String> = node_ids.iter().collect();
+        // Only follow `current_node_id` onto the new merge node if it
+        // actually pointed at one of the merged nodes — mirrors
+        // `delete_node`'s existing conditional-clear. Without this,
+        // merging a historical (non-tip) range would silently rewind the
+        // active conversation pointer to the merge node.
+        let current_is_merged =
+            self.current_node_id.as_deref().is_some_and(|cur| node_ids.iter().any(|id| id == cur));
 
         for id in node_ids {
             let node = self
@@ -101,7 +108,9 @@ impl Dag {
         }
 
         self.nodes.insert(new_id.clone(), merge_node);
-        self.current_node_id = Some(new_id.clone());
+        if current_is_merged {
+            self.current_node_id = Some(new_id.clone());
+        }
 
         Ok(new_id)
     }

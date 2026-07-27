@@ -1,6 +1,6 @@
 // Built-in `CommandSpec` handler implementations, split out of `command.rs`
 // to stay under the 300-line file limit.
-use super::{CommandResult, command_specs, llm, templates, tools, tree};
+use super::{CommandResult, command_specs, compact, llm, templates, tools, tree};
 use crate::orchestrator::Orchestrator;
 use std::fmt::Write as _;
 use std::sync::Arc;
@@ -21,7 +21,12 @@ pub(super) fn cmd_help(_args: &str, orchestrator: &Arc<Orchestrator>) -> Command
     CommandResult::StatusInfo(out)
 }
 
-pub(super) fn cmd_status(_args: &str, orchestrator: &Arc<Orchestrator>) -> CommandResult {
+// `/status` was a strict superset of the old `/session` (which only showed
+// the ID) — merged into one command under the `/session` name, matching
+// pi-coding-agent's precedent of a single `/session` command covering
+// "session file, ID, messages, tokens, and cost" rather than splitting
+// that across two commands with overlapping output.
+pub(super) fn cmd_session(_args: &str, orchestrator: &Arc<Orchestrator>) -> CommandResult {
     let session_id = orchestrator.session_id.lock().clone();
     let usage_guard = orchestrator.token_usage.lock();
     let (prompt, completion) = (usage_guard.prompt_tokens, usage_guard.completion_tokens);
@@ -44,22 +49,6 @@ pub(super) fn cmd_status(_args: &str, orchestrator: &Arc<Orchestrator>) -> Comma
     );
 
     CommandResult::StatusInfo(status_msg)
-}
-
-pub(super) fn cmd_clear(_args: &str, _orchestrator: &Arc<Orchestrator>) -> CommandResult {
-    // ANSI escape sequences to clear screen and reset cursor to top-left
-    print!("{}[2J{}[1;1H", 27 as char, 27 as char);
-    CommandResult::Continue
-}
-
-pub(super) fn cmd_session(_args: &str, orchestrator: &Arc<Orchestrator>) -> CommandResult {
-    // Previously required an argument and echoed it back unchanged instead
-    // of showing the actual session ID (`/session foo` printed "Current
-    // session: foo" regardless of what `foo` was, and `/session` with no
-    // argument fell through to being sent to the LLM as a task). Report
-    // the real session ID; no argument needed.
-    let session_id = orchestrator.session_id.lock().clone();
-    CommandResult::StatusInfo(format!("Current session: {session_id}"))
 }
 
 pub(super) fn cmd_rollback(args: &str, orchestrator: &Arc<Orchestrator>) -> CommandResult {
@@ -87,7 +76,7 @@ pub(super) fn cmd_reload(_args: &str, orchestrator: &Arc<Orchestrator>) -> Comma
     }
 }
 
-pub(super) fn cmd_reset(_args: &str, orchestrator: &Arc<Orchestrator>) -> CommandResult {
+pub(super) fn cmd_new(_args: &str, orchestrator: &Arc<Orchestrator>) -> CommandResult {
     match orchestrator.reset_session() {
         Ok(new_id) => CommandResult::StatusInfo(format!(
             "\x1b[32mSession reset successfully. Started new session: \x1b[1;36m{new_id}\x1b[0m"
@@ -109,4 +98,8 @@ pub(super) fn cmd_tools(_args: &str, orchestrator: &Arc<Orchestrator>) -> Comman
 
 pub(super) fn cmd_llm(args: &str, orchestrator: &Arc<Orchestrator>) -> CommandResult {
     CommandResult::StatusInfo(llm::execute_llm(args, orchestrator))
+}
+
+pub(super) fn cmd_compact(_args: &str, orchestrator: &Arc<Orchestrator>) -> CommandResult {
+    CommandResult::StatusInfo(compact::run_compact(orchestrator))
 }

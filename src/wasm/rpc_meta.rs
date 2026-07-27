@@ -141,16 +141,17 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             arguments,
         } => {
             if let Some(orch) = ctx.orchestrator {
-                // Clone the Arc out of the outer map lock and drop the guard
-                // immediately, then use try_lock() on the target runtime.
-                // Matches the GetTools/ExecuteTool pattern above; holding
-                // wasm_runtime's lock for the duration of a nested extension
-                // call is exactly the class of bug fixed in AWU 900.
-                let runtime_arc = {
-                    let guard = orch.wasm_runtime.lock();
-                    guard.get(extension_id).cloned()
-                };
-                let Some(runtime_arc) = runtime_arc else {
+                // `extension_id` selects by declared *role*
+                // (`ExtensionConfig.role`), not literal extension name —
+                // resolved via `find_extension_arc_by_role`, which reads
+                // the role from static config rather than locking every
+                // candidate runtime (the nested-lock pattern AWU 900 fixed
+                // away from). Callers ask for "whichever extension serves
+                // this role" (e.g. "context-tools") rather than a specific
+                // deployment's chosen name, so a user can swap in their
+                // own compatible implementation under a different name
+                // without breaking anything that calls it this way.
+                let Some(runtime_arc) = orch.find_extension_arc_by_role(extension_id) else {
                     return Ok(serde_json::Value::Null);
                 };
                 let Some(mut runtime) = runtime_arc.try_lock() else {

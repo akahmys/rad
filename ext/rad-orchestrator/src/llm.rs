@@ -200,6 +200,11 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
     };
 
     if let Ok(req_json) = serde_json::to_string(&ct_req) {
+        // "context-tools" selects by declared *role*, not literal
+        // extension name (the host resolves it via
+        // `find_extension_arc_by_role`) — a user-supplied replacement
+        // registered under any name still gets found here as long as it
+        // declares this role.
         let res_val = call_host(RasRpcCommand::CallExtension {
             extension_id: "context-tools".to_string(),
             method: "optimize".to_string(),

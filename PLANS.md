@@ -43,6 +43,7 @@
 - [✅] Phase 49: Context-Overflow Feature Completion (Manual Override & Exact Tokenization) (v0.54.0)
 - [✅] Phase 50: Session Storage Operational Hygiene (v0.55.0)
 - [✅] Phase 51: Advanced Context Compression Techniques (v0.56.0)
+- [✅] Phase 52: Slash Command Composition Review, Role-Based Extension Lookup & Manual Compaction (v0.57.0)
 
 ---
 
@@ -64,7 +65,7 @@ Trigger/Fix/Result detail once work actually starts on it.
 - **47-2 — done (AWU 919)**: Markdown-template-based lightweight command tier — see "Short-Term Plan: Phase 47" below.
 - **47-3 — done (AWU 919)**: Extension loading switched from lazy to eager-at-startup.
 - **47-4 — deliberately not implemented**: Extension-provided slash commands via a WIT export. Re-evaluated after 47-2 shipped, per this item's own stated condition: no current extension (rad-orchestrator/security-guard/mcp-tool-provider/llm-connector/context-tools) has a concrete need for a UI-facing command, and markdown templates already cover the actual demand this was meant to serve (user-defined prompt shortcuts). Building the WIT plumbing now would be speculative infrastructure with no consumer — revisit only if/when a real extension needs to do more than expand into a task prompt (e.g. programmatic output bypassing the LLM).
-- **47-5 (deferred, user request 2026-07-27)**: Broader review of the slash-command *composition* itself — which commands should exist at all, naming, possible consolidation (e.g. `/session`'s overlap with `/status`) — independent of the registry mechanism. Still deferred; not part of "complete Phase 47."
+- **47-5 — done (AWU 924, Phase 52)**: Broader review of the slash-command *composition* itself, revisited at user request once Phase 51 wrapped. See Phase 52 below.
 
 ### Phase 48: Security Policy & Extension Config Hygiene — ✅ complete
 *(48-1 and 48-2 shipped together as AWU 920, since the fix for one is the mechanism for the other — see "Short-Term Plan: Phase 48" below.)*
@@ -86,6 +87,30 @@ Trigger/Fix/Result detail once work actually starts on it.
 - **51-2 — done (AWU 923)**: Lexical relevance-based retention (keyword overlap with the goal) reinstating earlier turns windowing would otherwise drop, when size budget leaves slack.
 - **51-3 — done (AWU 923)**: Deterministic structured-fact digest (files touched, commands run) extracted from tool-call metadata in `rad-orchestrator`, attached to the system prompt so it survives windowing/clearing unconditionally.
 - **51-4 — deliberately not implemented**: LLM-based recursive summarization (MemGPT-style). The scope note's own framing — "last resort only" — is the reason not to build it yet: 51-1/51-2/51-3 just shipped and haven't been exercised in real usage, so their effectiveness at the stated goal (preventing local-LLM context overflow) is unproven. Adding a mechanism that consumes the same constrained local-LLM compute the user is trying to protect (a nested summarization call competing with the primary task, on the very hardware this whole effort was scoped around) is a meaningfully larger commitment than 51-1–51-3 combined, and premature before knowing whether the cheaper techniques already solve the problem. Revisit only if real usage shows the cheaper techniques still overflow.
+
+### Phase 52: Slash Command Composition Review, Role-Based Extension Lookup & Manual Compaction — ✅ complete
+*(All shipped together as AWU 924, since `/compact`'s persistence step is what motivated the role-based lookup fix — see "Short-Term Plan: Phase 52" below.)*
+- **Context**: User asked to revisit the deferred 47-5 composition review now that Phase 51 shipped, this time compared directly against pi-coding-agent's built-in slash-command set (fetched from its official docs) rather than in the abstract. That comparison surfaced concrete, externally-validated findings: pi merges what rad split across `/status`+`/session` into one `/session` command; pi has no `/clear` at all; pi's session-reset command is named `/new`, not `/reset`; and pi has a manual `/compact` with no rad equivalent — directly relevant given this whole session's context-overflow focus.
+- **Command changes**: `/session` and `/status` merged (removed `/status`, `/session` now shows the full former-`/status` output — matches pi's own `/session` semantics: "session file, ID, messages, tokens, and cost"). `/clear` removed (no pi precedent, and terminals already provide Ctrl+L). `/reset` renamed to `/new`.
+- **Extension-provided slash commands, reconsidered and re-confirmed not needed**: designing `/compact` surfaced that its logic is reachable entirely through the *existing* `CallExtension` RPC — proof that "host command delegating to an extension via RPC" already covers the use case a dedicated extension-owned-command mechanism would exist for. 47-4's original call stands.
+- **Role-based `CallExtension` lookup**: `call-extension-payload.extension-id` now resolves by the target's declared `role` (`ExtensionConfig.role`) instead of its literal name, via a new `Orchestrator::find_extension_arc_by_role` (reads the role from static config rather than locking every candidate `WasmRuntime`, avoiding the nested-lock pattern AWU 900 fixed away from). A user can now swap in their own compatible `context-tools` replacement under any name without breaking the automatic per-turn optimize call or `/compact`. `wit/rad.wit`'s payload doc comment updated; no wire-schema change.
+- **`/compact`**: new host-side command — no new WIT surface, since `rad-orchestrator`'s world only exports `on-event` (no generic "invoke me now" entry point the host could call on demand). Implemented entirely in `src/command/compact.rs`: walks the DAG natively (host already holds it directly, no RPC), calls `context-tools.optimize` the same way `rad-orchestrator` does (`WasmRuntime::call_extension_method`, found via the new role-based lookup), diffs surviving vs. dropped node IDs from the response, and persists the result via `Dag::merge_nodes` — split into one `merge_nodes` call per *contiguous* dropped run (Phase 51-2's relevance retention can make the dropped set non-contiguous, and `merge_nodes` isn't designed to collapse a non-contiguous list correctly). Failures surface as an explicit message (unlike the automatic path's silent fallback, appropriate for a deliberately user-triggered action).
+- **`merge_nodes` bug fix (found while building `/compact`)**: previously reassigned `current_node_id` to the new merge node *unconditionally*, even when merging a historical (non-tip) range — would have silently rewound the active conversation pointer. Fixed to mirror `delete_node`'s existing conditional-clear: only follow the pointer if it was actually pointing at one of the merged nodes. No prior consumer of `merge_nodes` existed (`/compact` is the first), so this was a safe, uncontested correction rather than a behavior change with a dependent to worry about.
+- **Scope**: `src/command.rs`, `src/command/handlers.rs`, `src/command/compact.rs` (new), `src/command/compact/tests.rs` (new), `src/orchestrator/runner/runtimes.rs`, `src/orchestrator/runner/runtimes/tests.rs` (new), `src/wasm/rpc_meta.rs`, `ext/rad-orchestrator/src/llm.rs`, `models/src/dag.rs`, `src/dag/tests.rs`, `wit/rad.wit`, `tests/command_tests.rs`, `README.md`, `PLANS.md`.
+- **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass, native and `wasm32-wasip2`.
+- **Result**: Success. New tests: 2 `merge_nodes` `current_node_id` tests, 1 role-based-lookup test (registers a `context-tools`-role extension under a different name and confirms resolution), 3 `/compact` tests (too-few-messages no-op, missing-extension error, and a full end-to-end run through the real `context_tools.wasm` that actually reduces DAG node count). `./scripts/build_all.sh` clean end-to-end.
+
+---
+
+## 🛠️ Short-Term Plan: Phase 52
+
+### 💡 Current AWU Status
+- [✅] AWU 924: Slash Command Composition Review, Role-Based Extension Lookup & `/compact` (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 924: Slash Command Composition Review, Role-Based Extension Lookup & `/compact`
+See the Phase 52 roadmap scope note above for the full trigger/design/result narrative — recorded there rather than duplicated here since this AWU's work *is* Phase 52 in its entirety (no sub-items split across multiple AWUs).
 
 ---
 

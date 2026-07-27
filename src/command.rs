@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use crate::orchestrator::Orchestrator;
 use handlers::{
-    cmd_clear, cmd_help, cmd_llm, cmd_reload, cmd_reset, cmd_rollback, cmd_session, cmd_status,
-    cmd_tools, cmd_tree,
+    cmd_compact, cmd_help, cmd_llm, cmd_new, cmd_reload, cmd_rollback, cmd_session, cmd_tools,
+    cmd_tree,
 };
 
 /// A slash command matched against the registry (`command_specs`), plus
@@ -65,21 +65,9 @@ pub fn command_specs() -> &'static [CommandSpec] {
             handler: |_, _| CommandResult::Quit,
         },
         CommandSpec {
-            name: "status",
-            aliases: &[],
-            description: "Show current session status and DAG info",
-            handler: cmd_status,
-        },
-        CommandSpec {
-            name: "clear",
-            aliases: &[],
-            description: "Clear the terminal screen",
-            handler: cmd_clear,
-        },
-        CommandSpec {
             name: "session",
             aliases: &[],
-            description: "Show the current session ID",
+            description: "Show session ID, DAG info, and token usage",
             handler: cmd_session,
         },
         CommandSpec {
@@ -95,10 +83,10 @@ pub fn command_specs() -> &'static [CommandSpec] {
             handler: cmd_reload,
         },
         CommandSpec {
-            name: "reset",
+            name: "new",
             aliases: &[],
             description: "Save current session and start a new clean session",
-            handler: cmd_reset,
+            handler: cmd_new,
         },
         CommandSpec {
             name: "tree",
@@ -115,8 +103,14 @@ pub fn command_specs() -> &'static [CommandSpec] {
         CommandSpec {
             name: "llm",
             aliases: &["models"],
-            description: "Manage LLM endpoints (list, switch, test, add, model)",
+            description: "Manage LLM endpoints (list, switch, test, add, model, context)",
             handler: cmd_llm,
+        },
+        CommandSpec {
+            name: "compact",
+            aliases: &[],
+            description: "Manually compact and persist session history now",
+            handler: cmd_compact,
         },
     ]
 }
@@ -174,6 +168,7 @@ impl CommandManager {
     }
 }
 
+pub mod compact;
 pub mod completion;
 pub use completion::CommandHelper;
 mod handlers;
