@@ -1,25 +1,16 @@
-use parking_lot::Mutex;
-use rad::config::{Config, CoreConfig, ExecutionConfig, ExtensionConfig, PermissionConfig};
+// Split out of `self_healing_tests.rs` to stay under the 300-line file
+// limit — that file's remaining test (`test_wasm_panic_self_healing_and_rehydration`)
+// drives a `WasmRuntime` directly with a `MockNetwork`, while this one
+// drives a full `Orchestrator` against a real mock HTTP server; the two
+// share no helpers, so the split is clean.
+use rad::config::{ExecutionConfig, PermissionConfig};
 use rad::dag::Dag;
-use rad::orchestrator::Orchestrator;
+
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-/// `security-guard`'s blocklist policy is config-driven (fetched via the
-/// `GetExtensionConfig` RPC), not hardcoded — these tests exercise the real
-/// wiring by explicitly configuring the same patterns the extension used to
-/// carry as literals, rather than relying on a fallback.
-fn security_guard_config() -> HashMap<String, serde_json::Value> {
-    HashMap::from([
-        ("block_path_patterns".to_string(), serde_json::json!(["blocked.txt"])),
-        (
-            "block_command_patterns".to_string(),
-            serde_json::json!(["blocked_command", "blocked.txt"]),
-        ),
-    ])
-}
 
 fn run_mock_http_server(
     addr: &str,
@@ -49,18 +40,18 @@ fn run_mock_http_server(
 }
 
 #[test]
-fn test_multi_extension_verification_chain() {
+fn test_core_auto_self_healing_integration() {
     let temp_dir = tempfile::tempdir().unwrap();
     let workspace = temp_dir.path().join("workspace");
     let snapshots = temp_dir.path().join("snapshots");
     fs::create_dir_all(&workspace).unwrap();
     fs::create_dir_all(&snapshots).unwrap();
 
-    let turn2 = "data: {\"choices\":[{\"delta\":{\"content\":\"Task completed safely.\"}}]}\n\n\
+    let turn2 = "data: {\"choices\":[{\"delta\":{\"content\":\"Recovered and completed.\"}}]}\n\n\
                  data: [DONE]\n\n"
         .to_string();
     let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[\
-                 {\"index\":0,\"id\":\"call_write\",\"type\":\"function\",\"function\":{\"name\":\"write\",\"arguments\":\"{\\\"path\\\":\\\"blocked.txt\\\",\\\"content\\\":\\\"dangerous content\\\"}\"}}\
+                 {\"index\":0,\"id\":\"call_panic\",\"type\":\"function\",\"function\":{\"name\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"echo CRASH_WASM; sleep 1\\\"}\"}}\
                  ]}}]}\n\n\
                  data: [DONE]\n\n".to_string();
 
@@ -70,21 +61,21 @@ fn test_multi_extension_verification_chain() {
 
     let responses = Arc::new(Mutex::new(vec![turn2, turn1]));
     let _server_handle = run_mock_http_server(&format!("127.0.0.1:{port}"), responses);
-
     unsafe {
         std::env::set_var("RAD_TEST_PORT", port.to_string());
         std::env::set_var("RAD_YOLO", "true");
     }
 
-    let mut config = Config {
-        core: CoreConfig {
-            workspace: workspace.to_string_lossy().to_string(),
-            snapshot: snapshots.to_string_lossy().to_string(),
-            log: temp_dir.path().join("logs").to_string_lossy().to_string(),
-            ..Default::default()
-        },
+    let mut config = rad::config::Config::default();
+    config.core = rad::config::CoreConfig {
+        workspace: workspace.to_string_lossy().to_string(),
+        snapshot: snapshots.to_string_lossy().to_string(),
+        log: temp_dir.path().join("logs").to_string_lossy().to_string(),
+        hitl_enabled: false,
+        verification_command: None,
         ..Default::default()
     };
+    let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
 
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
@@ -101,42 +92,16 @@ fn test_multi_extension_verification_chain() {
         ..Default::default()
     };
 
-    // Define TWO extensions pointing to the same WASM source but having different names.
-    // Both will be active, causing the verification chain to check both.
     config.extensions = vec![
-        ExtensionConfig {
+        rad::config::ExtensionConfig {
             name: "rad-orchestrator".to_string(),
             enabled: true,
             role: "orchestrator".to_string(),
-            source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
+            source: wasm_path.to_string(),
             permissions: Some(perms.clone()),
             config: HashMap::new(),
         },
-        ExtensionConfig {
-            name: "security-monitor-1".to_string(),
-            enabled: true,
-            role: "security".to_string(),
-            source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: security_guard_config(),
-        },
-        ExtensionConfig {
-            name: "security-monitor-2".to_string(),
-            enabled: true,
-            role: "security".to_string(),
-            source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: security_guard_config(),
-        },
-        ExtensionConfig {
-            name: "mcp-tool-provider".to_string(),
-            enabled: true,
-            role: "tool-provider".to_string(),
-            source: "target/wasm32-wasip2/debug/mcp_tool_provider.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::new(),
-        },
-        ExtensionConfig {
+        rad::config::ExtensionConfig {
             name: "llm-connector".to_string(),
             enabled: true,
             role: "llm-connector".to_string(),
@@ -151,14 +116,15 @@ fn test_multi_extension_verification_chain() {
         let mut dag_guard = dag.lock();
         let n0 = dag_guard.create_node("", "user").unwrap();
         dag_guard.set_node_text(&n0, "Initial").unwrap();
+
         let snapshot_dir = snapshots.join(&n0);
         fs::create_dir_all(snapshot_dir).unwrap();
         n0
     };
 
-    let orchestrator = Arc::new(Orchestrator::new(
+    let orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(
         config,
-        "test_multi_session".to_string(),
+        "test_session".to_string(),
         dag.clone(),
         None,
     ));
@@ -176,27 +142,25 @@ fn test_multi_extension_verification_chain() {
         std::thread::sleep(Duration::from_millis(50));
     }
 
-    assert!(completed, "Orchestrator task timed out");
+    assert!(completed, "Core auto recovery task did not finish in time");
 
-    // The blocked.txt file must NOT exist because it was rejected by the verification chain
-    let path = workspace.join("blocked.txt");
-    assert!(!path.exists(), "File blocked.txt should NOT exist");
-
-    // The DAG should contain the rejection message
     let dag_guard = dag.lock();
+    println!("DEBUG DAG NODES COUNT: {}", dag_guard.nodes.len());
+    for (id, node) in &dag_guard.nodes {
+        println!(
+            "DEBUG NODE id={}, type={}, text='{}'",
+            id, node.node_type, node.text
+        );
+    }
 
-    let mut found_rejection = false;
+    let mut found_recovery_msg = false;
     for node in dag_guard.nodes.values() {
-        if node
-            .text
-            .contains("Operation rejected by security extension")
-        {
-            found_rejection = true;
-            break;
+        if node.text.contains("Recovered and completed.") {
+            found_recovery_msg = true;
         }
     }
     assert!(
-        found_rejection,
-        "Verification chain rejection message not found in DAG"
+        found_recovery_msg,
+        "Rehydrated second turn message was not found in DAG"
     );
 }

@@ -1,3 +1,10 @@
+// Split out of `multi_extension_tests.rs` to stay under the 300-line file
+// limit — this file covers the "isolated roles" scenario specifically,
+// while `multi_extension_tests.rs` covers the "verification chain" (two
+// security-guard instances) scenario. Each file is its own test binary
+// (cargo's usual `tests/*.rs` convention) with exactly one test, so no
+// `TEST_MUTEX`/env-var serialization is needed here — that was only ever
+// about tests sharing a process, not sharing a machine.
 use parking_lot::Mutex;
 use rad::config::{Config, CoreConfig, ExecutionConfig, ExtensionConfig, PermissionConfig};
 use rad::dag::Dag;
@@ -8,7 +15,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// `security-guard`'s blocklist policy is config-driven (fetched via the
-/// `GetExtensionConfig` RPC), not hardcoded — these tests exercise the real
+/// `GetExtensionConfig` RPC), not hardcoded — this test exercises the real
 /// wiring by explicitly configuring the same patterns the extension used to
 /// carry as literals, rather than relying on a fallback.
 fn security_guard_config() -> HashMap<String, serde_json::Value> {
@@ -49,7 +56,7 @@ fn run_mock_http_server(
 }
 
 #[test]
-fn test_multi_extension_verification_chain() {
+fn test_multi_extension_isolated_roles() {
     let temp_dir = tempfile::tempdir().unwrap();
     let workspace = temp_dir.path().join("workspace");
     let snapshots = temp_dir.path().join("snapshots");
@@ -101,8 +108,7 @@ fn test_multi_extension_verification_chain() {
         ..Default::default()
     };
 
-    // Define TWO extensions pointing to the same WASM source but having different names.
-    // Both will be active, causing the verification chain to check both.
+    // Instantiate with isolated roles (Orchestrator, Security Guard, and Tool Provider)
     config.extensions = vec![
         ExtensionConfig {
             name: "rad-orchestrator".to_string(),
@@ -113,15 +119,7 @@ fn test_multi_extension_verification_chain() {
             config: HashMap::new(),
         },
         ExtensionConfig {
-            name: "security-monitor-1".to_string(),
-            enabled: true,
-            role: "security".to_string(),
-            source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: security_guard_config(),
-        },
-        ExtensionConfig {
-            name: "security-monitor-2".to_string(),
+            name: "security-guard".to_string(),
             enabled: true,
             role: "security".to_string(),
             source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
@@ -158,7 +156,7 @@ fn test_multi_extension_verification_chain() {
 
     let orchestrator = Arc::new(Orchestrator::new(
         config,
-        "test_multi_session".to_string(),
+        "test_multi_role".to_string(),
         dag.clone(),
         None,
     ));
@@ -178,7 +176,7 @@ fn test_multi_extension_verification_chain() {
 
     assert!(completed, "Orchestrator task timed out");
 
-    // The blocked.txt file must NOT exist because it was rejected by the verification chain
+    // The blocked.txt file must NOT exist because it was rejected by the standalone security extension
     let path = workspace.join("blocked.txt");
     assert!(!path.exists(), "File blocked.txt should NOT exist");
 
@@ -197,6 +195,6 @@ fn test_multi_extension_verification_chain() {
     }
     assert!(
         found_rejection,
-        "Verification chain rejection message not found in DAG"
+        "Security guard role rejection message not found in DAG"
     );
 }

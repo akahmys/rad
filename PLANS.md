@@ -44,6 +44,7 @@
 - [✅] Phase 50: Session Storage Operational Hygiene (v0.55.0)
 - [✅] Phase 51: Advanced Context Compression Techniques (v0.56.0)
 - [✅] Phase 52: Slash Command Composition Review, Role-Based Extension Lookup & Manual Compaction (v0.57.0)
+- [✅] Phase 53: File-Size Limit Compliance Cleanup (v0.58.0)
 
 ---
 
@@ -99,6 +100,24 @@ Trigger/Fix/Result detail once work actually starts on it.
 - **Scope**: `src/command.rs`, `src/command/handlers.rs`, `src/command/compact.rs` (new), `src/command/compact/tests.rs` (new), `src/orchestrator/runner/runtimes.rs`, `src/orchestrator/runner/runtimes/tests.rs` (new), `src/wasm/rpc_meta.rs`, `ext/rad-orchestrator/src/llm.rs`, `models/src/dag.rs`, `src/dag/tests.rs`, `wit/rad.wit`, `tests/command_tests.rs`, `README.md`, `PLANS.md`.
 - **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass, native and `wasm32-wasip2`.
 - **Result**: Success. New tests: 2 `merge_nodes` `current_node_id` tests, 1 role-based-lookup test (registers a `context-tools`-role extension under a different name and confirms resolution), 3 `/compact` tests (too-few-messages no-op, missing-extension error, and a full end-to-end run through the real `context_tools.wasm` that actually reduces DAG node count). `./scripts/build_all.sh` clean end-to-end.
+
+---
+
+## 🛠️ Short-Term Plan: Phase 53
+
+### 💡 Current AWU Status
+- [✅] AWU 925: File-Size Limit Compliance Cleanup (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 925: File-Size Limit Compliance Cleanup
+- **Trigger**: User asked, before starting real-world dogfooding, whether a comprehensive refactor was warranted. Assessed no (wait for real usage to surface concrete pain points first) but flagged 3 files that had drifted over CODING.md's 300-line limit as cheap, mechanical, zero-design-risk cleanup worth doing regardless: `models/src/rpc_conversion.rs` (370), `tests/multi_extension_tests.rs` (350, pre-existing since AWU 920), `tests/self_healing_tests.rs` (411). User agreed to clear them.
+- **`models/src/rpc_conversion.rs`**: the two large per-direction command macros (`impl_rpc_command_wit_to_core!`, `common_rpc_command_core_to_wit!`) moved to new companion files `rpc_conversion/wit_to_core.rs` / `rpc_conversion/core_to_wit.rs`. Pure mechanical move — `#[macro_export]` always exports at the crate root regardless of which module a macro is textually defined in, so every one of the 5 consumer crates was unaffected (confirmed by full rebuild across all `wasm32-wasip2` extension crates with zero changes needed at any call site).
+- **`tests/multi_extension_tests.rs`**: `test_multi_extension_isolated_roles` split into a new `tests/multi_extension_isolated_roles_tests.rs`. Each file's shared `run_mock_http_server`/`security_guard_config` helpers duplicated per-file (matching the precedent already set by `security_guard_policy_tests.rs`/`security_hook_tests.rs`) rather than factored into a shared `tests/common/` module — out of scope for a same-day mechanical split. `TEST_MUTEX` dropped from both resulting files: it only ever mattered for serializing tests sharing one process, and each file is now its own single-test binary.
+- **`tests/self_healing_tests.rs`**: `test_core_auto_self_healing_integration` split into a new `tests/self_healing_core_auto_tests.rs`. Unlike the multi_extension split, the two original tests used entirely disjoint helpers (`MockNetwork`+direct `WasmRuntime` driving vs. a real mock HTTP server + full `Orchestrator`), so no duplication was needed at all — a completely clean cut.
+- **Scope**: `models/src/rpc_conversion.rs`, `models/src/rpc_conversion/wit_to_core.rs` (new), `models/src/rpc_conversion/core_to_wit.rs` (new), `tests/multi_extension_tests.rs`, `tests/multi_extension_isolated_roles_tests.rs` (new), `tests/self_healing_tests.rs`, `tests/self_healing_core_auto_tests.rs` (new), `PLANS.md`.
+- **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass; zero files over 300 lines anywhere in `src/`, `ext/`, `models/`, `tests/`.
+- **Result**: Success. Verified with a full repo-wide line-count sweep (zero violations remaining) and `./scripts/build_all.sh` end-to-end.
 
 ---
 
