@@ -181,18 +181,47 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
     }
 }
 
+/// The active `/llm` profile's resolved fields — including `base_url`/
+/// `api_key`, which `active_llm_profile_json` deliberately omits from the
+/// generic `GetActiveLlmProfile` RPC response (that's reachable by any
+/// extension; a credential doesn't belong in a broadly-readable fact
+/// query). Used host-internally by `rpc_meta_llm_connector`, which passes
+/// `base_url`/`api_key` as explicit call arguments to the one extension
+/// that actually needs them, instead of the old approach of setting
+/// process environment variables for a Wasm guest to read — a `WasiCtxBuilder`
+/// environment is snapshotted once at instance creation, so that never
+/// reliably reached an already-running (e.g. eagerly-loaded-at-startup)
+/// instance in the first place.
+pub(crate) struct ActiveLlmProfile {
+    pub(crate) model: Option<String>,
+    pub(crate) context_length: Option<u32>,
+    pub(crate) base_url: Option<String>,
+    pub(crate) api_key: Option<String>,
+}
+
+pub(crate) fn resolve_active_llm_profile(orch: &crate::orchestrator::Orchestrator) -> ActiveLlmProfile {
+    let cfg = orch.config.lock();
+    let profile = cfg.llm.active.as_deref().and_then(|name| cfg.llm.endpoints.get(name));
+    ActiveLlmProfile {
+        model: profile.and_then(|p| p.model.clone()),
+        context_length: profile.and_then(|p| p.context_length),
+        base_url: profile.map(|p| p.base_url.clone()),
+        api_key: profile.and_then(crate::config::LlmEndpointProfile::resolved_api_key),
+    }
+}
+
 /// Reports facts about the active LLM profile — model name and detected
 /// context window — with no opinion on how a caller uses them. Extensions
 /// that need to reason about context-window budgets (e.g.
 /// `rad-orchestrator` sizing a `context-tools.optimize` request) ask this
 /// generic question instead of the host special-casing any one extension's
-/// request shape.
+/// request shape. Deliberately excludes `base_url`/`api_key` — see
+/// `ActiveLlmProfile`'s docs.
 fn active_llm_profile_json(orch: &crate::orchestrator::Orchestrator) -> serde_json::Value {
-    let cfg = orch.config.lock();
-    let profile = cfg.llm.active.as_deref().and_then(|name| cfg.llm.endpoints.get(name));
+    let p = resolve_active_llm_profile(orch);
     serde_json::json!({
-        "model": profile.and_then(|p| p.model.clone()),
-        "context_length": profile.and_then(|p| p.context_length),
+        "model": p.model,
+        "context_length": p.context_length,
     })
 }
 

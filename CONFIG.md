@@ -1,24 +1,25 @@
 # `rad` Configuration & Layout Guide
 
-This document defines the rules for operational settings, Extensions, and related assets (Skills, Workflows, etc.) of `rad`, as well as their lookup specifications.
+This document defines the rules for operational settings and Extensions of `rad`, as well as their lookup specifications.
 
-## 1. Configuration File (`rad.json`)
+## 1. Configuration File
 
-The overall operational parameters of the `rad` Core and the permission constraints of each Extension are managed centrally in `rad.json`.
+The overall operational parameters of the `rad` Core and the permission constraints of each Extension are managed centrally in a JSON config file — `~/.rad/config.json` (user-global) and/or `rad.json`/`.rad/config.json` (project-local).
 
 ### 1.1 Configuration Discovery & Unified Cascade Precedence
-When the `rad` Core starts, the system resolves operational parameters and credentials using a strict 5-tier Unified Precedence Cascade:
+When the `rad` Core starts, the system resolves operational parameters and credentials using a strict 5-tier Unified Precedence Cascade (each tier's values override the one below it):
 
 1. **CLI Arguments (Highest Priority)**: Options specified via `--base-url`, `--api-key`, `--model`, `--workspace`, `--config`.
 2. **Environment Variables**: `LLM_BASE_URL` / `RAD_BASE_URL`, `LLM_API_KEY` / `RAD_API_KEY`, `LLM_MODEL` / `RAD_MODEL`, `RAD_WORKSPACE`.
-3. **Local Directory Override**: `rad.local.json` in the current project root.
-4. **Project Local Config**: `rad.json` / `config.json` in the current project root.
-5. **User Global Config (Default Base)**: `~/.rad/config.json`.
+3. **Local Directory Override**: `rad.local.json` (or `config.local.json`) next to whichever project config file was found in tier 4.
+4. **Project Local Config**: `rad.json` at the project root, or `.rad/config.json` if that isn't present. An explicit `--config <path>` takes the place of this discovery entirely.
+5. **User Global Config (Base)**: `~/.rad/config.json`, always loaded first as the base that the other tiers merge on top of.
+
 > [!IMPORTANT]
 > `rad.local.json` is a local-only file designed to hold personal secrets like API keys. To prevent sharing credentials in repositories, it must always be excluded from Git version control (add it to `.gitignore`).
 
 ### 1.2 Configuration Schema Example (Full Parameters with Comments)
-`rad.json` supports JSON with comments (JSONC). The following is a full configuration example containing all available parameters with explanatory comments:
+The config file supports JSON with comments (JSONC). The following example registers the 5 extensions `rad` ships, plus two locally-installed MCP servers — without at least one MCP server registered under `mcp-tool-provider`, `rad` has no built-in file/shell tools at all and can't act on anything (see [README.md](README.md) §3.2 for more on this):
 
 ```json
 {
@@ -29,7 +30,10 @@ When the `rad` Core starts, the system resolves operational parameters and crede
     // Directory where filesystem snapshot backups are saved (defaults to ".rad/snapshots")
     "snapshot_dir": ".rad/snapshots",
     // Directory where execution and session logs are output (defaults to ".rad/logs")
-    "log_dir": ".rad/logs"
+    "log_dir": ".rad/logs",
+    // Beyond this count, the oldest .rad/sessions/*.json files are pruned at startup
+    // (defaults to 50). The currently active session is always kept regardless.
+    "max_sessions": 50
   },
 
   // Default timeout values for the Core (in milliseconds)
@@ -40,164 +44,174 @@ When the `rad` Core starts, the system resolves operational parameters and crede
     "process_silent_timeout_ms": 60000
   },
 
-  // List of Extensions (Policy Layer) to register and launch
+  // LLM endpoint profiles, managed interactively via the /llm slash command
+  // (list, switch, test, add, model, delete, context)
+  "llm": {
+    // Name of the currently active profile (key into "endpoints" below)
+    "active": "local",
+    "endpoints": {
+      "local": {
+        "base_url": "http://localhost:11434",
+        "model": "qwen2.5-coder",
+        // Detected automatically via /props or /api/show when the endpoint is
+        // reachable; set manually with /llm context <n> if auto-detection fails
+        "context_length": 32768
+      }
+    }
+  },
+
+  // List of Extensions (Policy Layer) to register and launch. Extensions are
+  // plain .wasm files at a path — there is no "builtin" scheme or directory
+  // auto-discovery; `./scripts/build_all.sh` builds all 5 into `~/.rad/wasm/`,
+  // which is a convenient install location to point `source` at (works from
+  // any project directory, not just a source checkout).
   "extensions": [
     {
-      // Unique identifier for the Extension
-      "name": "standard-orchestrator",
-      // Source location ("builtin://" schema, or absolute/relative path to local Wasm)
-      "source": "builtin://standard-orchestrator",
-      // Whether this Extension should be enabled and launched
+      "name": "rad-orchestrator",
+      "source": "~/.rad/wasm/rad_orchestrator.wasm",
       "enabled": true,
-      // Capability Mask for physical primitives granted to this Extension
-      // * Builtin extensions default to full privileges.
+      "role": "orchestrator",
       "permissions": {
-        // List of directories allowed for read access ("*" allows everything)
         "fs_read_allow": ["*"],
-        // List of directories allowed for write access ("*" allows everything)
         "fs_write_allow": ["*"],
-        // Bash command execution constraints
         "execution": {
-          // Whether executing bash commands (spawn_bash_process) is allowed
           "allow_bash": true,
-          // Whitelist of allowed commands/programs (empty means all allowed)
-          "allow_commands": ["cargo check", "cargo clippy", "cargo test", "git"],
-          // Blacklist of forbidden commands/programs
-          "block_commands": ["curl", "wget", "rm -rf /"]
+          "allow_commands": [],
+          "block_commands": []
         },
-        // Network access constraints
-        "network": {
-          // Whether external network access is allowed
-          "allow_network": true,
-          // Whitelist of domains allowed for communication (empty means unrestricted)
-          "allow_domains": ["api.openai.com", "api.anthropic.com", "github.com"]
-        }
-      },
-      // Settings passed transparently to the Extension
-      // * The Core does not interpret these values, it only forwards them.
-      "config": {
-        // LLM model name to use
-        "model": "claude-3-5-sonnet-20241022",
-        // Base API endpoint URL (defaults to Extension's default if omitted)
-        "api_base": "https://api.anthropic.com",
-        // LLM generation temperature
-        "temperature": 0.2
+        "network": { "allow_network": true, "allow_domains": [] }
       }
+    },
+    {
+      "name": "security-guard",
+      "source": "~/.rad/wasm/security_guard.wasm",
+      "enabled": true,
+      "role": "security",
+      "permissions": { "fs_read_allow": ["*"], "fs_write_allow": ["*"] },
+      // Extension-specific settings, passed through opaquely by the Core (it
+      // does not interpret them — only the Extension itself does). Empty or
+      // omitted means the blocklist is opt-in and blocks nothing.
+      "config": {
+        "block_path_patterns": ["secrets.env"],
+        "block_command_patterns": ["rm -rf /"]
+      }
+    },
+    {
+      "name": "mcp-tool-provider",
+      "source": "~/.rad/wasm/mcp_tool_provider.wasm",
+      "enabled": true,
+      "role": "tool-provider",
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"],
+        "execution": {
+          "allow_bash": true,
+          "allow_commands": [],
+          "block_commands": []
+        },
+        "network": { "allow_network": true, "allow_domains": [] }
+      },
+      // The only source of tools rad has — any stdio MCP server works here.
+      "config": {
+        "mcp_servers": {
+          "core-utilities": { "command": "~/.cargo/bin/core-utilities-mcp", "args": [] },
+          "web-access": { "command": "~/.cargo/bin/web-access-mcp", "args": [] }
+        }
+      }
+    },
+    {
+      "name": "llm-connector",
+      "source": "~/.rad/wasm/llm_connector.wasm",
+      "enabled": true,
+      "role": "llm-connector",
+      "permissions": { "network": { "allow_network": true, "allow_domains": [] } }
+    },
+    {
+      "name": "context-tools",
+      "source": "~/.rad/wasm/context_tools.wasm",
+      "enabled": true,
+      "role": "context-tools",
+      "permissions": { "fs_read_allow": ["*"], "fs_write_allow": ["*"] }
     }
   ]
 }
 ```
 
 ### 1.3 Handling Sensitive Information
-To handle API keys and other secrets securely, pass them to the Extension using the following methods:
+To handle API keys and other secrets securely, pass them to `rad` using the following methods:
 
 1. **Environment Variables (Recommended)**:
-   The Extension retrieves credentials directly from environment variables (e.g., `export ANTHROPIC_API_KEY=sk-...`) in the launching shell. Do not write credentials in configuration files.
+   Set `RAD_API_KEY` (or `LLM_API_KEY`) in the launching shell; it's applied to the active `llm.endpoints` profile on every startup. Do not write credentials in configuration files.
 2. **Local Configuration File (`rad.local.json`)**:
-   In local development environments where you do not want to set environment variables, specify them in `rad.local.json` to be merged:
+   In local development environments where you do not want to set environment variables, specify the key directly on the endpoint profile in `rad.local.json` to be merged on top of the project/global config:
 
 **Example `rad.local.json`:**
 ```json
 {
-  "extensions": [
-    {
-      "name": "standard-orchestrator",
-      "config": {
-        "api_key": "sk-ant-..."
-      }
+  "llm": {
+    "endpoints": {
+      "local": { "api_key": "sk-..." }
     }
-  ]
+  }
 }
 ```
 
 ### 1.4 Optional Parameters & Defaults (Convention)
-If settings are omitted from `rad.json`, the Core automatically applies the following default parameters:
+If settings are omitted from the config file, the Core automatically applies the following default parameters:
 
 | Setting | Default Value | Description |
 | :--- | :--- | :--- |
 | `core.workspace_dir` | `.` (Current directory) | The physical root path where the agent operates. |
 | `core.snapshot_dir` | `.rad/snapshots` | The directory where filesystem snapshots are saved/restored. |
-| `core.log_dir` | `.rad/logs` | The directory where operational and session logs are saved. |
+| `core.log_dir` | `.rad/logs` | The directory reserved for operational and session logs. |
+| `core.max_sessions` | `50` | Session files beyond this count (oldest first) are pruned from `.rad/sessions/` at startup; the active session is always kept. |
 | `default_timeout.llm_stream_heartbeat_ms` | `15000` (15s) | The maximum allowed interval between received tokens during LLM streaming. |
 | `default_timeout.process_silent_timeout_ms` | `60000` (60s) | The maximum idle duration for a process spawned via `spawn_bash_process` before timing out. |
-| `extensions[].permissions` | Builtin: Full / External: Deny All | If omitted, external Extensions default to denying all actions for security. |
-| `extensions[].config` | Empty object (`{}`) | Extension-specific configuration passed directly to the Extension. |
+| `extensions[].permissions` | Deny all if omitted | Extensions default to denying all filesystem/execution/network actions unless explicitly granted. |
+| `extensions[].config` | Empty object (`{}`) | Extension-specific configuration passed straight through to the Extension, uninterpreted by the Core. |
 
 ---
 
-## 2. Directory Layout Rules
+## 2. Directory Layout
 
-Assets and runtime data related to `rad` are organized in the `.rad/` directory (project local) and the `~/.rad/` directory (user global).
+Data `rad` reads or writes lives under `.rad/` (project-local) and `~/.rad/` (user-global).
 
-### 2.1 Directory Map
-
-#### 2.1.1 Project Local (Project-specific configuration and data)
+### 2.1 Project Local (`.rad/`)
 ```text
 <Project Root>/
 ├── rad.json                   # [Recommended] Project-local configuration file
+├── rad.local.json             # Local-only overrides/secrets (gitignore this)
+├── .agents/
+│   ├── AGENTS.md              # Project-specific rules appended to the system prompt
+│   └── commands/               # Custom slash commands (see §2.3)
 └── .rad/                      # Project-local data storage
-    ├── rad.json               # [Alternative] Hidden project-local configuration file
-    ├── ext/                   # Project-specific Extensions (.wasm, etc.)
-    │   └── analyzer.wasm
-    ├── skills/                # Project-specific custom Skills (scripts)
-    │   └── local_helper.sh
-    ├── workflows/             # Project-specific Workflows
-    │   └── local_flow.json
-    ├── snapshots/             # Backup snapshots created by Core
+    ├── config.json            # [Alternative] Hidden project-local configuration file
+    ├── snapshots/              # Filesystem snapshots, partitioned by DAG node_id
     │   └── <node_id>/
-    └── logs/                  # Log output directory
+    ├── sessions/               # Saved session DAGs (<session_id>.json), pruned by core.max_sessions
+    └── logs/                  # Reserved for operational/session log output
 ```
 
-#### 2.1.2 User Global (Shared assets across projects)
+### 2.2 User Global (`~/.rad/`)
 ```text
 ~/.rad/                        # User-global data storage
-│                              # (C:\Users\<User>\.rad\ on Windows)
-├── ext/                       # Shared Extensions available to all projects
-│   └── global_analyzer.wasm
-├── skills/                    # Shared Skills available to all projects
-│   └── git_helper.sh
-└── workflows/                 # Shared Workflows available to all projects
-    └── standard_coding_flow.json
+├── config.json                 # User-global configuration (base of the precedence cascade)
+├── wasm/                       # Convenient install location for built extensions
+│   └── rad_orchestrator.wasm   # (populated by ./scripts/build_all.sh)
+└── commands/                   # Custom slash commands shared across all projects (see §2.3)
 ```
 
-### 2.2 Subdirectory Descriptions
+### 2.3 Custom Slash Commands
+Markdown files under `.agents/commands/` (project-local, checked first) or `~/.rad/commands/` (user-global) become slash commands automatically — `.agents/commands/review.md` becomes `/review`. The file's content is sent as the task prompt; a literal `$ARGUMENTS` placeholder is substituted with whatever followed the command name, or the arguments are appended on their own line if no placeholder is present. No code or registration step is required — just drop a `.md` file in either directory.
 
-#### 2.2.1 Extensions (`.rad/ext/` and `~/.rad/ext/`)
-Holds Wasm files and scripts referenced by `extensions.source` in `rad.json`.
-- **Project Local**: Under `./.rad/ext/`
-- **User Global**: Under `~/.rad/ext/`
-- **Package Layout (Directory format)**:
-  Extensions can be packaged as directories containing metadata and binaries:
-  ```text
-  .rad/ext/custom-analyzer/
-  ├── extension.json           # Extension metadata and default permissions
-  └── main.wasm                # Execution binary
-  ```
-
-#### 2.2.2 Skills (`.rad/skills/` and `~/.rad/skills/`)
-Holds tools and scripts used by the LLM (or Policy Layer) for specific tasks.
-- **Project Local**: Under `./.rad/skills/`
-- **User Global**: Under `~/.rad/skills/`
-- Upon Core startup, the Extension collects script lists and documentation from both directories and registers them as tools to the LLM.
-- The LLM runs these scripts by issuing a command like `.rad/skills/xxx.sh` through `spawn_bash_process`.
-
-#### 2.2.3 Workflows (`.rad/workflows/` and `~/.rad/workflows/`)
-Contains development process definitions or initial DAG (Directed Acyclic Graph) templates in JSON/YAML.
-- **Project Local**: Under `./.rad/workflows/`
-- **User Global**: Under `~/.rad/workflows/`
-
-#### 2.2.4 Snapshots (`.rad/snapshots/`)
-Stores the filesystem state backed up by the `take_snapshot` RPC, partitioned by DAG `node_id` (Project local only).
-
-#### 2.2.5 Logs (`.rad/logs/`)
-Stores operational logs for the Core/Extension and standard I/O logs for the PTY session.
-* Global logs for `rad` run outside any project are saved under `~/.rad/logs/`.
+### 2.4 Project Rules (`AGENTS.md`)
+`.agents/AGENTS.md` or `AGENTS.md` at the project root, if present, is appended to the system prompt on every turn — use it for project-specific conventions, build commands, or constraints the agent should always know about.
 
 ---
 
-## 3. Update Rules for Core & Extensions
+## 3. Updating Core & Extensions
 
-`rad` requires no system-level administrative privileges and can be updated and executed entirely within user space.
+`rad` requires no system-level administrative privileges and runs entirely within user space.
 
-* **Core Update**: Run `rad --update` to fetch the latest stable binary from the official release and replace the local binary in-place.
-* **Extension Update**: Simply overwrite the `.wasm` file or scripts to apply updates dynamically.
+* **Core Update**: Pull the latest source and re-run `./scripts/build_all.sh` — it rebuilds all 5 extensions, runs the test/Clippy gates, and reinstalls the `rad` binary to `~/.cargo/bin/rad` via `cargo install --path .`.
+* **Extension Update**: Overwrite the extension's `.wasm` file at its configured `source` path, then run `/reload` inside a running session (or just restart `rad`) — `/reload` re-reads the config and clears the cached WASM runtimes so the next task picks up the new binary.

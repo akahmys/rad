@@ -18,6 +18,8 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
 
     fn generate_stream(
         model: String,
+        base_url: Option<String>,
+        api_key: Option<String>,
         messages: Vec<conn_types::Message>,
         tools: Vec<conn_types::Tool>,
     ) -> Result<exports::radcomp::connector::producer::EventStream, String> {
@@ -79,28 +81,25 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
 
         let body = serde_json::to_string(&req).map_err(|e| format!("JSON serialize error: {e}"))?;
         let mut headers = vec![("Content-Type".to_string(), "application/json".to_string())];
-        let api_key = std::env::var("LLM_API_KEY")
-            .or_else(|_| std::env::var("RAD_API_KEY"))
-            .or_else(|_| std::env::var("OPENAI_API_KEY"))
-            .ok();
 
         if let Some(key) = api_key.as_ref().filter(|k| !k.trim().is_empty()) {
             headers.push(("Authorization".to_string(), format!("Bearer {}", key.trim())));
         }
 
-        let base_url_env = std::env::var("LLM_BASE_URL")
-            .or_else(|_| std::env::var("RAD_BASE_URL"))
-            .or_else(|_| std::env::var("OPENAI_BASE_URL"))
-            .ok();
-
+        // RAD_TEST_PORT is test infrastructure (redirects every call to a
+        // local mock server) and stays env-var-based deliberately — it's
+        // not part of the real base-url/api-key resolution the host now
+        // does per call.
         let url = if let Ok(test_port) = std::env::var("RAD_TEST_PORT") {
             format!("http://127.0.0.1:{test_port}/v1/chat/completions")
-        } else if let Some(base_url) = base_url_env {
+        } else if let Some(base_url) = base_url.filter(|b| !b.trim().is_empty()) {
             format!("{}/v1/chat/completions", rad_models::normalize_base_url(&base_url))
         } else if api_key.is_some() {
             "https://api.openai.com/v1/chat/completions".to_string()
         } else {
-            return Err("No LLM endpoint configured. Please set LLM_BASE_URL (or RAD_BASE_URL / OPENAI_BASE_URL) or API_KEY.".to_string());
+            return Err(
+                "No LLM endpoint configured. Set one up with /llm add <name> <url>.".to_string()
+            );
         };
 
         eprintln!("[llm-connector] Connecting to endpoint: {url}");

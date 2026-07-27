@@ -119,10 +119,15 @@ pub(crate) fn generate(
         })
         .collect();
 
-    let stream_res = match conn_bindings
-        .radcomp_connector_producer()
-        .call_generate_stream(&mut connector_ref.store, model, &wit_messages, &wit_tools)
-    {
+    let active_profile = super::rpc_meta::resolve_active_llm_profile(orch);
+    let stream_res = match conn_bindings.radcomp_connector_producer().call_generate_stream(
+        &mut connector_ref.store,
+        model,
+        active_profile.base_url.as_deref(),
+        active_profile.api_key.as_deref(),
+        &wit_messages,
+        &wit_tools,
+    ) {
         Ok(Ok(stream)) => stream,
         Ok(Err(e)) => {
             eprintln!("\x1b[31m[LLM Connector Error] {e}\x1b[0m");

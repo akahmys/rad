@@ -411,18 +411,11 @@ sequenceDiagram
 
 ### 5.4 Unified Tooling, Policy Offloading, and Rollback Boundaries
 
-`rad` follows a strict philosophy of keeping the Core simple and offloading all logical policy decisions, workflow state-machines, and safety wrappers to Wasm Extensions. In this architecture, all tools (basic OS primitives, custom Skills, Workflows, and external MCP servers) are presented to the LLM as unified, flat Tool Calls.
+`rad` follows a strict philosophy of keeping the Core simple and offloading all logical policy decisions and safety wrappers to Wasm Extensions. The Core exposes no tool primitives of its own — every tool the LLM sees comes from external Model Context Protocol (MCP) servers, aggregated and presented as a unified, flat Tool Call list.
 
 ### 5.4.1 Tool Abstraction & Discovery
 
-1. **Basic OS Primitives (Core)**:
-   * Low-level primitives like `file_read`, `file_write`, `file_edit_patch`, and `spawn_bash_process` are exposed by the Core through the API Gateway, and are presented to the LLM as shorter, clean tool names: `read`, `write`, `edit`, and `bash`.
-2. **Skills (Local Scripts)**:
-   * Executable scripts are placed in `.rad/skills/`. The Extension collects these scripts' specifications at startup and registers them to the LLM's tool pool. The LLM executes them by calling the script paths via the `bash` tool.
-3. **External Model Context Protocol (MCP)**:
-   * Connection and schema mapping for external MCP servers are handled on the Extension side. The Extension fetches tool schemas from MCP servers, merges them with local schemas, and forwards tool invocations to the respective MCP servers.
-4. **Workflows (State Management)**:
-   * Workflow structures (such as the Plan-Execute-Test-Commit cycle) are managed entirely by the Extension. The Extension tracks the state (either via a config file like `state.json` or explicitly in DAG nodes) and may dynamically inject phase instructions into the system prompt or restrict the set of tools available to the LLM for that specific phase.
+* **External Model Context Protocol (MCP)** is the sole source of tools. Connection and schema mapping for configured MCP servers are handled entirely on the `mcp-tool-provider` Extension side: it launches each server declared in its own `config.mcp_servers`, fetches their tool schemas, merges them into one pool, and forwards tool invocations to the matching server. Without at least one MCP server configured there, the agent has zero tools and cannot act on the filesystem or run commands at all — see [CONFIG.md](CONFIG.md) for the schema.
 
 ### 5.4.2 Rollback Boundaries & External Side-Effects
 
@@ -431,7 +424,7 @@ Because `rad` provides filesystem snapshot backups under `.rad/snapshots/`, ther
 * **Rollback-Capable (Local State)**:
   * Operations involving local file editing (`file_write`, `file_edit_patch`) are tracked by the Core's snapshot mechanism. If the agent fails a task, the local files can be rolled back to a clean state.
 * **Non-Rollback-Capable (External Side-Effects)**:
-  * Tools originating from external MCP servers or certain Skills (e.g., Slack notifications, GitHub PR creations, cloud database updates) produce external side-effects. These cannot be reversed by `rad`'s local snapshots.
+  * Tools originating from external MCP servers (e.g., Slack notifications, GitHub PR creations, cloud database updates) produce external side-effects. These cannot be reversed by `rad`'s local snapshots.
 * **Architecture Guideline**:
   * Because the LLM sees all tools as a flat list, the Extension (or the system prompt/rules) must enforce safety boundaries. For non-rollback-capable (non-reversible) tools, the Extension is encouraged to intercept the invocation and block for explicit human confirmation (Human-in-the-Loop) before routing the request.
 

@@ -15,8 +15,10 @@
 *   **Wasm-based Multi-Plugins & Gateway Access Control**: Executes agent policy logic inside a secure, sandboxed WebAssembly environment. Policies are cleanly isolated into cooperating, single-responsibility micro-extensions:
     *   **LLM Orchestrator**: Manages prompt construction and the reasoning loop.
     *   **Security Guard**: Intercepts and validates host-RPC command resource creation requests for sandboxed security filtering.
-    *   **Tool/MCP Provider**: Resolves and maps dynamic schemas for external tools (e.g. MCP servers).
-*   **Unified Tooling & Extension-Based Policies**: Basic OS primitives, custom scripts (Skills), Workflows, and external Model Context Protocol (MCP) servers are presented to the LLM as unified, flat Tool Calls. All semantic state tracking, workflow phases (e.g., plan, execute, test), and tool-specific safety guards are decoupled from the Core and offloaded entirely to custom Wasm Extensions.
+    *   **Tool/MCP Provider**: Resolves and maps dynamic schemas for external tools (e.g. MCP servers) — the sole source of tools; there are no built-in file/shell primitives.
+    *   **LLM Connector**: Translates messages and tool definitions into model-specific API payloads and parses the response stream.
+    *   **Context Compactor**: Owns context-size-reduction policy (windowing, stale tool-result clearing, relevance-based retention) once the Orchestrator has assembled the raw message list.
+*   **Unified Tooling & Extension-Based Policies**: All tool-specific safety guards and context-compaction policy are decoupled from the Core and offloaded entirely to custom Wasm Extensions, communicating over WIT-defined interfaces.
 *   **Stateless Policy & DAG Context**: Extensions are designed to be stateless, reloading history dynamically from Core's DAG (Directed Acyclic Graph) representation to ensure resiliency across restarts.
 
 
@@ -79,37 +81,13 @@ When you run `rad`, you are entered into an interactive shell (REPL) where you c
   * `/llm` (alias `/models`): Manage LLM endpoint profiles (list, switch, test, add, model, delete, context).
   * `/compact`: Manually compact and persist session history now, instead of waiting for the automatic per-turn compaction to apply ephemerally.
 
-### 3.2 Capability-Based Security (`rad.json`)
-All filesystem and process operations requested by the AI agent are validated against `rad.json` at the root of the workspace. If an action is not authorized in this capabilities mask, the API Gateway rejects the operation.
+### 3.2 Capability-Based Security & Extension Configuration
+All filesystem and process operations requested by the AI agent are validated against the extension permissions registered in `~/.rad/config.json` (user-global) or a project-local `rad.json`/`config.json` override. If an action is not authorized in this capabilities mask, the API Gateway rejects the operation.
 
-Example `rad.json` structure:
-```json
-{
-  "hitl_enabled": false,
-  "extensions": [
-    {
-      "name": "standard-orchestrator",
-      "permissions": {
-        "fs_read_allow": ["/path/to/rad"],
-        "fs_write_allow": ["/path/to/rad"],
-        "execution": {
-          "allow_bash": true,
-          "allow_commands": ["cargo check", "cargo clippy", "cargo test", "git"],
-          "block_commands": ["curl", "wget", "rm -rf /"]
-        },
-        "network": {
-          "allow_network": true,
-          "allow_domains": ["api.openai.com", "api.anthropic.com", "github.com"]
-        },
-        "allowed_mcp_servers": ["mcp-server-postgres", "mcp-server-git"]
-      }
-    }
-  ]
-}
-```
+`rad` ships 5 extensions with no built-in tools of its own — file reads/writes and shell execution are only available through MCP servers registered under `mcp-tool-provider`'s own `config.mcp_servers`. Without at least one configured there, the agent has zero tools and can't act on anything.
 
 > [!NOTE]
-> For advanced configuration parameters, directory lookup precedence rules, and local environment overrides (e.g. `rad.local.json` for credential isolation), please refer to the detailed [CONFIG.md](CONFIG.md) Layout Guide.
+> The full config schema (with a working example), the 5-tier precedence cascade, and the on-disk directory layout are documented in [CONFIG.md](CONFIG.md) — the authoritative reference, kept here as a single source of truth rather than duplicated.
 
 ---
 

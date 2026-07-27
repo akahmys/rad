@@ -65,8 +65,17 @@ interface producer {
         read: func() -> result<option<llm-event>, string>;
     }
 
+    // `base-url`/`api-key` are resolved host-side from the active `/llm`
+    // profile and passed explicitly on every call, rather than read from
+    // process environment variables inside the guest: a `WasiCtxBuilder`
+    // environment is snapshotted once at Wasm instance creation, so a
+    // later `std::env::set_var` on the host is invisible to an
+    // already-running (e.g. eagerly-loaded-at-startup) instance. `none`
+    // means no active profile / no key configured.
     generate-stream: func(
         model: string,
+        base-url: option<string>,
+        api-key: option<string>,
         messages: list<message>,
         tools: list<tool>,
     ) -> result<event-stream, string>;
