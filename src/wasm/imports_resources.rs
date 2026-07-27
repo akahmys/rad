@@ -54,6 +54,14 @@ impl bindings::wit::HostStreamHandle for WasmState {
                     Err(_) => Ok(vec![]),
                 }
             }
+            crate::wasm::HostStream::PipeReaderFallible(rx_mutex) => {
+                let rx = rx_mutex.lock();
+                match rx.recv() {
+                    Ok(Ok(data)) => Ok(data),
+                    Ok(Err(e)) => Err(e),
+                    Err(_) => Ok(vec![]),
+                }
+            }
             crate::wasm::HostStream::PipeWriter(_) => {
                 Err("Cannot read from a write-only stream".to_string())
             }
@@ -86,7 +94,8 @@ impl bindings::wit::HostStreamHandle for WasmState {
                     Err(e) => Err(e.to_string()),
                 }
             }
-            crate::wasm::HostStream::PipeReader(_) => {
+            crate::wasm::HostStream::PipeReader(_)
+            | crate::wasm::HostStream::PipeReaderFallible(_) => {
                 Err("Cannot write to a read-only stream".to_string())
             }
             crate::wasm::HostStream::Closed => Err("Stream is closed".to_string()),

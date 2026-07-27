@@ -2,6 +2,9 @@ use crate::ipc::RasRpcCommand;
 use crate::wasm::rpc::RpcContext;
 use crate::wasm::rpc_meta_fallback::execute_core_tool_fallback;
 
+#[cfg(test)]
+mod tests;
+
 /// Handles meta/orchestration commands that are not specific to one subsystem.
 pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_json::Value, String> {
     match cmd {
@@ -161,6 +164,48 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                 Ok(serde_json::Value::Null)
             }
         }
+        RasRpcCommand::GetActiveLlmProfile => {
+            let Some(orch) = ctx.orchestrator else {
+                return Ok(serde_json::Value::Null);
+            };
+            Ok(active_llm_profile_json(orch))
+        }
+        RasRpcCommand::GetExtensionConfig => {
+            let Some(orch) = ctx.orchestrator else {
+                return Ok(serde_json::Value::Object(serde_json::Map::new()));
+            };
+            Ok(extension_config_json(orch, ctx.caller_name))
+        }
         _ => unreachable!(),
     }
+}
+
+/// Reports facts about the active LLM profile — model name and detected
+/// context window — with no opinion on how a caller uses them. Extensions
+/// that need to reason about context-window budgets (e.g.
+/// `rad-orchestrator` sizing a `context-tools.optimize` request) ask this
+/// generic question instead of the host special-casing any one extension's
+/// request shape.
+fn active_llm_profile_json(orch: &crate::orchestrator::Orchestrator) -> serde_json::Value {
+    let cfg = orch.config.lock();
+    let profile = cfg.llm.active.as_deref().and_then(|name| cfg.llm.endpoints.get(name));
+    serde_json::json!({
+        "model": profile.and_then(|p| p.model.clone()),
+        "context_length": profile.and_then(|p| p.context_length),
+    })
+}
+
+/// Returns the calling extension's own `config` blob (from
+/// `ExtensionConfig.config` in `~/.rad/config.json`) as a JSON object, so an
+/// extension can be configured (e.g. `security-guard`'s blocklist patterns)
+/// without the host needing to know anything about the shape of that
+/// configuration. Empty object if the extension isn't registered or has no
+/// configured `config`.
+fn extension_config_json(orch: &crate::orchestrator::Orchestrator, caller_name: &str) -> serde_json::Value {
+    let cfg = orch.config.lock();
+    cfg.extensions
+        .iter()
+        .find(|e| e.name == caller_name)
+        .map(|e| serde_json::Value::Object(e.config.clone().into_iter().collect()))
+        .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()))
 }

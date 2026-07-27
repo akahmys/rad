@@ -35,22 +35,21 @@ impl Completer for CommandHelper {
         ctx: &Context<'_>,
     ) -> Result<(usize, Vec<String>), ReadlineError> {
         if line.starts_with('/') {
+            // Derived from the same registry `CommandParser`/`CommandManager`
+            // dispatch through (`super::command_specs`), instead of a
+            // separately hand-maintained list — this previously drifted out
+            // of sync and never suggested `/llm` at all.
             let mut candidates = Vec::new();
-            let commands = [
-                "/help",
-                "/quit",
-                "/status",
-                "/clear",
-                "/session",
-                "/rollback",
-                "/reload",
-                "/reset",
-                "/tree",
-                "/tools",
-            ];
-            for cmd in commands {
-                if cmd.starts_with(line) {
-                    candidates.push(cmd.to_string());
+            for spec in super::command_specs() {
+                let name = format!("/{}", spec.name);
+                if name.starts_with(line) {
+                    candidates.push(name);
+                }
+                for alias in spec.aliases {
+                    let alias_name = format!("/{alias}");
+                    if alias_name.starts_with(line) {
+                        candidates.push(alias_name);
+                    }
                 }
             }
             Ok((pos - line.len(), candidates))

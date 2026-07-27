@@ -42,7 +42,7 @@ pub mod rad_tool_provider {
 
 pub mod rad_llm_connector {
     wasmtime::component::bindgen!({
-        path: "wit/llm-connector.wit",
+        path: "wit/connector/llm-connector.wit",
         world: "llm-connector",
         additional_derives: [serde::Serialize, serde::Deserialize],
         with: {
@@ -52,10 +52,18 @@ pub mod rad_llm_connector {
 }
 
 pub mod rad_context_tools {
+    // `path` is the directory, not a single file: context-tools.wit shares
+    // `package radcomp:extension` with rad.wit (see that file's docs), so
+    // resolving it needs both files. `llm-connector.wit` lives in its own
+    // `wit/connector/` subdirectory specifically so it doesn't collide with
+    // this directory scan (it's a different, unrelated package).
     wasmtime::component::bindgen!({
-        path: "wit/context-tools.wit",
+        path: "wit",
         world: "context-tools-extension",
         additional_derives: [serde::Serialize, serde::Deserialize],
+        with: {
+            "radcomp:extension/types": crate::wasm::bindings::rad_extension::radcomp::extension::types,
+        }
     });
 }
 
@@ -68,55 +76,10 @@ pub use rad_extension::radcomp::extension::types as wit;
 // this file under the 300-line limit.
 mod rpc_command;
 
-use rad_models::{
-    PendingToolCallInfo as CorePendingToolCallInfo, Target as CoreTarget,
-    TimeoutPolicy as CoreTimeoutPolicy,
-};
-
-impl From<wit::Target> for CoreTarget {
-    fn from(t: wit::Target) -> Self {
-        match t {
-            wit::Target::Llm => CoreTarget::Llm,
-            wit::Target::Process(p) => CoreTarget::Process(p.to_string()),
-        }
-    }
-}
-
-impl From<CoreTarget> for wit::Target {
-    fn from(t: CoreTarget) -> Self {
-        match t {
-            CoreTarget::Llm => wit::Target::Llm,
-            CoreTarget::Process(p) => wit::Target::Process(p.parse().unwrap_or(0)),
-        }
-    }
-}
-
-impl From<wit::TimeoutPolicy> for CoreTimeoutPolicy {
-    fn from(tp: wit::TimeoutPolicy) -> Self {
-        match tp {
-            wit::TimeoutPolicy::Dynamic(p) => CoreTimeoutPolicy::Dynamic {
-                heartbeat_timeout_ms: p.heartbeat_timeout_ms,
-                max_silent_wait_ms: p.max_silent_wait_ms,
-            },
-            wit::TimeoutPolicy::Infinite => CoreTimeoutPolicy::Infinite,
-        }
-    }
-}
-
-impl From<CoreTimeoutPolicy> for wit::TimeoutPolicy {
-    fn from(tp: CoreTimeoutPolicy) -> Self {
-        match tp {
-            CoreTimeoutPolicy::Dynamic {
-                heartbeat_timeout_ms,
-                max_silent_wait_ms,
-            } => wit::TimeoutPolicy::Dynamic(wit::DynamicPolicy {
-                heartbeat_timeout_ms,
-                max_silent_wait_ms,
-            }),
-            CoreTimeoutPolicy::Infinite => wit::TimeoutPolicy::Infinite,
-        }
-    }
-}
+// Target/TimeoutPolicy WIT conversions are generated in bindings/rpc_command.rs
+// via the shared `rad_models::impl_rpc_target_*`/`impl_rpc_timeout_policy_*`
+// macros (see that file and `models/src/rpc_conversion.rs`).
+use rad_models::PendingToolCallInfo as CorePendingToolCallInfo;
 
 impl From<wit::PendingToolCallInfo> for CorePendingToolCallInfo {
     fn from(info: wit::PendingToolCallInfo) -> Self {

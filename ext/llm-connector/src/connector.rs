@@ -96,14 +96,7 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
         let url = if let Ok(test_port) = std::env::var("RAD_TEST_PORT") {
             format!("http://127.0.0.1:{test_port}/v1/chat/completions")
         } else if let Some(base_url) = base_url_env {
-            let trimmed = base_url.trim().trim_end_matches('/');
-            if trimmed.ends_with("/chat/completions") {
-                trimmed.to_string()
-            } else if trimmed.ends_with("/v1") {
-                format!("{trimmed}/chat/completions")
-            } else {
-                format!("{trimmed}/v1/chat/completions")
-            }
+            format!("{}/v1/chat/completions", rad_models::normalize_base_url(&base_url))
         } else if api_key.is_some() {
             "https://api.openai.com/v1/chat/completions".to_string()
         } else {

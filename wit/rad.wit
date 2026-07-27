@@ -93,6 +93,8 @@ interface types {
         write-stdout(string),
         complete-task,
         get-dag,
+        get-active-llm-profile,
+        get-extension-config,
         ask-human-approval(string),
         report-token-usage(report-token-usage-payload),
         spawn-mcp-server(spawn-mcp-server-payload),

@@ -19,6 +19,7 @@ pub struct RpcContext<'a> {
     pub orchestrator: Option<&'a Arc<crate::orchestrator::Orchestrator>>,
     pub call_id: String,
     pub hitl_enabled: bool,
+    pub caller_name: &'a str,
 }
 
 /// Thin dispatcher: routes each RPC command to a focused handler function.
@@ -40,6 +41,7 @@ pub fn execute_rpc_command(
     orchestrator: Option<&Arc<crate::orchestrator::Orchestrator>>,
     call_id: String,
     hitl_enabled: bool,
+    caller_name: &str,
 ) -> Result<serde_json::Value, String> {
     let ctx = RpcContext {
         sandbox,
@@ -53,6 +55,7 @@ pub fn execute_rpc_command(
         orchestrator,
         call_id,
         hitl_enabled,
+        caller_name,
     };
     match cmd {
         RasRpcCommand::FileRead { .. }
@@ -68,6 +71,10 @@ pub fn execute_rpc_command(
         | RasRpcCommand::MergeNodes { .. }
         | RasRpcCommand::DeleteNode { .. }
         | RasRpcCommand::GetDag => super::rpc_dag::handle_dag(cmd, &ctx),
+
+        RasRpcCommand::GetActiveLlmProfile | RasRpcCommand::GetExtensionConfig => {
+            super::rpc_meta::handle_meta(cmd, &ctx)
+        }
 
         RasRpcCommand::SpawnBashProcess { .. }
         | RasRpcCommand::SpawnMcpServer { .. }

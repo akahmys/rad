@@ -2,6 +2,9 @@ use std::fmt::Write;
 use crate::call_host;
 use crate::tool::{Message, get_available_tools};
 use crate::types::{Dag, RasRpcCommand};
+use context_tools_wire::{CtMessage, CtOptimizationRequest, CtOptimizationResponse};
+
+mod context_tools_wire;
 
 fn read_rule_file(p: &str) -> Option<String> {
     let val = call_host(RasRpcCommand::FileRead { path: std::path::PathBuf::from(p) }).ok()?;
@@ -110,6 +113,26 @@ fn traverse_dag_messages(dag: &Dag) -> Vec<Message> {
     messages
 }
 
+/// Asks the host what the active LLM endpoint's detected context window is.
+/// A generic fact query (`GetActiveLlmProfile`) — the host has no idea this
+/// value is destined for a `context-tools.optimize` call, and doesn't need
+/// to. `None` if detection never succeeded for the active profile (e.g. a
+/// backend that doesn't expose `/props` or `/api/show`); callers fall back
+/// to count-based windowing only in that case.
+fn active_llm_context_length() -> Option<u32> {
+    let val = call_host(RasRpcCommand::GetActiveLlmProfile).ok()?;
+    val.get("context_length")?.as_u64().and_then(|n| u32::try_from(n).ok())
+}
+
+/// Asks the host for the active LLM profile's configured model name, so the
+/// generation request actually targets whatever the user set via `/llm add`
+/// or `/llm model` instead of a hardcoded placeholder. `None` if no profile
+/// is active or it has no model configured.
+fn active_llm_model() -> Option<String> {
+    let val = call_host(RasRpcCommand::GetActiveLlmProfile).ok()?;
+    val.get("model")?.as_str().map(ToString::to_string)
+}
+
 pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
     let dag_val = call_host(RasRpcCommand::GetDag)?;
     let dag: Dag =
@@ -128,9 +151,19 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 
     let filtered_messages = filter_orphaned_tool_messages(messages);
 
+    // Computed from the full, pre-optimization message list so no activity
+    // is ever missed, then attached to the system message below — which
+    // `context-tools` never sees (split out before `optimize`, re-attached
+    // after) — so it survives regardless of how aggressively the rest of
+    // history gets windowed or cleared (Phase 51-3).
+    let mut system_prompt = get_system_prompt();
+    if let Some(digest) = crate::digest::build_digest_addendum(&filtered_messages) {
+        system_prompt.push_str(&digest);
+    }
+
     let mut all_messages = vec![Message {
         role: "system".to_string(),
-        content: Some(get_system_prompt()),
+        content: Some(system_prompt),
         name: None,
         tool_call_id: None,
         tool_calls: None,
@@ -150,6 +183,9 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 
     let mut optimized_non_system = non_system_msgs;
 
+    let max_content_chars =
+        active_llm_context_length().map(rad_models::budget_chars_from_context_length);
+
     let ct_req = CtOptimizationRequest {
         messages: optimized_non_system
             .iter()
@@ -160,6 +196,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
             })
             .collect(),
         max_history: Some(u32::try_from(max_history_messages).unwrap_or(u32::MAX)),
+        max_content_chars,
     };
 
     if let Ok(req_json) = serde_json::to_string(&ct_req) {
@@ -221,9 +258,17 @@ pub fn trigger_llm_stream(messages: &[Message]) -> Result<(), String> {
     let tools_json =
         serde_json::to_string(&tools).map_err(|e| format!("Failed to serialize tools: {e}"))?;
 
-    crate::log_trace("session", "Calling GenerateLlmStream host RPC...");
+    // Many local backends (llama.cpp with a single loaded model) ignore
+    // this field entirely, but multi-model servers (Ollama, LM Studio,
+    // vLLM) route on it — sending the wrong name silently mis-targets the
+    // request there. Fall back to an empty string (not a guessed model
+    // name) when nothing is configured, so a misconfiguration surfaces as
+    // a clear server-side error instead of a silent wrong-model request.
+    let model = active_llm_model().unwrap_or_default();
+
+    crate::log_trace("session", &format!("Calling GenerateLlmStream host RPC with model '{model}'..."));
     call_host(RasRpcCommand::GenerateLlmStream {
-        model: "qwen".to_string(),
+        model,
         messages_json,
         tools_json,
     })?;
@@ -231,24 +276,3 @@ pub fn trigger_llm_stream(messages: &[Message]) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-struct CtMessage {
-    #[serde(rename = "node-id")]
-    node_id: Option<String>,
-    role: String,
-    content: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct CtOptimizationRequest {
-    messages: Vec<CtMessage>,
-    #[serde(rename = "max-history")]
-    max_history: Option<u32>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize)]
-struct CtOptimizationResponse {
-    #[serde(rename = "optimized-messages")]
-    optimized_messages: Vec<CtMessage>,
-    summary: String,
-}

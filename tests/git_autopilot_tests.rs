@@ -63,6 +63,7 @@ fn setup_autopilot_orchestrator(
         log: workspace.join("logs").to_string_lossy().to_string(),
         hitl_enabled: false,
         verification_command: verify_cmd,
+        ..Default::default()
     };
 
     let perms = PermissionConfig {

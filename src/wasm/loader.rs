@@ -27,6 +27,7 @@ impl WasmRuntime {
         event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
         orchestrator: Option<std::sync::Weak<crate::orchestrator::Orchestrator>>,
         hitl_enabled: bool,
+        llm_stream_heartbeat_ms: u64,
     ) -> Result<Self, String> {
         let mut config = wasmtime::Config::new();
         config.wasm_multi_memory(true);
@@ -99,7 +100,10 @@ impl WasmRuntime {
             active_processes,
             active_mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             event_tx,
-            llm_timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Infinite)),
+            llm_timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Dynamic {
+                heartbeat_timeout_ms: llm_stream_heartbeat_ms,
+                max_silent_wait_ms: llm_stream_heartbeat_ms,
+            })),
             orchestrator,
             hitl_enabled,
             wasi,

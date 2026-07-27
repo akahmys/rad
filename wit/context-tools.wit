@@ -1,15 +1,12 @@
-package radcomp:context-tools;
+package radcomp:extension;
 
-interface types {
-    variant ras-rpc-command {
-        command(string),
-    }
-}
-
-interface host-rpc {
-    use types.{ras-rpc-command};
-    call: func(command: ras-rpc-command) -> result<string, string>;
-}
+// `types` (ras-rpc-command et al.) is defined in rad.wit — same package,
+// same directory, resolved together by the tooling. context-tools uses to
+// the same full RPC surface every other extension does (see AWU 915's
+// follow-up: this used to be a bespoke single-variant `command(string)`
+// type in its own `radcomp:context-tools` package, whose raw-shell host
+// bridge silently ignored `PermissionConfig.fs_read_allow`/`fs_write_allow`
+// since it never went through the real permission-checked RPC path).
 
 interface context-tools {
     record message {
@@ -25,6 +22,15 @@ interface context-tools {
         // goal) plus the most recent messages before role-based compaction is
         // applied. `none` disables count-based windowing.
         max-history: option<u32>,
+        // Maximum total content characters to retain across the first
+        // (goal) message plus the kept tail. Computed by the host from the
+        // active LLM endpoint's actual context window, since message count
+        // alone is a poor proxy for how much of a small local context
+        // window a handful of large tool outputs can consume. When both
+        // this and `max-history` are set, whichever produces the smaller
+        // (more restrictive) window wins. `none` disables size-based
+        // windowing.
+        max-content-chars: option<u32>,
     }
 
     record optimization-response {
@@ -38,8 +44,8 @@ interface context-tools {
 
 world context-tools-extension {
     use types.{ras-rpc-command};
-    
-    import host-rpc;
+
+    import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
 
     export context-tools;
 }

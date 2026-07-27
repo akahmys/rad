@@ -89,6 +89,7 @@ fn setup_runtime(
         event_tx,
         None,
         false,
+        15000,
     )
     .unwrap();
 
@@ -122,6 +123,7 @@ fn test_wasm_panic_self_healing_and_rehydration() {
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
         hitl_enabled: false,
         verification_command: None,
+        ..Default::default()
     };
     let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
 
@@ -316,6 +318,7 @@ fn test_core_auto_self_healing_integration() {
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
         hitl_enabled: false,
         verification_command: None,
+        ..Default::default()
     };
     let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
 

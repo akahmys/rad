@@ -55,6 +55,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
         event_tx,
         None,
         false,
+        15000,
     )
     .unwrap();
 

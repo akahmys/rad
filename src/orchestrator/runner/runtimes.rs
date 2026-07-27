@@ -13,9 +13,13 @@ impl Orchestrator {
         self: &Arc<Self>,
         event_tx: &Sender<RasCoreEvent>,
     ) -> Result<HashMap<String, Arc<Mutex<WasmRuntime>>>, String> {
-        let (extensions, hitl_enabled) = {
+        let (extensions, hitl_enabled, llm_stream_heartbeat_ms) = {
             let config_guard = self.config.lock();
-            (config_guard.extensions.clone(), config_guard.core.hitl_enabled)
+            (
+                config_guard.extensions.clone(),
+                config_guard.core.hitl_enabled,
+                config_guard.default_timeout.llm_stream_heartbeat_ms,
+            )
         };
 
         for ext in &extensions {
@@ -50,6 +54,7 @@ impl Orchestrator {
                     event_tx.clone(),
                     Some(Arc::downgrade(self)),
                     hitl_enabled,
+                    llm_stream_heartbeat_ms,
                 )?;
 
                 if runtime.tool_provider.is_some() {

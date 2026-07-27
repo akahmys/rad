@@ -1,100 +1,21 @@
 #![deny(clippy::pedantic)]
 
-use std::fmt::{self, Write as _};
+use std::sync::Arc;
 
-/// Represents the available slash commands in the REPL.
+use crate::orchestrator::Orchestrator;
+use handlers::{
+    cmd_clear, cmd_help, cmd_llm, cmd_reload, cmd_reset, cmd_rollback, cmd_session, cmd_status,
+    cmd_tools, cmd_tree,
+};
+
+/// A slash command matched against the registry (`command_specs`), plus
+/// whatever trailing text followed its name. `name` is the command's
+/// canonical registered name even when the input used an alias (e.g.
+/// `/models` resolves to `name: "llm"`).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Command {
-    /// Show the help menu.
-    Help,
-    /// Exit the session.
-    Quit,
-    /// Show current session status.
-    Status,
-    /// Clear the terminal screen.
-    Clear,
-    /// Display information about the current session ID.
-    Session(String),
-    /// Roll back the session state to a specific node ID.
-    Rollback(String),
-    /// Reload configuration file dynamically.
-    Reload,
-    /// Reset the current session (rotates session ID and clears DAG).
-    Reset,
-    /// Show history DAG visually as a tree.
-    Tree,
-    /// List active permissions and registered tools.
-    Tools,
-    /// Manage LLM server profiles and active endpoints.
-    Llm(llm::LlmSubcommand),
-}
-
-impl fmt::Display for Command {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Command::Help => write!(f, "/help"),
-            Command::Quit => write!(f, "/quit"),
-            Command::Status => write!(f, "/status"),
-            Command::Clear => write!(f, "/clear"),
-            Command::Session(id) => write!(f, "/session {id}"),
-            Command::Rollback(id) => write!(f, "/rollback {id}"),
-            Command::Reload => write!(f, "/reload"),
-            Command::Reset => write!(f, "/reset"),
-            Command::Tree => write!(f, "/tree"),
-            Command::Tools => write!(f, "/tools"),
-            Command::Llm(_) => write!(f, "/llm"),
-        }
-    }
-}
-
-/// Parser for identifying slash commands in user input.
-pub struct CommandParser;
-
-impl CommandParser {
-    /// Parses the input string. Returns `Some(Command)` if it's a valid slash command,
-    /// otherwise returns `None` (indicating it's a regular task).
-    #[must_use]
-    pub fn parse(input: &str) -> Option<Command> {
-        let trimmed = input.trim();
-        if !trimmed.starts_with('/') {
-            return None;
-        }
-
-        let parts: Vec<&str> = trimmed.split_whitespace().collect();
-        if parts.is_empty() {
-            return None;
-        }
-
-        match parts[0] {
-            "/help" => Some(Command::Help),
-            "/quit" => Some(Command::Quit),
-            "/status" => Some(Command::Status),
-            "/clear" => Some(Command::Clear),
-            "/session" => {
-                if parts.len() > 1 {
-                    Some(Command::Session(parts[1].to_string()))
-                } else {
-                    None
-                }
-            }
-            "/rollback" => {
-                if parts.len() > 1 {
-                    Some(Command::Rollback(parts[1].to_string()))
-                } else {
-                    None
-                }
-            }
-            "/reload" => Some(Command::Reload),
-            "/reset" => Some(Command::Reset),
-            "/tree" => Some(Command::Tree),
-            "/tools" => Some(Command::Tools),
-            "/llm" | "/models" => {
-                let args = if parts.len() > 1 { &parts[1..] } else { &[] };
-                Some(Command::Llm(llm::parse_llm_command(args)))
-            }
-            _ => None,
-        }
-    }
+pub struct ParsedCommand {
+    pub name: &'static str,
+    pub args: String,
 }
 
 /// Result of executing a command.
@@ -105,113 +26,159 @@ pub enum CommandResult {
     Quit,
     /// The command produced status information to be printed.
     StatusInfo(String),
+    /// The command expanded into a task prompt to run through the agent
+    /// (currently only produced by markdown-template commands — see
+    /// `templates` — but kept as a first-class `CommandResult` variant
+    /// rather than a template-specific side channel, since "run this text
+    /// as a task" is a generic outcome any future command could produce).
+    RunTask(String),
+}
+
+/// One entry in the command registry: name, aliases, help text, and
+/// handler are declared together so they can never drift out of sync with
+/// each other (previously the command enum, parser match, dispatcher
+/// match, hand-written `/help` text, and `CommandHelper`'s tab-completion
+/// list were 5 independently-maintained sources of truth — `CommandHelper`
+/// didn't even know `/llm` existed). Every handler takes the raw trailing
+/// text after the command name and parses whatever structure it needs
+/// itself, the same way `/llm`'s subcommands already worked.
+pub struct CommandSpec {
+    pub name: &'static str,
+    pub aliases: &'static [&'static str],
+    pub description: &'static str,
+    pub handler: fn(&str, &Arc<Orchestrator>) -> CommandResult,
+}
+
+#[must_use]
+pub fn command_specs() -> &'static [CommandSpec] {
+    &[
+        CommandSpec {
+            name: "help",
+            aliases: &[],
+            description: "Show this help message",
+            handler: cmd_help,
+        },
+        CommandSpec {
+            name: "quit",
+            aliases: &[],
+            description: "Exit the session",
+            handler: |_, _| CommandResult::Quit,
+        },
+        CommandSpec {
+            name: "status",
+            aliases: &[],
+            description: "Show current session status and DAG info",
+            handler: cmd_status,
+        },
+        CommandSpec {
+            name: "clear",
+            aliases: &[],
+            description: "Clear the terminal screen",
+            handler: cmd_clear,
+        },
+        CommandSpec {
+            name: "session",
+            aliases: &[],
+            description: "Show the current session ID",
+            handler: cmd_session,
+        },
+        CommandSpec {
+            name: "rollback",
+            aliases: &[],
+            description: "Roll back session to a specific DAG node (usage: /rollback <node_id>)",
+            handler: cmd_rollback,
+        },
+        CommandSpec {
+            name: "reload",
+            aliases: &[],
+            description: "Reload configuration file dynamically",
+            handler: cmd_reload,
+        },
+        CommandSpec {
+            name: "reset",
+            aliases: &[],
+            description: "Save current session and start a new clean session",
+            handler: cmd_reset,
+        },
+        CommandSpec {
+            name: "tree",
+            aliases: &[],
+            description: "Show history DAG visually as a tree",
+            handler: cmd_tree,
+        },
+        CommandSpec {
+            name: "tools",
+            aliases: &[],
+            description: "List permissions and registered tools",
+            handler: cmd_tools,
+        },
+        CommandSpec {
+            name: "llm",
+            aliases: &["models"],
+            description: "Manage LLM endpoints (list, switch, test, add, model)",
+            handler: cmd_llm,
+        },
+    ]
+}
+
+/// Splits `/name rest` into `(name, rest)`, trimming `rest`. `None` if
+/// `input` isn't `/`-prefixed or the name portion is empty. Shared between
+/// `CommandParser::parse` (built-in registry lookup) and the markdown
+/// template lookup in `main.rs` (`templates` module) — both need to
+/// extract the same `name`/`args` shape from raw input, just against
+/// different sources of "known names."
+#[must_use]
+pub fn split_slash(input: &str) -> Option<(&str, &str)> {
+    let trimmed = input.trim();
+    let rest = trimmed.strip_prefix('/')?;
+    let (name, args) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+    if name.is_empty() {
+        return None;
+    }
+    Some((name, args.trim()))
+}
+
+/// Parser for identifying slash commands in user input.
+pub struct CommandParser;
+
+impl CommandParser {
+    /// Parses the input string against the command registry. Returns
+    /// `Some(ParsedCommand)` for a recognized `/name ...` command,
+    /// otherwise `None` (indicating it's a regular task, a markdown
+    /// template command — see `templates` — or an unrecognized
+    /// `/whatever` sent to the LLM as-is).
+    #[must_use]
+    pub fn parse(input: &str) -> Option<ParsedCommand> {
+        let (name, args) = split_slash(input)?;
+        let spec = command_specs()
+            .iter()
+            .find(|spec| spec.name == name || spec.aliases.contains(&name))?;
+        Some(ParsedCommand {
+            name: spec.name,
+            args: args.to_string(),
+        })
+    }
 }
 
 /// Manages the execution of slash commands.
 pub struct CommandManager;
 
 impl CommandManager {
-    /// Executes the given command and returns the result.
+    /// Executes the given parsed command and returns the result.
     #[must_use]
-    pub fn execute(
-        command: Command,
-        orchestrator: &std::sync::Arc<crate::orchestrator::Orchestrator>,
-    ) -> CommandResult {
-        match command {
-            Command::Help => {
-                println!("Available Slash Commands:");
-                println!("  /help           - Show this help message");
-                println!("  /quit           - Exit the session");
-                println!("  /status         - Show current session status and DAG info");
-                println!("  /clear          - Clear the terminal screen");
-                println!("  /session <id>   - Show the current session ID");
-                println!("  /rollback <id>  - Roll back session to a specific DAG node");
-                println!("  /reload         - Reload configuration file dynamically");
-                println!("  /reset          - Save current session and start a new clean session");
-                println!("  /tree           - Show history DAG visually as a tree");
-                println!("  /tools          - List permissions and registered tools");
-                println!("  /llm [cmd]      - Manage LLM endpoints (list, switch, test, add, model)");
-                CommandResult::Continue
-            }
-            Command::Quit => CommandResult::Quit,
-            Command::Status => {
-                let session_id = orchestrator.session_id.lock().clone();
-                let usage_guard = orchestrator.token_usage.lock();
-                let (prompt, completion) =
-                    (usage_guard.prompt_tokens, usage_guard.completion_tokens);
-                let total = prompt + completion;
-                let mut status_msg = format!("Session ID: {session_id}\n");
-
-                {
-                    let dag_guard = orchestrator.dag.lock();
-                    let total_nodes = dag_guard.nodes.len();
-                    let current_node = dag_guard.current_node_id.as_deref().unwrap_or("None");
-                    let _ = write!(
-                        status_msg,
-                        "Total DAG Nodes: {total_nodes}\nCurrent DAG Node: {current_node}\n"
-                    );
-                }
-
-                let _ = write!(
-                    status_msg,
-                    "Token Usage: Prompt: {prompt}, Completion: {completion}, Total: {total}"
-                );
-
-                CommandResult::StatusInfo(status_msg)
-            }
-            Command::Clear => {
-                // ANSI escape sequences to clear screen and reset cursor to top-left
-                print!("{}[2J{}[1;1H", 27 as char, 27 as char);
-                CommandResult::Continue
-            }
-            Command::Session(id) => CommandResult::StatusInfo(format!("Current session: {id}")),
-            Command::Rollback(node_id) => {
-                match orchestrator.rollback(&node_id) {
-                    Ok(()) => {
-                        println!("Session successfully rolled back to node: {node_id}");
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to rollback: {e}");
-                    }
-                }
-                CommandResult::Continue
-            }
-            Command::Reload => match orchestrator.reload() {
-                Ok(()) => CommandResult::StatusInfo(
-                    "\x1b[32mConfiguration reloaded successfully!\x1b[0m".to_string(),
-                ),
-                Err(e) => CommandResult::StatusInfo(format!(
-                    "\x1b[1;31mFailed to reload configuration: {e}\x1b[0m"
-                )),
-            },
-            Command::Reset => match orchestrator.reset_session() {
-                Ok(new_id) => CommandResult::StatusInfo(format!(
-                    "\x1b[32mSession reset successfully. Started new session: \x1b[1;36m{new_id}\x1b[0m"
-                )),
-                Err(e) => CommandResult::StatusInfo(format!(
-                    "\x1b[1;31mFailed to reset session: {e}\x1b[0m"
-                )),
-            },
-            Command::Tree => {
-                let dag_guard = orchestrator.dag.lock();
-                let tree_str = tree::render_dag_tree(&dag_guard);
-                CommandResult::StatusInfo(tree_str)
-            }
-            Command::Tools => {
-                let tools_str = tools::render_tools_and_permissions(orchestrator);
-                CommandResult::StatusInfo(tools_str)
-            }
-            Command::Llm(ref subcmd) => {
-                let msg = llm::execute_llm_command(subcmd, orchestrator);
-                CommandResult::StatusInfo(msg)
-            }
+    pub fn execute(command: &ParsedCommand, orchestrator: &Arc<Orchestrator>) -> CommandResult {
+        match command_specs().iter().find(|spec| spec.name == command.name) {
+            Some(spec) => (spec.handler)(&command.args, orchestrator),
+            None => CommandResult::StatusInfo(format!("Unknown command: /{}", command.name)),
         }
     }
 }
 
 pub mod completion;
 pub use completion::CommandHelper;
+mod handlers;
 pub mod llm;
+pub mod templates;
 pub mod tools;
 pub mod tree;
 

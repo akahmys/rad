@@ -37,6 +37,7 @@ fn test_async_task_cancellation_on_rollback() {
         log: temp_dir.path().join("logs").to_string_lossy().to_string(),
         hitl_enabled: false,
         verification_command: None,
+        ..Default::default()
     };
     let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
     let ext_config = rad::config::ExtensionConfig {

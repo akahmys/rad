@@ -9,6 +9,9 @@ use std::sync::Mutex;
 
 pub static STATE: Mutex<Option<OrchestratorState>> = Mutex::new(None);
 
+const DEFAULT_MAX_HISTORY_MESSAGES: usize = 50;
+const DEFAULT_MAX_TOOL_OUTPUT_CHARS: usize = 2000;
+
 fn handle_human_input(text: &str) -> Result<(), String> {
     {
         let mut state_guard = STATE.lock().map_err(|e| format!("Mutex lock error: {e}"))?;
@@ -17,8 +20,8 @@ fn handle_human_input(text: &str) -> Result<(), String> {
             is_reasoning: false,
             reasoning_buffered: String::new(),
             tool_calls: HashMap::new(),
-            max_history_messages: Some(50),
-            max_tool_output_chars: Some(2000),
+            max_history_messages: Some(DEFAULT_MAX_HISTORY_MESSAGES),
+            max_tool_output_chars: Some(DEFAULT_MAX_TOOL_OUTPUT_CHARS),
             is_rehydrated: false,
         });
     }

@@ -94,6 +94,7 @@ fn setup_runtime(
         event_tx,
         None,
         hitl_enabled,
+        15000,
     )
     .unwrap();
 

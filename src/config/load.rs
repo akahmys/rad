@@ -48,11 +48,10 @@ fn discover_config_path(explicit_path: Option<&str>) -> Option<PathBuf> {
     }
 
     // 2. User Global (~/.rad/config.json)
-    if let Some(home_dir) = dirs::home_dir() {
-        let rad_home_config = home_dir.join(".rad/config.json");
-        if rad_home_config.exists() {
-            return Some(rad_home_config);
-        }
+    if let Some(rad_home_config) = super::global_config_path()
+        && rad_home_config.exists()
+    {
+        return Some(rad_home_config);
     }
 
     None
@@ -63,23 +62,19 @@ pub fn load_config(explicit_path: Option<&str>) -> Result<Config, crate::error::
     let mut base_val = serde_json::Value::Object(serde_json::Map::new());
 
     // 1. Always load User Global (~/.rad/config.json) as the base if it exists
-    if let Some(home_dir) = dirs::home_dir() {
-        let rad_home_config = home_dir.join(".rad/config.json");
-        if rad_home_config.exists()
-            && let Ok(content) = fs::read_to_string(&rad_home_config)
-            && let Ok(global_val) = parse_jsonc(&content)
-        {
-            merge_json_value(&mut base_val, global_val);
-        }
+    if let Some(rad_home_config) = super::global_config_path()
+        && rad_home_config.exists()
+        && let Ok(content) = fs::read_to_string(&rad_home_config)
+        && let Ok(global_val) = parse_jsonc(&content)
+    {
+        merge_json_value(&mut base_val, global_val);
     }
 
     // 2. Discover and merge Project Local / Explicit config over the global base
     let config_path = discover_config_path(explicit_path);
     if let Some(path) = config_path {
         // If config_path is the same as global config, skip duplicate read
-        let is_global = dirs::home_dir()
-            .map(|h| h.join(".rad/config.json") == path)
-            .unwrap_or(false);
+        let is_global = super::global_config_path().map(|h| h == path).unwrap_or(false);
 
         if !is_global {
             let content = fs::read_to_string(&path).map_err(|e| {

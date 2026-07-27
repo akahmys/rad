@@ -49,6 +49,7 @@ impl bindings::RadExtensionImports for WasmState {
             orchestrator.as_ref(),
             "wasm_call".to_string(),
             self.hitl_enabled,
+            &self.name,
         );
 
         match result {

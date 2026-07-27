@@ -40,6 +40,11 @@ mod tests;
 pub enum HostStream {
     File(std::fs::File),
     PipeReader(Mutex<std::sync::mpsc::Receiver<Vec<u8>>>),
+    /// Like `PipeReader`, but the producer can report a mid-stream failure
+    /// (connect/read timeout, HTTP error) as an `Err` instead of it being
+    /// silently swallowed as an empty/unparseable chunk. Used by
+    /// `open_http_stream` for the `llm-connector` extension.
+    PipeReaderFallible(Mutex<std::sync::mpsc::Receiver<Result<Vec<u8>, String>>>),
     PipeWriter(Mutex<Box<dyn std::io::Write + Send>>),
     Closed,
 }
@@ -234,11 +239,11 @@ impl WasmRuntime {
                 if let Some(ref ct) = self.context_tools {
                     match method {
                         "optimize" => {
-                            use crate::wasm::bindings::rad_context_tools::exports::radcomp::context_tools::context_tools::OptimizationRequest;
+                            use crate::wasm::bindings::rad_context_tools::exports::radcomp::extension::context_tools::OptimizationRequest;
                             let req: OptimizationRequest = serde_json::from_str(arguments)
                                 .map_err(|e| format!("Failed to parse OptimizationRequest: {e}"))?;
                             let resp = ct
-                                .radcomp_context_tools_context_tools()
+                                .radcomp_extension_context_tools()
                                 .call_optimize(&mut self.store, &req)
                                 .map_err(|e| format_wasm_error(&ext_name, "optimize", &e))??;
                             serde_json::to_string(&resp)
@@ -246,7 +251,7 @@ impl WasmRuntime {
                         }
                         "get-repo-map" => {
                             let resp = ct
-                                .radcomp_context_tools_context_tools()
+                                .radcomp_extension_context_tools()
                                 .call_get_repo_map(&mut self.store)
                                 .map_err(|e| format_wasm_error(&ext_name, "get_repo_map", &e))??;
                             Ok(resp)

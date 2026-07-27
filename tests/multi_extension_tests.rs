@@ -9,6 +9,20 @@ use std::time::{Duration, Instant};
 
 static TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// `security-guard`'s blocklist policy is config-driven (fetched via the
+/// `GetExtensionConfig` RPC), not hardcoded — these tests exercise the real
+/// wiring by explicitly configuring the same patterns the extension used to
+/// carry as literals, rather than relying on a fallback.
+fn security_guard_config() -> HashMap<String, serde_json::Value> {
+    HashMap::from([
+        ("block_path_patterns".to_string(), serde_json::json!(["blocked.txt"])),
+        (
+            "block_command_patterns".to_string(),
+            serde_json::json!(["blocked_command", "blocked.txt"]),
+        ),
+    ])
+}
+
 fn run_mock_http_server(
     addr: &str,
     responses: Arc<Mutex<Vec<String>>>,
@@ -107,7 +121,7 @@ fn test_multi_extension_verification_chain() {
             role: "security".to_string(),
             source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
             permissions: Some(perms.clone()),
-            config: HashMap::new(),
+            config: security_guard_config(),
         },
         ExtensionConfig {
             name: "security-monitor-2".to_string(),
@@ -115,7 +129,7 @@ fn test_multi_extension_verification_chain() {
             role: "security".to_string(),
             source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
             permissions: Some(perms.clone()),
-            config: HashMap::new(),
+            config: security_guard_config(),
         },
         ExtensionConfig {
             name: "mcp-tool-provider".to_string(),
@@ -260,7 +274,7 @@ fn test_multi_extension_isolated_roles() {
             role: "security".to_string(),
             source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
             permissions: Some(perms.clone()),
-            config: HashMap::new(),
+            config: security_guard_config(),
         },
         ExtensionConfig {
             name: "mcp-tool-provider".to_string(),

@@ -171,6 +171,16 @@ pub enum RasRpcCommand {
     OpenProcess { command: String },
     /// Retrieve the current execution DAG.
     GetDag,
+    /// Fetch the active LLM endpoint's model name and detected context
+    /// window, so extensions can budget context-window usage without the
+    /// host needing to know anything about how any specific extension uses
+    /// that information.
+    GetActiveLlmProfile,
+    /// Fetch the calling extension's own `config` blob (from its
+    /// `ExtensionConfig.config` in `~/.rad/config.json`) as a JSON object
+    /// string, so an extension can be configured without the host needing
+    /// to know anything about the shape of that configuration.
+    GetExtensionConfig,
     /// Log a structured event with a trace_id across Wasm boundaries.
     LogTracedEvent {
         trace_id: String,
@@ -212,5 +222,10 @@ pub struct RasRpcResponse {
     pub id: Option<String>,
     pub result: Result<serde_json::Value, String>,
 }
+
+pub mod llm_endpoint;
+pub use llm_endpoint::{budget_chars_from_context_length, normalize_base_url};
+
+mod rpc_conversion;
 pub mod dag;
 pub use dag::{Dag, DagNode};

@@ -57,7 +57,7 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
    - **Responsibility**: Manages the prompt logic, calls the LLM, and orchestrates the steps of the agent loop.
    - **Isolation**: Focuses strictly on token completion and reasoning, calling tools abstractly via Core APIs.
 2. **Security Guard (Validation / verify-rpc)**
-   - **Responsibility**: Implements deep inspect rules to approve or deny resource instantiation requests (such as opening path `blocked.txt`) before the host returns the handle.
+   - **Responsibility**: Implements deep inspect rules to approve or deny resource instantiation requests before the host returns the handle. The blocklist (path/command substring patterns) is config-driven, not hardcoded: on first `verify_rpc` call it fetches its own `ExtensionConfig.config` (`~/.rad/config.json`) via the generic `GetExtensionConfig` RPC and caches it for the life of the component instance. No configured patterns means the policy blocks nothing — it's opt-in, not a fallback demo.
    - **Isolation**: Even if the Orchestrator is hijacked via prompt injection, the independent Security Guard Wasm prevents damage (sandboxed verification).
 3. **Tool/MCP Provider (Capability Bridging)**
    - **Responsibility**: Discovers, parses, and resolves dynamic schemas for external tools (e.g., via MCP servers) and marshals tool calls/replies.
@@ -65,8 +65,9 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
    - **Responsibility**: Translates standardized Message objects and tool definitions into model-specific API payloads, initiates connections (using Core HTTP capability), and parses SSE stream chunks.
    - **Isolation**: Decouples model-specific network packet parsing and JSON payload generation from the Orchestrator, rendering the main decision loop fully model-agnostic.
 5. **Context Compactor (`context-tools`)**
-   - **Responsibility**: Owns all context-size-reduction policy once the Orchestrator has assembled the raw message list — currently trimming it to a configurable history-length budget (count-based windowing). Also exposes auxiliary context-gathering utilities (e.g. `get-repo-map`).
+   - **Responsibility**: Owns all context-size-reduction policy once the Orchestrator has assembled the raw message list — trimming it to a configurable history-length budget (count-based windowing) and/or a character budget derived from the active LLM endpoint's real context window (size-based windowing), whichever is more restrictive. Also exposes auxiliary context-gathering utilities (`get-repo-map`, which delegates to the same semantic/tree-sitter repo map every other extension gets via the shared `GetRepoMap` RPC).
    - **Isolation**: Stateless and pure — takes a message list (and thresholds) in, returns a possibly-shortened list and a human-readable summary out. It does not read the DAG or hold session state itself. Failure degrades gracefully: the Orchestrator falls back to sending the uncompacted list rather than blocking the turn, since compaction is a quality optimization, not a correctness requirement.
+   - **WIT contract**: Shares the same `radcomp:extension` WIT package and full `ras-rpc-command` surface as every other extension (unified in AWU 915's follow-up from a bespoke single-variant `command(string)` type whose raw-shell host bridge bypassed `PermissionConfig` entirely), so its declared `fs_read_allow`/`fs_write_allow` permissions are now actually enforced like any other extension's.
 
 ---
 

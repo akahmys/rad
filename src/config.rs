@@ -22,6 +22,13 @@ pub struct CoreConfig {
     pub hitl_enabled: bool,
     #[serde(default)]
     pub verification_command: Option<String>,
+    /// Session files beyond this count (by most-recent modification time)
+    /// are pruned from `.rad/sessions/` at startup (Phase 50-1) — they
+    /// otherwise accumulate unbounded, since nothing else ever deletes
+    /// them. The currently active session is always kept regardless of
+    /// this limit.
+    #[serde(default = "default_max_sessions")]
+    pub max_sessions: usize,
 }
 
 impl Default for CoreConfig {
@@ -32,6 +39,7 @@ impl Default for CoreConfig {
             log: default_log_dir(),
             hitl_enabled: false,
             verification_command: None,
+            max_sessions: default_max_sessions(),
         }
     }
 }
@@ -46,6 +54,10 @@ fn default_snapshot_dir() -> String {
 
 fn default_log_dir() -> String {
     ".rad/logs".to_string()
+}
+
+fn default_max_sessions() -> usize {
+    50
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -134,6 +146,13 @@ pub struct LlmEndpointProfile {
     pub api_key: Option<String>,
     #[serde(default)]
     pub model: Option<String>,
+    /// The active model's context window, in tokens. Auto-detected via
+    /// `detect_context_length` (llama.cpp's `/props` or Ollama's
+    /// `/api/show`) on `/llm add`/`/llm test`; `None` if detection failed
+    /// or hasn't run yet, in which case callers must fall back to a
+    /// conservative built-in default rather than assuming a large window.
+    #[serde(default)]
+    pub context_length: Option<u32>,
 }
 
 impl LlmEndpointProfile {
@@ -147,6 +166,21 @@ impl LlmEndpointProfile {
             }
         })
     }
+}
+
+/// Resolves the user-global config path (`~/.rad/config.json`), honoring
+/// `RAD_TEST_CONFIG_HOME` so tests never read or write the real one. Both
+/// `load_config`'s global-base read and `/llm add`/`test`/`model`/`delete`'s
+/// `save_global_config` write must agree on this path — they previously
+/// resolved it independently via separate `dirs::home_dir()` calls, and a
+/// test exercising the latter with no override clobbered a real
+/// developer's `~/.rad/config.json` (see AWU 918).
+#[must_use]
+pub fn global_config_path() -> Option<std::path::PathBuf> {
+    if let Ok(test_home) = std::env::var("RAD_TEST_CONFIG_HOME") {
+        return Some(std::path::PathBuf::from(test_home).join(".rad/config.json"));
+    }
+    dirs::home_dir().map(|home_dir| home_dir.join(".rad/config.json"))
 }
 
 #[must_use]

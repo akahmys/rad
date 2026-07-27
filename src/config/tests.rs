@@ -3,6 +3,15 @@ use super::merge::{merge_json_value, parse_jsonc};
 use std::fs;
 use std::path::PathBuf;
 
+// `load_config` always reads the real `~/.rad/config.json` as its base
+// layer (see `global_config_path`'s docs) unless `RAD_TEST_CONFIG_HOME`
+// redirects it. That env var is process-global, so tests setting it must
+// serialize against each other; a prior version of these two tests didn't
+// set it at all and silently depended on whatever happened to be in the
+// machine's real global config (see AWU 918 — this surfaced as a flaky
+// failure once that file was corrupted by an unrelated test bug).
+static CONFIG_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn test_parse_jsonc_valid() {
     let jsonc = r#"
@@ -88,8 +97,21 @@ fn test_merge_json_value() {
 
 #[test]
 fn test_load_config_default_when_no_file() {
-    // Explicit path that doesn't exist returns default Config
+    let _lock = CONFIG_TEST_MUTEX.lock().unwrap();
+    let fake_home = tempfile::tempdir().unwrap();
+    // Safety: serialized by `CONFIG_TEST_MUTEX` for the duration of this test.
+    unsafe {
+        std::env::set_var("RAD_TEST_CONFIG_HOME", fake_home.path());
+    }
+
+    // Explicit path that doesn't exist, and no real global config in the
+    // redirected fake home either, returns default Config.
     let config = load_config(Some("non_existent_config_file_xyz.json"));
+
+    unsafe {
+        std::env::remove_var("RAD_TEST_CONFIG_HOME");
+    }
+
     assert!(config.is_ok());
     let config = config.unwrap();
     assert_eq!(config.core.workspace, ".");
@@ -97,6 +119,13 @@ fn test_load_config_default_when_no_file() {
 
 #[test]
 fn test_load_config_with_local_override() {
+    let _lock = CONFIG_TEST_MUTEX.lock().unwrap();
+    let fake_home = tempfile::tempdir().unwrap();
+    // Safety: serialized by `CONFIG_TEST_MUTEX` for the duration of this test.
+    unsafe {
+        std::env::set_var("RAD_TEST_CONFIG_HOME", fake_home.path());
+    }
+
     let test_dir = PathBuf::from("temp_test_config");
     fs::create_dir_all(&test_dir).unwrap();
 
@@ -138,6 +167,9 @@ fn test_load_config_with_local_override() {
 
     let config_res = load_config(Some(base_path.to_str().unwrap()));
 
+    unsafe {
+        std::env::remove_var("RAD_TEST_CONFIG_HOME");
+    }
     let _ = fs::remove_file(&base_path);
     let _ = fs::remove_file(&local_path);
     let _ = fs::remove_dir(&test_dir);

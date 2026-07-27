@@ -51,6 +51,7 @@ fn setup_test_context(perms: PermissionConfig, dag: Arc<Mutex<Dag>>) -> TestCont
         event_tx,
         None,
         false,
+        15000,
     )
     .unwrap();
 

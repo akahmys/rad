@@ -1,92 +1,141 @@
-use crate::config::{Config, LlmEndpointProfile};
+use crate::config::Config;
 use crate::orchestrator::Orchestrator;
 use std::fmt::Write as _;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LlmSubcommand {
-    List,
-    Switch(String),
-    Test(Option<String>),
-    Add {
-        name: String,
-        url: String,
-        model: Option<String>,
-        api_key: Option<String>,
-    },
-    Model(String),
+mod context_length;
+mod profile_admin;
+pub use context_length::check_endpoint;
+use profile_admin::{
+    add_llm_profile, delete_llm_profile, set_active_model, set_manual_context_length,
+    switch_llm_profile, test_llm_profiles,
+};
+
+/// One `/llm` subcommand: name, one-line usage (doubles as help text), and
+/// handler. Mirrors the top-level `CommandSpec` registry in
+/// `src/command.rs` (AWU 917) so `/llm`'s own subcommands aren't a second,
+/// hand-matched parser living one level down — `execute_llm` and
+/// `render_llm_profiles`' help footer both read from this same table.
+pub struct LlmSubcommandSpec {
+    pub name: &'static str,
+    pub usage: &'static str,
+    pub handler: fn(&str, &Orchestrator) -> String,
 }
 
 #[must_use]
-pub fn parse_llm_command(args: &[&str]) -> LlmSubcommand {
-    if args.is_empty() {
-        return LlmSubcommand::List;
-    }
-
-    match args[0] {
-        "list" => LlmSubcommand::List,
-        "test" => {
-            let target = if args.len() > 1 {
-                Some(args[1].to_string())
-            } else {
-                None
-            };
-            LlmSubcommand::Test(target)
-        }
-        "add" => {
-            if args.len() >= 3 {
-                let name = args[1].to_string();
-                let url = args[2].to_string();
-                let model = if args.len() > 3 {
-                    Some(args[3].to_string())
-                } else {
-                    None
-                };
-                let api_key = if args.len() > 4 {
-                    Some(args[4].to_string())
-                } else {
-                    None
-                };
-                LlmSubcommand::Add {
-                    name,
-                    url,
-                    model,
-                    api_key,
-                }
-            } else {
-                LlmSubcommand::List
-            }
-        }
-        "model" => {
-            if args.len() > 1 {
-                LlmSubcommand::Model(args[1].to_string())
-            } else {
-                LlmSubcommand::List
-            }
-        }
-        "switch" => {
-            if args.len() > 1 {
-                LlmSubcommand::Switch(args[1].to_string())
-            } else {
-                LlmSubcommand::List
-            }
-        }
-        other => LlmSubcommand::Switch(other.to_string()),
-    }
+pub fn llm_subcommand_specs() -> &'static [LlmSubcommandSpec] {
+    &[
+        LlmSubcommandSpec {
+            name: "list",
+            usage: "/llm list",
+            handler: |_, orch| render_llm_profiles(&orch.config.lock()),
+        },
+        LlmSubcommandSpec {
+            name: "switch",
+            usage: "/llm switch <name|index>",
+            handler: |args, orch| switch_llm_profile(orch, args.trim()),
+        },
+        LlmSubcommandSpec {
+            name: "test",
+            usage: "/llm test [name]",
+            handler: cmd_test,
+        },
+        LlmSubcommandSpec {
+            name: "add",
+            usage: "/llm add <name> <url> [--model <model>] [--api-key <key>]",
+            handler: cmd_add,
+        },
+        LlmSubcommandSpec {
+            name: "model",
+            usage: "/llm model <model>",
+            handler: |args, orch| set_active_model(orch, args.trim()),
+        },
+        LlmSubcommandSpec {
+            name: "delete",
+            usage: "/llm delete <name>",
+            handler: cmd_delete,
+        },
+        LlmSubcommandSpec {
+            name: "context",
+            usage: "/llm context <n>   manually set context window (tokens) when auto-detection can't reach it",
+            handler: |args, orch| set_manual_context_length(orch, args),
+        },
+    ]
 }
 
+fn cmd_test(args: &str, orchestrator: &Orchestrator) -> String {
+    let target = args.trim();
+    test_llm_profiles(orchestrator, if target.is_empty() { None } else { Some(target) })
+}
+
+/// Flag-based, not positional: `/llm add <name> <url> [--model <m>] [--api-key <k>]`.
+/// Replaces the old strict `<name> <url> <model> <api_key>` positional form
+/// (which made it impossible to set `api_key` without also supplying
+/// `model`) — a deliberate breaking change, acceptable pre-1.0.
+fn cmd_add(args: &str, orchestrator: &Orchestrator) -> String {
+    const USAGE: &str =
+        "\x1b[1;31mUsage: /llm add <name> <url> [--model <model>] [--api-key <key>]\x1b[0m";
+
+    let tokens: Vec<&str> = args.split_whitespace().collect();
+    if tokens.len() < 2 {
+        return USAGE.to_string();
+    }
+    let name = tokens[0];
+    let url = tokens[1];
+    let mut model = None;
+    let mut api_key = None;
+    let mut i = 2;
+    while i < tokens.len() {
+        match tokens[i] {
+            "--model" if i + 1 < tokens.len() => {
+                model = Some(tokens[i + 1].to_string());
+                i += 2;
+            }
+            "--api-key" if i + 1 < tokens.len() => {
+                api_key = Some(tokens[i + 1].to_string());
+                i += 2;
+            }
+            other => {
+                return format!("\x1b[1;31mUnrecognized argument '{other}'.\x1b[0m\n{USAGE}");
+            }
+        }
+    }
+    add_llm_profile(orchestrator, name, url, model.as_deref(), api_key.as_deref())
+}
+
+fn cmd_delete(args: &str, orchestrator: &Orchestrator) -> String {
+    let name = args.trim();
+    if name.is_empty() {
+        return "\x1b[1;31mUsage: /llm delete <name>\x1b[0m".to_string();
+    }
+    delete_llm_profile(orchestrator, name)
+}
+
+/// Parses and executes a `/llm` invocation given the raw text that followed
+/// `/llm` (e.g. `"add ollama http://localhost:11434"`).
+///
+/// Registered profile names take priority over reserved subcommand
+/// keywords, so a profile literally named `test`/`add`/`model`/etc. can
+/// still be switched to by typing its name directly — `/llm switch <name>`
+/// remains an unambiguous escape hatch either way.
 #[must_use]
-pub fn execute_llm_command(subcmd: &LlmSubcommand, orchestrator: &Orchestrator) -> String {
-    match subcmd {
-        LlmSubcommand::List => render_llm_profiles(&orchestrator.config.lock()),
-        LlmSubcommand::Switch(target) => switch_llm_profile(orchestrator, target),
-        LlmSubcommand::Test(target) => test_llm_profiles(orchestrator, target.as_deref()),
-        LlmSubcommand::Add {
-            name,
-            url,
-            model,
-            api_key,
-        } => add_llm_profile(orchestrator, name, url, model.as_deref(), api_key.as_deref()),
-        LlmSubcommand::Model(new_model) => set_active_model(orchestrator, new_model),
+pub fn execute_llm(args: &str, orchestrator: &Orchestrator) -> String {
+    let trimmed = args.trim();
+    if trimmed.is_empty() {
+        return render_llm_profiles(&orchestrator.config.lock());
+    }
+    let (word, rest) = trimmed.split_once(char::is_whitespace).unwrap_or((trimmed, ""));
+
+    let is_known_profile = orchestrator.config.lock().llm.endpoints.contains_key(word);
+    if is_known_profile || word.parse::<usize>().is_ok() {
+        return switch_llm_profile(orchestrator, word);
+    }
+
+    match llm_subcommand_specs().iter().find(|spec| spec.name == word) {
+        Some(spec) => (spec.handler)(rest.trim(), orchestrator),
+        // Not a known subcommand or profile name either — let
+        // `switch_llm_profile` produce the "not found" error, rather than
+        // silently falling through to being sent to the LLM as a task.
+        None => switch_llm_profile(orchestrator, word),
     }
 }
 
@@ -96,189 +145,36 @@ pub fn render_llm_profiles(config: &Config) -> String {
     let _ = writeln!(out, "Configured LLM Server Endpoints:");
     if config.llm.endpoints.is_empty() {
         let _ = writeln!(out, "  (No LLM endpoints configured in config.json)");
-        let _ = writeln!(
-            out,
-            "  Use `/llm add <name> <url> [model] [api_key]` to register an endpoint."
-        );
-        return out;
-    }
-
-    let mut sorted_keys: Vec<_> = config.llm.endpoints.keys().collect();
-    sorted_keys.sort();
-
-    for (idx, name) in sorted_keys.iter().enumerate() {
-        let num = idx + 1;
-        let profile = &config.llm.endpoints[*name];
-        let is_active = config.llm.active.as_deref() == Some(*name);
-        let active_mark = if is_active { " \x1b[1;32m(active)\x1b[0m" } else { "" };
-        let model_info = profile
-            .model
-            .as_deref()
-            .map_or_else(String::new, |m| format!(" [model: {m}]"));
-        let key_info = if profile.api_key.is_some() { " [auth: yes]" } else { "" };
-
-        let _ = writeln!(
-            out,
-            "  [{num}] {name}{active_mark}: {}{model_info}{key_info}",
-            profile.base_url
-        );
-    }
-    let _ = writeln!(
-        out,
-        "\nType `/llm <name_or_number>` to switch endpoints, or `/llm test` for health checks."
-    );
-    out
-}
-
-fn switch_llm_profile(orchestrator: &Orchestrator, target: &str) -> String {
-    let mut cfg = orchestrator.config.lock();
-    let matched_name = if let Ok(num) = target.parse::<usize>() {
-        let mut sorted_keys: Vec<_> = cfg.llm.endpoints.keys().cloned().collect();
+    } else {
+        let mut sorted_keys: Vec<_> = config.llm.endpoints.keys().collect();
         sorted_keys.sort();
-        if num > 0 && num <= sorted_keys.len() {
-            Some(sorted_keys[num - 1].clone())
-        } else {
-            None
-        }
-    } else if cfg.llm.endpoints.contains_key(target) {
-        Some(target.to_string())
-    } else {
-        None
-    };
 
-    let Some(profile_name) = matched_name else {
-        return format!("\x1b[1;31mError: LLM profile '{target}' not found.\x1b[0m\nUse `/llm` to list available profiles.");
-    };
+        for (idx, name) in sorted_keys.iter().enumerate() {
+            let num = idx + 1;
+            let profile = &config.llm.endpoints[*name];
+            let is_active = config.llm.active.as_deref() == Some(*name);
+            let active_mark = if is_active { " \x1b[1;32m(active)\x1b[0m" } else { "" };
+            let model_info = profile
+                .model
+                .as_deref()
+                .map_or_else(String::new, |m| format!(" [model: {m}]"));
+            let key_info = if profile.api_key.is_some() { " [auth: yes]" } else { "" };
+            let ctx_info = profile
+                .context_length
+                .map_or_else(String::new, |n| format!(" [ctx: {n} tok]"));
 
-    cfg.llm.active = Some(profile_name.clone());
-    save_global_config(&cfg);
-    format!("\x1b[32mSwitched active LLM server profile to '\x1b[1m{profile_name}\x1b[0;32m'.\x1b[0m")
-}
-
-fn set_active_model(orchestrator: &Orchestrator, new_model: &str) -> String {
-    let mut cfg = orchestrator.config.lock();
-    let Some(active_name) = cfg.llm.active.clone() else {
-        return "\x1b[1;31mError: No active LLM profile selected to change model.\x1b[0m".to_string();
-    };
-
-    if let Some(profile) = cfg.llm.endpoints.get_mut(&active_name) {
-        profile.model = Some(new_model.to_string());
-        save_global_config(&cfg);
-        format!("\x1b[32mUpdated model for profile '{active_name}' to '\x1b[1m{new_model}\x1b[0;32m'.\x1b[0m")
-    } else {
-        format!("\x1b[1;31mError: Active profile '{active_name}' not found.\x1b[0m")
-    }
-}
-
-fn add_llm_profile(
-    orchestrator: &Orchestrator,
-    name: &str,
-    url: &str,
-    model: Option<&str>,
-    api_key: Option<&str>,
-) -> String {
-    let mut cfg = orchestrator.config.lock();
-    let profile = LlmEndpointProfile {
-        base_url: url.to_string(),
-        api_key: api_key.map(ToString::to_string),
-        model: model.map(ToString::to_string),
-    };
-    cfg.llm.endpoints.insert(name.to_string(), profile);
-    if cfg.llm.active.is_none() {
-        cfg.llm.active = Some(name.to_string());
-    }
-    save_global_config(&cfg);
-    format!("\x1b[32mAdded LLM profile '\x1b[1m{name}\x1b[0;32m' ({url}) and saved to config.json.\x1b[0m")
-}
-
-fn test_llm_profiles(orchestrator: &Orchestrator, target: Option<&str>) -> String {
-    let cfg = orchestrator.config.lock();
-    if cfg.llm.endpoints.is_empty() {
-        return "\x1b[33mNo LLM endpoints configured to test.\x1b[0m".to_string();
-    }
-
-    let mut out = String::new();
-    let _ = writeln!(out, "Running LLM Server Health Checks...");
-
-    let targets: Vec<(String, LlmEndpointProfile)> = if let Some(t) = target {
-        if let Some(p) = cfg.llm.endpoints.get(t) {
-            vec![(t.to_string(), p.clone())]
-        } else {
-            return format!("\x1b[1;31mError: Profile '{t}' not found.\x1b[0m");
-        }
-    } else {
-        let mut list: Vec<_> = cfg
-            .llm
-            .endpoints
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        list.sort_by(|a, b| a.0.cmp(&b.0));
-        list
-    };
-
-    for (name, profile) in targets {
-        let start = std::time::Instant::now();
-        let res = probe_endpoint(&profile.base_url);
-        let elapsed_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
-        match res {
-            Ok(()) => {
-                let _ = writeln!(
-                    out,
-                    "  - {name} ({}) -> \x1b[32mOK\x1b[0m ({elapsed_ms}ms)",
-                    profile.base_url
-                );
-            }
-            Err(e) => {
-                let _ = writeln!(
-                    out,
-                    "  - {name} ({}) -> \x1b[31mFAILED ({e})\x1b[0m",
-                    profile.base_url
-                );
-            }
+            let _ = writeln!(
+                out,
+                "  [{num}] {name}{active_mark}: {}{model_info}{key_info}{ctx_info}",
+                profile.base_url
+            );
         }
     }
 
+    let _ = writeln!(out, "\nSubcommands:");
+    for spec in llm_subcommand_specs() {
+        let _ = writeln!(out, "  {}", spec.usage);
+    }
+    let _ = writeln!(out, "  /llm <name_or_index>   switch directly by name or list position");
     out
-}
-
-fn probe_endpoint(url_str: &str) -> Result<(), String> {
-    let stripped = url_str
-        .strip_prefix("http://")
-        .or_else(|| url_str.strip_prefix("https://"))
-        .unwrap_or(url_str);
-    let host_port_path = stripped.split('/').next().unwrap_or(stripped);
-    let mut parts = host_port_path.split(':');
-    let host = parts.next().unwrap_or("localhost");
-    let default_port = if url_str.starts_with("https://") { 443 } else { 80 };
-    let port = parts
-        .next()
-        .and_then(|p| p.parse::<u16>().ok())
-        .unwrap_or(default_port);
-
-    let socket_addr = format!("{host}:{port}");
-    let addrs: Vec<std::net::SocketAddr> = std::net::ToSocketAddrs::to_socket_addrs(&socket_addr)
-        .map_err(|e| format!("DNS resolution error: {e}"))?
-        .collect();
-
-    if addrs.is_empty() {
-        return Err("Could not resolve host address".to_string());
-    }
-
-    let timeout = std::time::Duration::from_secs(3);
-    for addr in addrs {
-        if std::net::TcpStream::connect_timeout(&addr, timeout).is_ok() {
-            return Ok(());
-        }
-    }
-    Err("Connection refused".to_string())
-}
-
-fn save_global_config(config: &Config) {
-    if let Some(home_dir) = dirs::home_dir() {
-        let config_path = home_dir.join(".rad/config.json");
-        if let Ok(json_str) = serde_json::to_string_pretty(config) {
-            let _ = std::fs::write(config_path, json_str);
-        }
-    }
 }

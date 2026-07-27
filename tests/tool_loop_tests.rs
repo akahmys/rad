@@ -102,6 +102,7 @@ fn test_tool_loop_autonomy() {
         event_tx,
         None,
         false,
+        15000,
     )
     .unwrap();
 
@@ -194,6 +195,7 @@ fn test_context_recovery_with_tool_execution() {
             event_tx,
             None,
             false,
+            15000,
         )
         .unwrap();
 
@@ -244,6 +246,7 @@ fn test_context_recovery_with_tool_execution() {
             event_tx,
             None,
             false,
+            15000,
         )
         .unwrap();
 

@@ -15,10 +15,29 @@ struct TestContext {
     _process_manager: Arc<ProcessManager>,
     _dag: Arc<Mutex<Dag>>,
     _active_processes: Arc<Mutex<HashMap<String, RunningProcess>>>,
+    _orchestrator: Arc<crate::orchestrator::Orchestrator>,
     runtime: WasmRuntime,
 }
 
-fn setup_test_context(perms: PermissionConfig) -> TestContext {
+/// The blocklist patterns `security-guard` used to carry as hardcoded
+/// literals, now fetched via `GetExtensionConfig` — these tests register
+/// them on a minimal `Orchestrator` so `verify_rpc` has a real config to
+/// resolve, matching how the extension is actually configured in
+/// `~/.rad/config.json`.
+fn blocklist_config() -> HashMap<String, serde_json::Value> {
+    HashMap::from([
+        ("block_path_patterns".to_string(), serde_json::json!(["blocked.txt"])),
+        (
+            "block_command_patterns".to_string(),
+            serde_json::json!(["blocked_command", "blocked.txt"]),
+        ),
+    ])
+}
+
+fn setup_test_context(
+    perms: PermissionConfig,
+    ext_config: HashMap<String, serde_json::Value>,
+) -> TestContext {
     let temp_dir = tempfile::tempdir().unwrap();
     let workspace = temp_dir.path().join("workspace");
     let snapshots = temp_dir.path().join("snapshots");
@@ -47,6 +66,24 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
     let network_subsystem = Arc::new(crate::http::HttpManager);
     let (event_tx, _event_rx) = std::sync::mpsc::channel();
 
+    let orch_config = crate::config::Config {
+        extensions: vec![crate::config::ExtensionConfig {
+            name: "test-extension".to_string(),
+            source: String::new(),
+            enabled: true,
+            role: "security".to_string(),
+            permissions: None,
+            config: ext_config,
+        }],
+        ..Default::default()
+    };
+    let orchestrator = Arc::new(crate::orchestrator::Orchestrator::new(
+        orch_config,
+        "wasm_tests_session".to_string(),
+        Arc::new(Mutex::new(Dag::new())),
+        None,
+    ));
+
     let runtime = WasmRuntime::new(
         "test-extension".to_string(),
         wasm_path,
@@ -58,8 +95,9 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
         network_subsystem,
         active_processes.clone(),
         event_tx,
-        None,
+        Some(Arc::downgrade(&orchestrator)),
         false,
+        15000,
     )
     .unwrap();
 
@@ -69,6 +107,7 @@ fn setup_test_context(perms: PermissionConfig) -> TestContext {
         _process_manager: process_manager,
         _dag: dag,
         _active_processes: active_processes,
+        _orchestrator: orchestrator,
         runtime,
     }
 }
@@ -80,7 +119,7 @@ fn test_verify_rpc_blocked_file() {
         fs_write_allow: vec!["*".to_string()],
         ..Default::default()
     };
-    let mut ctx = setup_test_context(perms);
+    let mut ctx = setup_test_context(perms, blocklist_config());
 
     let req = crate::ipc::RasRpcRequest {
         id: Some("wasm_call".to_string()),
@@ -107,7 +146,7 @@ fn test_verify_rpc_blocked_command() {
         }),
         ..Default::default()
     };
-    let mut ctx = setup_test_context(perms);
+    let mut ctx = setup_test_context(perms, blocklist_config());
 
     let req = crate::ipc::RasRpcRequest {
         id: Some("wasm_call".to_string()),
@@ -127,7 +166,7 @@ fn test_verify_rpc_allowed() {
         fs_write_allow: vec!["*".to_string()],
         ..Default::default()
     };
-    let mut ctx = setup_test_context(perms);
+    let mut ctx = setup_test_context(perms, HashMap::new());
 
     let req = crate::ipc::RasRpcRequest {
         id: Some("wasm_call".to_string()),

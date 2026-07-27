@@ -7,7 +7,7 @@
 )]
 mod bindings {
     wit_bindgen::generate!({
-        path: "../../wit/llm-connector.wit",
+        path: "../../wit/connector/llm-connector.wit",
         world: "llm-connector",
     });
 
