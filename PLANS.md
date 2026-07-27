@@ -109,6 +109,7 @@ Trigger/Fix/Result detail once work actually starts on it.
 ### 💡 Current AWU Status
 - [✅] AWU 926: MCP/LLM Onboarding Fixes & Documentation Consolidation (Result: Success)
 - [✅] AWU 927: Fix `llm-connector` Eager-Load Stale-Environment-Snapshot Bug (Result: Success)
+- [✅] AWU 928: Dedupe Repeated Inline Tool Calls from Local-Model Output (Result: Success)
 
 ### 📝 AWU Details
 
@@ -127,6 +128,13 @@ Trigger/Fix/Result detail once work actually starts on it.
 - **Scope**: `wit/connector/llm-connector.wit`, `ext/llm-connector/src/connector.rs`, `src/wasm/rpc_meta.rs`, `src/wasm/rpc_meta_llm_connector.rs`, `src/orchestrator/runner.rs`, `tests/llm_connector_eager_load_tests.rs` (new).
 - **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass, native and `wasm32-wasip2`; a new regression test reproduces the exact eager-load ordering with a real (non-`RAD_TEST_PORT`) `llm.endpoints` config.
 - **Result**: Success. New `tests/llm_connector_eager_load_tests.rs` proves the first task after eager loading succeeds outright (one connection attempt, not two). Verified against the real local `llama-server` too: previously 2 connection attempts (1 failure + 1 self-heal retry) before success, now exactly 1. Full workspace test suite (21 binaries) and Clippy clean on both targets; `./scripts/build_all.sh` clean end-to-end.
+
+#### AWU 928: Dedupe Repeated Inline Tool Calls from Local-Model Output
+- **Trigger**: Continued dogfooding surfaced a real task where the local `qwen2.5-coder-32b` model responded with the identical inline tool-call JSON (`{"name": "list_directory_contents", "arguments": {"path": "./"}}`) twice back-to-back in one turn's plain-text content — the preceding apology sentence appeared only once, so this was the model itself repeating just the JSON snippet (a known small/quantized-model quirk), not a streaming/duplication bug in `rad`'s own SSE handling. `parse_bare_json_tool_calls` (`ext/rad-orchestrator/src/orchestrator/runner/inline_tool_calls.rs`) scans the full text for every JSON-object-shaped occurrence and fires a separate tool call for each one found, so it faithfully — but unhelpfully — executed the identical call twice, producing two identical `[Tool Output]` blocks and likely contributing to the `LLM stream stalled` timeout that followed (the model's next turn had to make sense of a confusing duplicated tool-call/tool-response pair in its context).
+- **Fix**: `push_tool_call` (the shared helper both the `call:`-prefixed and bare-JSON inline parsers funnel through) now skips pushing a call whose `(name, arguments)` exactly matches the *immediately preceding* pushed call in the same parse pass. Deliberately adjacent-only, not a full-history dedup: `assistant_tool_calls` is always empty when inline parsing starts (it only runs when the proper `delta.tool_calls` streaming mechanism produced nothing), so this can't cross-contaminate with unrelated real tool calls, and calling the same tool again later in the same turn with something else in between remains a legitimate, unaffected case.
+- **Scope**: `ext/rad-orchestrator/src/orchestrator/runner/inline_tool_calls.rs`.
+- **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass, native and `wasm32-wasip2`.
+- **Result**: Success. 3 new tests: dedupes the exact reported case (adjacent identical calls collapse to 1), confirms non-adjacent repeats of the same call still both fire, confirms adjacent calls with *different* arguments still both fire. Full workspace test suite (21 binaries) and Clippy clean on both targets; `./scripts/build_all.sh` clean end-to-end.
 
 ---
 

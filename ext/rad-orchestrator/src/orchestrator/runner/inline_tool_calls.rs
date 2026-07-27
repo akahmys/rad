@@ -78,6 +78,19 @@ fn push_tool_call(
     assistant_tool_calls: &mut Vec<ToolCall>,
     pending_calls: &mut Vec<PendingToolCall>,
 ) {
+    // Local models occasionally repeat the exact same inline tool-call JSON
+    // back-to-back in one turn (a known small/quantized-model quirk, not a
+    // legitimate request to run it twice) — skip an immediate repeat of the
+    // previous call rather than executing it again. Only checks the
+    // adjacent call, so genuinely calling the same tool again later in the
+    // same turn (with something else in between) is unaffected.
+    if let Some(last) = assistant_tool_calls.last()
+        && last.function.name == name
+        && last.function.arguments == arguments
+    {
+        return;
+    }
+
     let call_id = format!("inline_call_{call_count}");
     *call_count += 1;
 
@@ -181,6 +194,53 @@ mod tests {
         );
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.arguments, "{\"query\": \"test\"}");
+    }
+
+    #[test]
+    fn dedupes_identical_adjacent_bare_json_tool_calls() {
+        // A small/quantized local model repeating its own tool-call JSON
+        // back-to-back — must fire once, not twice.
+        let mut tool_calls = Vec::new();
+        let mut pending = Vec::new();
+        parse_inline_tool_calls(
+            r#"{"name": "list_directory_contents", "arguments": {"path": "./"}}
+
+{"name": "list_directory_contents", "arguments": {"path": "./"}}"#,
+            &mut tool_calls,
+            &mut pending,
+        );
+        assert_eq!(tool_calls.len(), 1, "{tool_calls:?}");
+        assert_eq!(pending.len(), 1);
+    }
+
+    #[test]
+    fn does_not_dedupe_non_adjacent_repeats_of_the_same_call() {
+        // The same tool+args called again later in the turn, with a
+        // different call in between, is a legitimate repeat and must not
+        // be dropped.
+        let mut tool_calls = Vec::new();
+        let mut pending = Vec::new();
+        parse_inline_tool_calls(
+            r#"{"name": "list_directory_contents", "arguments": {"path": "./"}}
+{"name": "read_file", "arguments": {"path": "README.md"}}
+{"name": "list_directory_contents", "arguments": {"path": "./"}}"#,
+            &mut tool_calls,
+            &mut pending,
+        );
+        assert_eq!(tool_calls.len(), 3, "{tool_calls:?}");
+    }
+
+    #[test]
+    fn does_not_dedupe_adjacent_calls_with_different_arguments() {
+        let mut tool_calls = Vec::new();
+        let mut pending = Vec::new();
+        parse_inline_tool_calls(
+            r#"{"name": "list_directory_contents", "arguments": {"path": "./a"}}
+{"name": "list_directory_contents", "arguments": {"path": "./b"}}"#,
+            &mut tool_calls,
+            &mut pending,
+        );
+        assert_eq!(tool_calls.len(), 2, "{tool_calls:?}");
     }
 
     #[test]
