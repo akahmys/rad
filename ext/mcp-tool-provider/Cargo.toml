@@ -12,3 +12,4 @@ serde_json = { workspace = true }
 serde_bytes = { workspace = true }
 rad-models = { path = "../../models" }
 wit-bindgen = { workspace = true }
+rust-mcp-schema = "0.10"

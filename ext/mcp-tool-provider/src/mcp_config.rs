@@ -77,7 +77,9 @@ fn strip_json_comments(json_str: &str) -> String {
 
 fn read_config_file(path: &str) -> Option<String> {
     let cmd = wit::RasRpcCommand::FileRead(path.to_string());
-    let res_str = crate::host_rpc(&cmd).ok().filter(|s| !s.is_empty() && s != "null")?;
+    let res_str = crate::host_rpc(&cmd)
+        .ok()
+        .filter(|s| !s.is_empty() && s != "null")?;
     // 1. Try deserializing directly as String (if host returned JSON string)
     if let Ok(s) = serde_json::from_str::<String>(&res_str) {
         let cleaned = strip_json_comments(&s);
@@ -86,7 +88,10 @@ fn read_config_file(path: &str) -> Option<String> {
         }
     }
     // 2. Try deserializing as byte array (serde_bytes::Bytes)
-    if let Some(s) = serde_json::from_str::<Vec<u8>>(&res_str).ok().and_then(|b| String::from_utf8(b).ok()) {
+    if let Some(s) = serde_json::from_str::<Vec<u8>>(&res_str)
+        .ok()
+        .and_then(|b| String::from_utf8(b).ok())
+    {
         let cleaned = strip_json_comments(&s);
         if serde_json::from_str::<serde_json::Value>(&cleaned).is_ok() {
             return Some(cleaned);
@@ -130,16 +135,29 @@ pub fn load_mcp_config() -> Option<McpProviderConfig> {
     paths.push("rad.json".to_string());
 
     for p in &paths {
-        let Some(c) = read_config_file(p) else { continue };
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(&c) else { continue };
-        let Some(exts) = v.get("extensions").and_then(|e| e.as_array()) else { continue };
+        let Some(c) = read_config_file(p) else {
+            continue;
+        };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&c) else {
+            continue;
+        };
+        let Some(exts) = v.get("extensions").and_then(|e| e.as_array()) else {
+            continue;
+        };
         for ext in exts {
             if ext.get("name").and_then(|n| n.as_str()) != Some("mcp-tool-provider") {
                 continue;
             }
-            let Some(cfg_val) = ext.get("config") else { continue };
-            let Ok(parsed_cfg) = serde_json::from_value::<McpProviderConfig>(cfg_val.clone()) else { continue };
-            let Some(servers) = parsed_cfg.mcp_servers else { continue };
+            let Some(cfg_val) = ext.get("config") else {
+                continue;
+            };
+            let Ok(parsed_cfg) = serde_json::from_value::<McpProviderConfig>(cfg_val.clone())
+            else {
+                continue;
+            };
+            let Some(servers) = parsed_cfg.mcp_servers else {
+                continue;
+            };
             for (srv_name, srv_cfg) in servers {
                 merged_servers.insert(srv_name, srv_cfg);
                 found_any = true;

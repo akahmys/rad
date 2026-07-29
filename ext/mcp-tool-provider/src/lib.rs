@@ -32,6 +32,10 @@ mod mcp_transport;
 
 use client::{MCP_SERVERS, MCP_TOOL_MAPPING, diag, init_mcp_servers, mcp_request};
 use default_tools::{FunctionDefinition, Tool};
+use rust_mcp_schema::schema_utils::{ClientJsonrpcRequest, RequestFromClient};
+use rust_mcp_schema::{
+    CallToolRequestParams, CallToolResult, ContentBlock, ListToolsResult, RequestId,
+};
 
 impl Guest for ToolProviderImpl {
     fn get_tools() -> Result<String, String> {
@@ -81,53 +85,57 @@ impl Guest for ToolProviderImpl {
             return Err("MCP_SERVERS is empty after init_mcp_servers".to_string());
         }
 
-            for server_name in servers_list {
-                let req = serde_json::json!({
-                    "jsonrpc": "2.0",
-                    "id": "list_tools",
-                    "method": "tools/list",
-                    "params": {}
-                });
-                match mcp_request(&server_name, &req) {
-                    Err(e) => {
-                        diag(&format!("tools/list request failed for '{server_name}': {e}"));
-                    }
-                    Ok(res) => {
+        for server_name in servers_list {
+            let list_req = ClientJsonrpcRequest::new(
+                RequestId::String("list_tools".to_string()),
+                RequestFromClient::ListToolsRequest(None),
+            );
+            let Ok(req) = serde_json::to_value(&list_req) else {
+                diag(&format!(
+                    "Failed to serialize tools/list request for '{server_name}'"
+                ));
+                continue;
+            };
+            match mcp_request(&server_name, &req) {
+                Err(e) => {
+                    diag(&format!(
+                        "tools/list request failed for '{server_name}': {e}"
+                    ));
+                }
+                Ok(res) => {
                     if let Some(err) = res.get("error") {
-                        diag(&format!("tools/list returned JSON-RPC error for '{server_name}': {err}"));
+                        diag(&format!(
+                            "tools/list returned JSON-RPC error for '{server_name}': {err}"
+                        ));
                     }
-                    if let Some(mcp_tools) = res.get("result").and_then(|r| r.get("tools")).and_then(|t| t.as_array()) {
-                        diag(&format!("'{server_name}' returned {} tool(s)", mcp_tools.len()));
-                        for t in mcp_tools {
-                            if let Some(name) = t.get("name").and_then(|n| n.as_str()) {
-                                mapping.insert(name.to_string(), server_name.clone());
-                                let description = t
-                                    .get("description")
-                                    .and_then(|d| d.as_str())
-                                    .map(ToString::to_string);
-                                let parameters = t.get("inputSchema").cloned().unwrap_or(
-                                    serde_json::json!({
-                                        "type": "object",
-                                        "properties": {}
-                                    }),
-                                );
-                                tools.push(Tool {
-                                    tool_type: "function".to_string(),
-                                    function: FunctionDefinition {
-                                        name: name.to_string(),
-                                        description,
-                                        parameters,
-                                    },
-                                });
-                            }
+                    if let Ok(list_result) = serde_json::from_value::<ListToolsResult>(
+                        res.get("result").cloned().unwrap_or_default(),
+                    ) {
+                        diag(&format!(
+                            "'{server_name}' returned {} tool(s)",
+                            list_result.tools.len()
+                        ));
+                        for t in list_result.tools {
+                            mapping.insert(t.name.clone(), server_name.clone());
+                            let parameters = serde_json::to_value(&t.input_schema).unwrap_or(
+                                serde_json::json!({ "type": "object", "properties": {} }),
+                            );
+                            tools.push(Tool {
+                                tool_type: "function".to_string(),
+                                function: FunctionDefinition {
+                                    name: t.name,
+                                    description: t.description,
+                                    parameters,
+                                },
+                            });
                         }
-                    }
                     }
                 }
             }
-            if let Ok(mut map_guard) = MCP_TOOL_MAPPING.lock() {
-                *map_guard = Some(mapping);
-            }
+        }
+        if let Ok(mut map_guard) = MCP_TOOL_MAPPING.lock() {
+            *map_guard = Some(mapping);
+        }
 
         serde_json::to_string(&tools).map_err(|e| format!("Failed to serialize tools: {e}"))
     }
@@ -135,8 +143,14 @@ impl Guest for ToolProviderImpl {
     fn execute_tool(name: String, arguments: String) -> Result<wit::ExecutionHandle, String> {
         if std::env::var("RAD_TEST_PORT").is_ok() {
             let args_json: serde_json::Value = serde_json::from_str(&arguments).unwrap_or_default();
-            let path = args_json.get("path").and_then(|p| p.as_str()).unwrap_or("out.txt");
-            let cmd = args_json.get("command").and_then(|c| c.as_str()).unwrap_or("");
+            let path = args_json
+                .get("path")
+                .and_then(|p| p.as_str())
+                .unwrap_or("out.txt");
+            let cmd = args_json
+                .get("command")
+                .and_then(|c| c.as_str())
+                .unwrap_or("");
             let target_cmd = if name == "execute" && !cmd.is_empty() {
                 cmd.to_string()
             } else {
@@ -168,15 +182,21 @@ impl Guest for ToolProviderImpl {
 
         let args_json: serde_json::Value = serde_json::from_str(&arguments)
             .map_err(|e| format!("Failed to parse MCP tool args: {e}"))?;
-        let req = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": "mcp_call",
-            "method": "tools/call",
-            "params": {
-                "name": name,
-                "arguments": args_json
-            }
-        });
+        let args_map = match args_json {
+            serde_json::Value::Object(map) => Some(map),
+            _ => None,
+        };
+        let call_req = ClientJsonrpcRequest::new(
+            RequestId::String("mcp_call".to_string()),
+            RequestFromClient::CallToolRequest(CallToolRequestParams {
+                name: name.clone(),
+                arguments: args_map,
+                meta: None,
+                task: None,
+            }),
+        );
+        let req = serde_json::to_value(&call_req)
+            .map_err(|e| format!("Failed to serialize tools/call request: {e}"))?;
 
         let res = mcp_request(server_name, &req)?;
 
@@ -188,13 +208,17 @@ impl Guest for ToolProviderImpl {
             .and_then(|m| m.as_str())
         {
             result_text = format!("Error from MCP server: {err}");
-        } else if let Some(content) = res.get("result").and_then(|r| r.get("content")).and_then(|c| c.as_array()) {
-            let mut texts = Vec::new();
-            for item in content {
-                if let Some(text) = item.get("text").filter(|_| item.get("type").and_then(|t| t.as_str()) == Some("text")).and_then(|t| t.as_str()) {
-                    texts.push(text.to_string());
-                }
-            }
+        } else if let Ok(call_result) =
+            serde_json::from_value::<CallToolResult>(res.get("result").cloned().unwrap_or_default())
+        {
+            let texts: Vec<String> = call_result
+                .content
+                .into_iter()
+                .filter_map(|block| match block {
+                    ContentBlock::TextContent(t) => Some(t.text),
+                    _ => None,
+                })
+                .collect();
             result_text = texts.join("\n");
         }
         if result_text.is_empty() {
@@ -205,5 +229,3 @@ impl Guest for ToolProviderImpl {
         open_process(&format!("echo -n '{escaped_result}'"))
     }
 }
-
-

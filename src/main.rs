@@ -110,7 +110,21 @@ fn run_agent_task(
         return Err(format!("Execution error: {e}"));
     }
 
+    // Esc aborts the running task without needing Enter first. Only
+    // possible while stdin can be put into raw mode (a real terminal);
+    // falls back to the plain poll loop otherwise (e.g. piped stdin).
+    let raw_guard = rad::esc_abort::RawInputGuard::enable();
+    let mut aborted = false;
     while orchestrator.is_running() {
+        if let Some(ref guard) = raw_guard
+            && !aborted
+            && rad::esc_abort::esc_pressed(guard)
+        {
+            aborted = true;
+            orchestrator.abort();
+            rad::terminal::get_terminal()
+                .write_log("\x1b[33m[Aborted by user]\x1b[0m".to_string());
+        }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     rad::terminal::get_terminal().set_state(rad::terminal::TerminalState::Idle);

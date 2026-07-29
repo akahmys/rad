@@ -1,5 +1,5 @@
 # Project Work Plan (PLANS.md)
-**Last Updated**: 2026-07-27
+**Last Updated**: 2026-07-29
 
 ## 🗺️ Long-Term Plan (Roadmap)
 - [✅] Phase 10: Codebase Refactoring & Rule Alignment (v0.15.0)
@@ -46,6 +46,7 @@
 - [✅] Phase 52: Slash Command Composition Review, Role-Based Extension Lookup & Manual Compaction (v0.57.0)
 - [✅] Phase 53: File-Size Limit Compliance Cleanup (v0.58.0)
 - [✅] Phase 54: Real-World Dogfooding Fixes — MCP/LLM Onboarding, Doc Consolidation & Eager-Load Env-Var Bug (v0.59.0)
+- [✅] Phase 55: Adopt `rust-mcp-schema` for Typed MCP Protocol Messages in `mcp-tool-provider` (v0.60.0)
 
 ---
 
@@ -104,12 +105,30 @@ Trigger/Fix/Result detail once work actually starts on it.
 
 ---
 
+## 🛠️ Short-Term Plan: Phase 55
+
+### 💡 Current AWU Status
+- [✅] AWU 930: Adopt `rust-mcp-schema` for Typed MCP Protocol Messages in `mcp-tool-provider` (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 930: Adopt `rust-mcp-schema` for Typed MCP Protocol Messages in `mcp-tool-provider`
+- **Trigger**: Continued dogfooding review of `ext/mcp-tool-provider/src/client.rs` found it hardcoded `protocolVersion: "2024-11-05"` — two spec generations behind — and still performed the `initialize`/`notifications/initialized` handshake that the 2026-07-28 MCP spec redesign removed entirely (stateless `server/discover` replaces it). All JSON-RPC request/response construction across the crate (`client.rs`'s handshake, `lib.rs`'s `tools/list` and `tools/call`) was hand-built via `serde_json::json!()` and parsed via manual `.get("...")` chains, with no compile-time guarantee of matching the real MCP schema. User asked for a fresh survey of the MCP-Rust-crate ecosystem (`rmcp`, gateway/aggregator tools like AgentGateway/MetaMCP, `rust-mcp-schema`) before deciding how to fix it.
+- **Rejected alternatives**: `rmcp` (the official SDK) is Tokio-based and assumes direct OS access to spawn processes/open sockets — architecturally incompatible with `mcp-tool-provider`'s WASM-sandboxed, host-mediated-`host_rpc` transport model. MCP gateway/aggregator tools (AgentGateway, MetaMCP) solve a different-scale problem (multi-tenant aggregation behind one endpoint) than rad's single-user local use case, add operational complexity conflicting with rad's "single static binary, zero dependencies" philosophy, and don't even eliminate the need for an MCP client implementation since rad would still have to speak MCP to the gateway itself.
+- **Fix**: adopted `rust-mcp-schema` (crates.io, MIT, transport-agnostic — just `serde` structs, no async runtime) for protocol *types only*, keeping the existing host-mediated process-spawn/stdin-stdout-pipe transport unchanged. Verified it builds cleanly for `wasm32-wasip2` with zero shim code needed. `client.rs`'s `init_mcp_servers` handshake now builds `ClientJsonrpcRequest::new(RequestId::String("init_1"), RequestFromClient::InitializeRequest(InitializeRequestParams { protocol_version: ProtocolVersion::latest().to_string(), .. }))` (currently resolves to spec `2025-11-25`, the newest the crate ships — still 2 generations ahead of the previous hardcoded `2024-11-05`) and `InitializedNotification::new(None)`, extracted into a new `perform_handshake` helper to keep `init_mcp_servers` under the 100-line Clippy pedantic limit. `lib.rs`'s `get_tools` builds `RequestFromClient::ListToolsRequest(None)` and parses the response via `serde_json::from_value::<ListToolsResult>`; `execute_tool` builds `RequestFromClient::CallToolRequest(CallToolRequestParams { name, arguments, .. })` and parses via `serde_json::from_value::<CallToolResult>`, extracting `ContentBlock::TextContent` variants. `RequestId::String(...)` (not `Integer`) was used throughout deliberately, to match `mcp_transport.rs::send_mcp_bytes`'s existing `req_val.get("id").and_then(|v| v.as_str())` response-correlation logic without needing to touch that file at all — the JSON-RPC wire format and transport layer stay exactly as they were; only the construction/parsing at the two call sites is now typed.
+- **Scope**: `ext/mcp-tool-provider/Cargo.toml`, `ext/mcp-tool-provider/src/client.rs`, `ext/mcp-tool-provider/src/lib.rs`.
+- **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass, native and `wasm32-wasip2`; verified end-to-end against the real installed `core-utilities-mcp` and `web-access-mcp` servers via the actual `rad` binary, not just automated tests.
+- **Result**: Success. Full workspace test suite and Clippy (`#![deny(clippy::pedantic)]` in this crate) clean on both targets. Verified via two real `rad` runs from `~/projects/test` against the real running MCP servers: a `core-utilities-mcp` directory-listing call and a `web-access-mcp` HTTP-fetch call both round-tripped correctly end-to-end through the new typed handshake/list/call path (`[OK] Verified 18 tools from extension 'mcp-tool-provider'`).
+
+---
+
 ## 🛠️ Short-Term Plan: Phase 54
 
 ### 💡 Current AWU Status
 - [✅] AWU 926: MCP/LLM Onboarding Fixes & Documentation Consolidation (Result: Success)
 - [✅] AWU 927: Fix `llm-connector` Eager-Load Stale-Environment-Snapshot Bug (Result: Success)
 - [✅] AWU 928: Dedupe Repeated Inline Tool Calls from Local-Model Output (Result: Success)
+- [✅] AWU 929: Restore Esc-to-Abort for Running Tasks (Result: Success)
 
 ### 📝 AWU Details
 
@@ -135,6 +154,14 @@ Trigger/Fix/Result detail once work actually starts on it.
 - **Scope**: `ext/rad-orchestrator/src/orchestrator/runner/inline_tool_calls.rs`.
 - **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass, native and `wasm32-wasip2`.
 - **Result**: Success. 3 new tests: dedupes the exact reported case (adjacent identical calls collapse to 1), confirms non-adjacent repeats of the same call still both fire, confirms adjacent calls with *different* arguments still both fire. Full workspace test suite (21 binaries) and Clippy clean on both targets; `./scripts/build_all.sh` clean end-to-end.
+
+#### AWU 929: Restore Esc-to-Abort for Running Tasks
+- **Trigger**: User asked to be able to press Esc to interrupt a running task's thinking/work — mentioned in passing during AWU 927/928's dogfooding that they'd previously used Esc to stop a stuck task. The roadmap's own Phase 14 ("Esc Key Task Abort Polish & Robustness", v0.19.0) implies this once existed, but grepping the current codebase for `Esc`/`KeyCode`/`crossterm` turned up nothing at all in `src/` — `crossterm` is declared in `Cargo.toml` but was completely unused. `main.rs`'s `run_agent_task` blocks the main thread in a plain `while orchestrator.is_running() { sleep(50ms) }` loop while a task runs, and `rustyline`'s `Editor::readline()` — the only thing that would otherwise read stdin — isn't being called during that window. Conclusion: nothing currently reads stdin at all while a task is running, so no keypress (Esc included) could have reached any code; the earlier "I stopped it with Esc" was most likely the natural 15s stall timeout coinciding with the keypress, not a real abort path. This was a confirmed regression/dead-feature, not a verification task.
+- **Design constraint discovered**: `crossterm::terminal::enable_raw_mode()` (the obvious approach) clears the *output* side of termios (`OPOST`/`ONLCR`) as well as input — but the background task thread concurrently `println!`s streamed LLM tokens via `src/terminal.rs`'s `TerminalController`, which relies on the terminal's automatic `\n` → `\r\n` translation. Enabling full raw mode while that's happening would turn concurrent output into a staircase mess.
+- **Fix**: new `src/esc_abort.rs` module manipulates *only* the input side of termios directly via `nix::sys::termios` (already a dependency with the `"term"` feature) — clears `ICANON`/`ECHO` from `local_flags`, sets `VMIN`=0/`VTIME`=0 for a non-blocking-style `read()`, and leaves output flags untouched. `RawInputGuard` is an RAII guard restoring the original settings on drop; `esc_pressed(&RawInputGuard)` takes the guard by reference specifically so it can't be called without raw mode active (which would otherwise block waiting for a full line). `main.rs`'s `run_agent_task` poll loop now checks `esc_pressed` each 50ms tick and calls the pre-existing (already fully implemented) `orchestrator.abort()` on the first hit, routing the confirmation message through `TerminalController::write_log` (deferred like every other log during `Thinking`/`Streaming` state, so it surfaces cleanly once things settle back to `Idle` rather than interleaving with in-flight streamed tokens).
+- **Scope**: `src/esc_abort.rs` (new), `src/lib.rs`, `src/main.rs`.
+- **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass.
+- **Result**: Success. 2 new tests (`contains_esc` byte-detection logic, and confirming `RawInputGuard::enable()` gracefully returns `None` rather than hanging on the non-tty stdin `cargo test` itself runs under — exercises the real fallback path for free). Full workspace test suite and Clippy clean; `./scripts/build_all.sh` clean end-to-end. The actual interactive Esc keypress behavior needs a real TTY to verify (not reproducible via piped Bash-tool input), left for the user to confirm directly.
 
 ---
 

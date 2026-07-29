@@ -2,6 +2,11 @@ use crate::mcp_config::load_mcp_config;
 use crate::mcp_transport::read_line;
 use crate::open_process;
 use crate::radcomp::extension::types as wit;
+use rust_mcp_schema::schema_utils::{ClientJsonrpcRequest, RequestFromClient};
+use rust_mcp_schema::{
+    ClientCapabilities, Implementation, InitializeRequestParams, InitializedNotification,
+    ProtocolVersion, RequestId,
+};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -33,6 +38,48 @@ pub fn diag(msg: &str) {
     )));
 }
 
+/// Performs the MCP handshake (`initialize` request + `notifications/initialized`)
+/// over an already-spawned server's stdin/stdout. `notifications/initialized` has no
+/// `id`/response, so it's serialized directly; `initialize` goes through the same
+/// `ClientJsonrpcRequest` envelope every other request uses (see `mcp_transport.rs`),
+/// keeping this one request typed too rather than a special-cased literal.
+fn perform_handshake(
+    name: &str,
+    stdin: &wit::StreamHandle,
+    stdout: &wit::StreamHandle,
+) -> Result<(), String> {
+    let init_req = ClientJsonrpcRequest::new(
+        RequestId::String("init_1".to_string()),
+        RequestFromClient::InitializeRequest(InitializeRequestParams {
+            protocol_version: ProtocolVersion::latest().to_string(),
+            capabilities: ClientCapabilities::default(),
+            client_info: Implementation {
+                name: "rad".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                title: None,
+                description: None,
+                icons: Vec::new(),
+                website_url: None,
+            },
+            meta: None,
+        }),
+    );
+    let req_str = format!("{init_req}\n");
+    stdin
+        .write(req_str.as_bytes())
+        .map_err(|e| format!("Stdin write failed for '{name}' during initialize: {e}"))?;
+    let line =
+        read_line(stdout).map_err(|e| format!("Handshake read_line failed for '{name}': {e}"))?;
+    diag(&format!("Handshake response from '{name}': {line}"));
+
+    let notif = InitializedNotification::new(None);
+    let notif_str = format!("{}\n", serde_json::to_string(&notif).unwrap_or_default());
+    stdin.write(notif_str.as_bytes()).map_err(|e| {
+        format!("Stdin write failed for '{name}' during notifications/initialized: {e}")
+    })?;
+    Ok(())
+}
+
 pub fn init_mcp_servers() -> Result<(), String> {
     let mut servers_guard = MCP_SERVERS.lock().map_err(|e| e.to_string())?;
     if let Some(active) = servers_guard.as_ref().filter(|s| !s.is_empty()) {
@@ -52,12 +99,18 @@ pub fn init_mcp_servers() -> Result<(), String> {
 
     let mut active = HashMap::new();
     let Some(config) = load_mcp_config() else {
-        diag("load_mcp_config() returned None: no mcp_servers block found in any discovered config file");
+        diag(
+            "load_mcp_config() returned None: no mcp_servers block found in any discovered config file",
+        );
         return Err("load_mcp_config returned None (no mcp_servers config found)".to_string());
     };
 
     if let Some(ref servers) = config.mcp_servers {
-        diag(&format!("Found {} server config(s): {:?}", servers.len(), servers.keys().collect::<Vec<_>>()));
+        diag(&format!(
+            "Found {} server config(s): {:?}",
+            servers.len(),
+            servers.keys().collect::<Vec<_>>()
+        ));
         for (name, cfg) in servers {
             let mut cmd_parts = vec![cfg.command.clone()];
             cmd_parts.extend(cfg.args.clone());
@@ -74,45 +127,20 @@ pub fn init_mcp_servers() -> Result<(), String> {
             let stdin = exec.get_stdin();
             let stdout = exec.get_stdout();
 
-            // Perform MCP handshake
-            let init_req = serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": "init_1",
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {},
-                    "clientInfo": {
-                        "name": "rad",
-                        "version": "0.8.0"
-                    }
-                }
-            });
-            let req_str = format!("{}\n", serde_json::to_string(&init_req).unwrap_or_default());
-            if let Err(e) = stdin.write(req_str.as_bytes()) {
-                diag(&format!("Stdin write failed for '{name}' during initialize: {e}"));
+            if let Err(e) = perform_handshake(name, &stdin, &stdout) {
+                diag(&e);
                 continue;
-            }
-            match read_line(&stdout) {
-                Ok(line) => diag(&format!("Handshake response from '{name}': {line}")),
-                Err(e) => {
-                    diag(&format!("Handshake read_line failed for '{name}': {e}"));
-                    continue;
-                }
-            }
-
-            let notif = serde_json::json!({
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized",
-                "params": {}
-            });
-            let notif_str = format!("{}\n", serde_json::to_string(&notif).unwrap_or_default());
-            if let Err(e) = stdin.write(notif_str.as_bytes()) {
-                diag(&format!("Stdin write failed for '{name}' during notifications/initialized: {e}"));
             }
 
             diag(&format!("'{name}' initialized successfully"));
-            active.insert(name.clone(), ActiveMcpServer { exec, stdin, stdout });
+            active.insert(
+                name.clone(),
+                ActiveMcpServer {
+                    exec,
+                    stdin,
+                    stdout,
+                },
+            );
         }
     } else {
         diag("load_mcp_config() succeeded but mcp_servers field was empty/None");
@@ -121,7 +149,10 @@ pub fn init_mcp_servers() -> Result<(), String> {
     if active.is_empty() {
         Err(format!(
             "Failed to initialize active MCP servers (found_any={}, active_count=0)",
-            config.mcp_servers.as_ref().map_or(0, std::collections::HashMap::len)
+            config
+                .mcp_servers
+                .as_ref()
+                .map_or(0, std::collections::HashMap::len)
         ))
     } else {
         *servers_guard = Some(active);

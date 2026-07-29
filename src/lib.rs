@@ -2,6 +2,7 @@ pub mod command;
 pub mod config;
 pub mod dag;
 pub mod error;
+pub mod esc_abort;
 pub mod fs;
 pub mod git;
 pub mod http;

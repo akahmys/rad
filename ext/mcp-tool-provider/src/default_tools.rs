@@ -12,5 +12,3 @@ pub struct Tool {
     pub tool_type: String,
     pub function: FunctionDefinition,
 }
-
-

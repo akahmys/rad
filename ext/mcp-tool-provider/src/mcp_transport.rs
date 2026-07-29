@@ -30,7 +30,12 @@ pub(crate) fn read_line(stdout: &wit::StreamHandle) -> Result<String, String> {
                 }
             }
             Err(e) => {
-                if let Some(trimmed) = String::from_utf8(buffer.clone()).ok().filter(|_| !buffer.is_empty()).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+                if let Some(trimmed) = String::from_utf8(buffer.clone())
+                    .ok()
+                    .filter(|_| !buffer.is_empty())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                {
                     return Ok(trimmed);
                 }
                 return Err(format!("Stream error reading from MCP server: {e}"));
@@ -63,13 +68,18 @@ fn send_mcp_bytes(
                 if parsed.get("id").and_then(|v| v.as_str()) == Some(expected_id) {
                     return Ok(parsed);
                 }
-            } else if parsed.get("jsonrpc").is_some() || parsed.get("result").is_some() || parsed.get("error").is_some() {
+            } else if parsed.get("jsonrpc").is_some()
+                || parsed.get("result").is_some()
+                || parsed.get("error").is_some()
+            {
                 return Ok(parsed);
             }
         }
     }
 
-    Err(format!("Failed to get valid JSON-RPC response from {server_name}"))
+    Err(format!(
+        "Failed to get valid JSON-RPC response from {server_name}"
+    ))
 }
 
 pub fn mcp_request(
