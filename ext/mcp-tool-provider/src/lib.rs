@@ -30,12 +30,90 @@ mod default_tools;
 mod mcp_config;
 mod mcp_transport;
 
-use client::{MCP_SERVERS, MCP_TOOL_MAPPING, diag, init_mcp_servers, mcp_request};
+use client::{MCP_SERVERS, MCP_TOOL_MAPPING, MCP_TOOLS_CACHE, diag, init_mcp_servers, mcp_request};
 use default_tools::{FunctionDefinition, Tool};
 use rust_mcp_schema::schema_utils::{ClientJsonrpcRequest, RequestFromClient};
 use rust_mcp_schema::{
     CallToolRequestParams, CallToolResult, ContentBlock, ListToolsResult, RequestId,
 };
+
+/// Issues a live `tools/list` to every configured MCP server, rebuilding
+/// both the returned tool list and the `MCP_TOOL_MAPPING`/`MCP_TOOLS_CACHE`
+/// caches from the result. Only called when the cache is empty or
+/// `init_mcp_servers` had to (re)spawn a server — see `get_tools`.
+fn fetch_and_cache_mcp_tools() -> Result<Vec<Tool>, String> {
+    let mut mapping = HashMap::new();
+    let servers_list: Vec<String> = {
+        if let Ok(guard) = MCP_SERVERS.lock() {
+            guard
+                .as_ref()
+                .map(|m| m.keys().cloned().collect())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        }
+    };
+
+    if servers_list.is_empty() && std::env::var("RAD_TEST_PORT").is_err() {
+        return Err("MCP_SERVERS is empty after init_mcp_servers".to_string());
+    }
+
+    let mut fetched_tools = Vec::new();
+    for server_name in servers_list {
+        let list_req = ClientJsonrpcRequest::new(
+            RequestId::String("list_tools".to_string()),
+            RequestFromClient::ListToolsRequest(None),
+        );
+        let Ok(req) = serde_json::to_value(&list_req) else {
+            diag(&format!(
+                "Failed to serialize tools/list request for '{server_name}'"
+            ));
+            continue;
+        };
+        match mcp_request(&server_name, &req) {
+            Err(e) => {
+                diag(&format!(
+                    "tools/list request failed for '{server_name}': {e}"
+                ));
+            }
+            Ok(res) => {
+                if let Some(err) = res.get("error") {
+                    diag(&format!(
+                        "tools/list returned JSON-RPC error for '{server_name}': {err}"
+                    ));
+                }
+                if let Ok(list_result) = serde_json::from_value::<ListToolsResult>(
+                    res.get("result").cloned().unwrap_or_default(),
+                ) {
+                    diag(&format!(
+                        "'{server_name}' returned {} tool(s)",
+                        list_result.tools.len()
+                    ));
+                    for t in list_result.tools {
+                        mapping.insert(t.name.clone(), server_name.clone());
+                        let parameters = serde_json::to_value(&t.input_schema)
+                            .unwrap_or(serde_json::json!({ "type": "object", "properties": {} }));
+                        fetched_tools.push(Tool {
+                            tool_type: "function".to_string(),
+                            function: FunctionDefinition {
+                                name: t.name,
+                                description: t.description,
+                                parameters,
+                            },
+                        });
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(mut map_guard) = MCP_TOOL_MAPPING.lock() {
+        *map_guard = Some(mapping);
+    }
+    if let Ok(mut cache_guard) = MCP_TOOLS_CACHE.lock() {
+        *cache_guard = Some(fetched_tools.clone());
+    }
+    Ok(fetched_tools)
+}
 
 impl Guest for ToolProviderImpl {
     fn get_tools() -> Result<String, String> {
@@ -68,73 +146,25 @@ impl Guest for ToolProviderImpl {
             });
         }
 
-        init_mcp_servers()?;
-        let mut mapping = HashMap::new();
-        let servers_list: Vec<String> = {
-            if let Ok(guard) = MCP_SERVERS.lock() {
-                guard
-                    .as_ref()
-                    .map(|m| m.keys().cloned().collect())
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            }
+        let did_reinit = init_mcp_servers()?;
+
+        // MCP servers' tool lists don't change mid-session, so once
+        // `init_mcp_servers` confirms the existing connections are still
+        // alive (`did_reinit == false`), reuse the last fetch instead of
+        // re-issuing `tools/list` to every server — this function runs on
+        // every LLM turn and every tool-call routing lookup, so an
+        // unconditional live re-fetch here was pure waste on the common
+        // path. Invalidated by `init_mcp_servers` itself whenever it has to
+        // actually (re)spawn a server.
+        let cached = if did_reinit {
+            None
+        } else {
+            MCP_TOOLS_CACHE.lock().ok().and_then(|guard| guard.clone())
         };
 
-        if servers_list.is_empty() && std::env::var("RAD_TEST_PORT").is_err() {
-            return Err("MCP_SERVERS is empty after init_mcp_servers".to_string());
-        }
-
-        for server_name in servers_list {
-            let list_req = ClientJsonrpcRequest::new(
-                RequestId::String("list_tools".to_string()),
-                RequestFromClient::ListToolsRequest(None),
-            );
-            let Ok(req) = serde_json::to_value(&list_req) else {
-                diag(&format!(
-                    "Failed to serialize tools/list request for '{server_name}'"
-                ));
-                continue;
-            };
-            match mcp_request(&server_name, &req) {
-                Err(e) => {
-                    diag(&format!(
-                        "tools/list request failed for '{server_name}': {e}"
-                    ));
-                }
-                Ok(res) => {
-                    if let Some(err) = res.get("error") {
-                        diag(&format!(
-                            "tools/list returned JSON-RPC error for '{server_name}': {err}"
-                        ));
-                    }
-                    if let Ok(list_result) = serde_json::from_value::<ListToolsResult>(
-                        res.get("result").cloned().unwrap_or_default(),
-                    ) {
-                        diag(&format!(
-                            "'{server_name}' returned {} tool(s)",
-                            list_result.tools.len()
-                        ));
-                        for t in list_result.tools {
-                            mapping.insert(t.name.clone(), server_name.clone());
-                            let parameters = serde_json::to_value(&t.input_schema).unwrap_or(
-                                serde_json::json!({ "type": "object", "properties": {} }),
-                            );
-                            tools.push(Tool {
-                                tool_type: "function".to_string(),
-                                function: FunctionDefinition {
-                                    name: t.name,
-                                    description: t.description,
-                                    parameters,
-                                },
-                            });
-                        }
-                    }
-                }
-            }
-        }
-        if let Ok(mut map_guard) = MCP_TOOL_MAPPING.lock() {
-            *map_guard = Some(mapping);
+        match cached {
+            Some(cached_tools) => tools.extend(cached_tools),
+            None => tools.extend(fetch_and_cache_mcp_tools()?),
         }
 
         serde_json::to_string(&tools).map_err(|e| format!("Failed to serialize tools: {e}"))

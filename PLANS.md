@@ -1,5 +1,5 @@
 # Project Work Plan (PLANS.md)
-**Last Updated**: 2026-07-29
+**Last Updated**: 2026-07-30
 
 ## 🗺️ Long-Term Plan (Roadmap)
 - [✅] Phase 10: Codebase Refactoring & Rule Alignment (v0.15.0)
@@ -47,6 +47,7 @@
 - [✅] Phase 53: File-Size Limit Compliance Cleanup (v0.58.0)
 - [✅] Phase 54: Real-World Dogfooding Fixes — MCP/LLM Onboarding, Doc Consolidation & Eager-Load Env-Var Bug (v0.59.0)
 - [✅] Phase 55: Adopt `rust-mcp-schema` for Typed MCP Protocol Messages in `mcp-tool-provider` (v0.60.0)
+- [✅] Phase 56: Performance Audit — wasmtime Compile Cache & MCP Tool-List Caching (v0.61.0)
 
 ---
 
@@ -102,6 +103,101 @@ Trigger/Fix/Result detail once work actually starts on it.
 - **Scope**: `src/command.rs`, `src/command/handlers.rs`, `src/command/compact.rs` (new), `src/command/compact/tests.rs` (new), `src/orchestrator/runner/runtimes.rs`, `src/orchestrator/runner/runtimes/tests.rs` (new), `src/wasm/rpc_meta.rs`, `ext/rad-orchestrator/src/llm.rs`, `models/src/dag.rs`, `src/dag/tests.rs`, `wit/rad.wit`, `tests/command_tests.rs`, `README.md`, `PLANS.md`.
 - **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass, native and `wasm32-wasip2`.
 - **Result**: Success. New tests: 2 `merge_nodes` `current_node_id` tests, 1 role-based-lookup test (registers a `context-tools`-role extension under a different name and confirms resolution), 3 `/compact` tests (too-few-messages no-op, missing-extension error, and a full end-to-end run through the real `context_tools.wasm` that actually reduces DAG node count). `./scripts/build_all.sh` clean end-to-end.
+
+---
+
+## 🛠️ Short-Term Plan: Phase 56
+
+### 💡 Current AWU Status
+- [✅] AWU 931: wasmtime Compile Cache & MCP Tool-List Caching (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 931: wasmtime Compile Cache & MCP Tool-List Caching
+- **Trigger**: User asked where `rad`'s own architecture (as opposed to raw LLM
+  inference latency, acknowledged as out of scope) could be sped up. A
+  code-reading pass surfaced two candidates; both were verified empirically
+  (not just reasoned about) before being scoped for a fix, and a couple of
+  other candidates raised along the way were explicitly retracted or ruled
+  out of scope once measured — see below.
+- **Fix 1 — wasmtime compile cache**: any single extension crash triggers
+  `clear_runtimes()` (`src/orchestrator/runner/runtimes.rs`), which discards
+  **all 5** extension runtimes; the retry then recompiles all 5 from scratch
+  via `WasmRuntime::new` (`src/wasm/loader.rs`), which builds a fresh
+  `Engine` + `Component::from_file` with no caching. Measured with a
+  throwaway benchmark (same wasmtime 29.0.1, same debug `.wasm` files
+  `~/.rad/wasm` actually points at): **210ms cold, uncached**. Enabled
+  wasmtime's built-in disk-based compilation cache
+  (`Config::cache_config_load_default()`, gated behind the crate's `cache`
+  feature — added to `wasmtime`'s features in `Cargo.toml`) in
+  `WasmRuntime::new`; a load failure only logs via `log_host!` and falls
+  back to always-recompile rather than blocking extension load, since
+  caching is an optimization, not a correctness requirement. Deliberately
+  **did not** pursue sharing a single `Engine` across extensions/self-heals
+  (would have required changing `WasmRuntime::new`'s signature and touching
+  11 call sites — 1 production + 10 tests): the benchmark showed
+  `Engine::new()` itself is already near-zero cost after the first call
+  in-process, and wasmtime's compile cache is a content-hash-keyed disk
+  cache independent of which `Engine` instance requests the compile, so
+  caching alone captures effectively all the available win without that
+  blast radius.
+- **Fix 2 — MCP tool-list caching**: `mcp-tool-provider`'s `get_tools()`
+  (`ext/mcp-tool-provider/src/lib.rs`) issued a live, uncached `tools/list`
+  to every configured MCP server on **every single call** — and it's called
+  from both `trigger_llm_stream()` (every LLM turn, via
+  `get_available_tools()` in `ext/rad-orchestrator/src/tool.rs`) and the
+  host's `ExecuteTool` routing lookup (`src/wasm/rpc_meta.rs`, once per tool
+  call, to find which extension owns a tool name). A raw JSON-RPC timing
+  test against the real `core-utilities-mcp`/`web-access-mcp` binaries
+  showed each server's own `tools/list` response is negligible
+  (~0.06–0.08ms) — an earlier suspicion that `mcp_transport.rs::read_line`'s
+  10ms poll-on-empty-read loop was adding latency here was **investigated
+  and retracted**: the host-side stream read
+  (`src/wasm/imports_resources.rs`) blocks on `mpsc::Receiver::recv()`
+  rather than polling, so that path barely triggers in normal operation.
+  Even so, the *design* was pure waste: `init_mcp_servers()`
+  (`ext/mcp-tool-provider/src/client.rs`) now returns `Result<bool, String>`
+  (`did_reinit` — true only when it actually had to (re)spawn a server, false
+  when the existing connections' liveness check passed) instead of
+  `Result<(), String>`; `get_tools()` skips the entire live-fetch loop and
+  returns a cached `Vec<Tool>` (new `MCP_TOOLS_CACHE` static, alongside the
+  existing `MCP_TOOL_MAPPING`) whenever `did_reinit` is false and the cache
+  is populated, and `init_mcp_servers()` itself clears the cache whenever it
+  does have to reinitialize. The live-fetch loop was extracted into a
+  `fetch_and_cache_mcp_tools()` helper to keep `get_tools()` under the
+  100-line Clippy pedantic limit. `mcp_transport.rs`'s two
+  `init_mcp_servers()?` call sites needed no changes at all — both already
+  discard the result as a bare statement, and `bool` isn't `#[must_use]`.
+  Host-side `ExecuteTool`'s separate `get_tools()` call for routing was left
+  untouched: with the extension-side cache in place it's now a cheap
+  in-memory return, so restructuring host routing logic for a now-marginal
+  gain wasn't worth the added risk.
+- **Retracted/out-of-scope after investigation**: `read_line`'s 10ms poll
+  loop (see above — real code path, but not the normal-operation bottleneck
+  it first appeared to be); `main.rs`'s 50ms Esc/completion poll loop
+  (estimated impact too small to matter); `security-guard`'s
+  `verify_rpc_exclude` WASM-boundary crossing on every RPC (inherent
+  sandboxing cost — removing it would weaken the security model for a small
+  gain).
+- **Scope**: `Cargo.toml`, `src/wasm/loader.rs`,
+  `ext/mcp-tool-provider/src/client.rs`, `ext/mcp-tool-provider/src/lib.rs`.
+- **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass,
+  native and `wasm32-wasip2`; both fixes verified with real measurements
+  against the actual artifacts involved, not just reasoning from the code.
+- **Result**: Success. Fix 1: re-measured with the same benchmark — cold
+  compile of all 5 extensions went from 210ms to (with the cache warm)
+  **~110ms** (a fresh from-scratch timing run measured 308ms cold → 107ms
+  warm, ~65% reduction, stable across repeated runs; confirmed the on-disk
+  cache directory `~/Library/Caches/BytecodeAlliance.wasmtime` was actually
+  created and used). Fix 2: verified with temporary unconditional `eprintln!`
+  markers (added, checked, then reverted — not part of the shipped diff)
+  during a real multi-tool-call task via the installed `rad` binary against
+  the real `core-utilities-mcp`/`web-access-mcp` servers: **1 live fetch
+  followed by 7 cache hits** for a task with 3 tool calls (previously would
+  have been 8 separate live `tools/list` round-trips). Full workspace test
+  suite (native, including both self-healing tests) and Clippy clean on
+  both targets; end-to-end task output unchanged/correct with the cache
+  path active.
 
 ---
 

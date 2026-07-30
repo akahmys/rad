@@ -25,6 +25,7 @@ pub struct ActiveMcpServer {
 
 pub static MCP_SERVERS: Mutex<Option<HashMap<String, ActiveMcpServer>>> = Mutex::new(None);
 pub static MCP_TOOL_MAPPING: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+pub static MCP_TOOLS_CACHE: Mutex<Option<Vec<crate::default_tools::Tool>>> = Mutex::new(None);
 
 /// Prints a diagnostic line directly to the human-visible terminal output via host RPC.
 /// Silent by default; set `RAD_DEBUG=1` in the environment to re-enable while troubleshooting
@@ -80,7 +81,12 @@ fn perform_handshake(
     Ok(())
 }
 
-pub fn init_mcp_servers() -> Result<(), String> {
+/// Returns `Ok(true)` if servers were actually (re)spawned and re-handshaken
+/// this call, `Ok(false)` if the existing connections were confirmed still
+/// alive and reused as-is. Callers use this to decide whether cached data
+/// derived from the server set (e.g. `get_tools`'s tool list) is still
+/// valid or needs refreshing.
+pub fn init_mcp_servers() -> Result<bool, String> {
     let mut servers_guard = MCP_SERVERS.lock().map_err(|e| e.to_string())?;
     if let Some(active) = servers_guard.as_ref().filter(|s| !s.is_empty()) {
         let mut valid = true;
@@ -91,11 +97,14 @@ pub fn init_mcp_servers() -> Result<(), String> {
             }
         }
         if valid {
-            return Ok(());
+            return Ok(false);
         }
     }
 
     *servers_guard = None;
+    if let Ok(mut cache_guard) = MCP_TOOLS_CACHE.lock() {
+        *cache_guard = None;
+    }
 
     let mut active = HashMap::new();
     let Some(config) = load_mcp_config() else {
@@ -156,6 +165,6 @@ pub fn init_mcp_servers() -> Result<(), String> {
         ))
     } else {
         *servers_guard = Some(active);
-        Ok(())
+        Ok(true)
     }
 }

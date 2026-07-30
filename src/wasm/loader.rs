@@ -32,6 +32,15 @@ impl WasmRuntime {
         let mut config = wasmtime::Config::new();
         config.wasm_multi_memory(true);
         config.wasm_component_model(true);
+        // Compiled components are cached to disk (content-hash keyed, shared
+        // across Engine instances) so a self-healing respawn re-decodes a
+        // cached artifact instead of re-running Cranelift codegen from
+        // scratch. Not a correctness requirement, so a failure here (e.g. a
+        // malformed cache config file) only logs and falls back to
+        // always-recompile rather than blocking extension load.
+        if let Err(e) = config.cache_config_load_default() {
+            crate::log_host!("[WASM] wasmtime compile cache unavailable, recompiling every load: {e}");
+        }
         let engine = Engine::new(&config).map_err(|e| format!("Failed to create Engine: {e}"))?;
         let component = Component::from_file(&engine, wasm_path)
             .map_err(|e| format!("Failed to load Wasm component: {e}"))?;
