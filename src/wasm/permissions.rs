@@ -261,14 +261,6 @@ pub fn check_permissions(
 
             Ok(())
         }
-        RasRpcCommand::SpawnMcpServer { name, .. } | RasRpcCommand::SendMcpRequest { name, .. } => {
-            if !perms.allowed_mcp_servers.contains(name) {
-                return Err(format!(
-                    "MCP permission denied: server '{name}' is not whitelisted"
-                ));
-            }
-            Ok(())
-        }
         _ => Ok(()),
     }
 }

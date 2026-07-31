@@ -43,7 +43,6 @@ impl bindings::RadExtensionImports for WasmState {
             &*self.dag,
             &*self.network,
             &self.active_processes,
-            &self.active_mcp_servers,
             &self.event_tx,
             &self.llm_timeout_policy,
             orchestrator.as_ref(),

@@ -54,7 +54,10 @@ fn fetch_and_cache_mcp_tools() -> Result<Vec<Tool>, String> {
         }
     };
 
-    if servers_list.is_empty() && std::env::var("RAD_TEST_PORT").is_err() {
+    // `get_tools` never reaches this function in `RAD_TEST_PORT` mode (it
+    // returns synthetic tools directly), so an empty server list here is
+    // always a real misconfiguration.
+    if servers_list.is_empty() {
         return Err("MCP_SERVERS is empty after init_mcp_servers".to_string());
     }
 
@@ -117,35 +120,42 @@ fn fetch_and_cache_mcp_tools() -> Result<Vec<Tool>, String> {
 
 impl Guest for ToolProviderImpl {
     fn get_tools() -> Result<String, String> {
-        let mut tools = Vec::new();
-
+        // Self-contained test mode: return the synthetic tools directly,
+        // without ever touching real MCP server discovery/config (which
+        // real tests running in this mode don't configure at all — see
+        // `execute_tool`'s matching RAD_TEST_PORT short-circuit below,
+        // which already does this correctly).
         if std::env::var("RAD_TEST_PORT").is_ok() {
-            tools.push(Tool {
-                tool_type: "function".to_string(),
-                function: FunctionDefinition {
-                    name: "read".to_string(),
-                    description: Some("Read file content".to_string()),
-                    parameters: serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}}}),
+            let tools = vec![
+                Tool {
+                    tool_type: "function".to_string(),
+                    function: FunctionDefinition {
+                        name: "read".to_string(),
+                        description: Some("Read file content".to_string()),
+                        parameters: serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}}}),
+                    },
                 },
-            });
-            tools.push(Tool {
-                tool_type: "function".to_string(),
-                function: FunctionDefinition {
-                    name: "write".to_string(),
-                    description: Some("Write file content".to_string()),
-                    parameters: serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}}),
+                Tool {
+                    tool_type: "function".to_string(),
+                    function: FunctionDefinition {
+                        name: "write".to_string(),
+                        description: Some("Write file content".to_string()),
+                        parameters: serde_json::json!({"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}}),
+                    },
                 },
-            });
-            tools.push(Tool {
-                tool_type: "function".to_string(),
-                function: FunctionDefinition {
-                    name: "execute".to_string(),
-                    description: Some("Execute bash command".to_string()),
-                    parameters: serde_json::json!({"type": "object", "properties": {"command": {"type": "string"}}}),
+                Tool {
+                    tool_type: "function".to_string(),
+                    function: FunctionDefinition {
+                        name: "execute".to_string(),
+                        description: Some("Execute bash command".to_string()),
+                        parameters: serde_json::json!({"type": "object", "properties": {"command": {"type": "string"}}}),
+                    },
                 },
-            });
+            ];
+            return serde_json::to_string(&tools).map_err(|e| format!("Failed to serialize tools: {e}"));
         }
 
+        let mut tools = Vec::new();
         let did_reinit = init_mcp_servers()?;
 
         // MCP servers' tool lists don't change mid-session, so once

@@ -1,6 +1,5 @@
 use crate::ipc::RasRpcCommand;
 use crate::wasm::rpc::RpcContext;
-use crate::wasm::rpc_meta_fallback::execute_core_tool_fallback;
 
 #[cfg(test)]
 mod tests;
@@ -66,64 +65,18 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             }
         }
 
-        RasRpcCommand::ExecuteTool {
-            call_id,
-            name,
-            arguments,
-        } => {
-            if let Some(orch) = ctx.orchestrator {
-                let provider_arc = {
-                    let runtimes = {
-                        let guard = orch.wasm_runtime.lock();
-                        guard.values().cloned().collect::<Vec<_>>()
-                    };
-                    let mut provider = None;
-                    for runtime_arc in runtimes {
-                        let Some(mut runtime) = runtime_arc.try_lock() else {
-                            continue;
-                        };
-                        if runtime.tool_provider.is_some()
-                            && let Ok(json_str) = runtime.get_tools()
-                            && let Ok(serde_json::Value::Array(arr)) =
-                                serde_json::from_str::<serde_json::Value>(&json_str)
-                        {
-                            let has_tool = arr.iter().any(|t| {
-                                t.get("function")
-                                    .and_then(|f| f.get("name"))
-                                    .and_then(|n| n.as_str())
-                                    == Some(name.as_str())
-                            });
-                            if has_tool {
-                                provider = Some(runtime_arc.clone());
-                                break;
-                            }
-                        }
-                    }
-                    provider
-                };
-
-                if let Some(provider_arc) = provider_arc {
-                    let mut runtime = provider_arc.lock();
-                    let args_val: serde_json::Value =
-                        serde_json::from_str(arguments).unwrap_or(serde_json::Value::Null);
-                    let _ = ctx
-                        .event_tx
-                        .send(crate::ipc::RasCoreEvent::ToolCallRequested {
-                            call_id: call_id.clone(),
-                            name: name.clone(),
-                            args: args_val,
-                        });
-
-                    return runtime
-                        .execute_tool(name, arguments)
-                        .map(serde_json::Value::String)
-                        .map_err(|e| format!("Tool execution failed: {e}"));
-                }
-                execute_core_tool_fallback(name, arguments, ctx)
-            } else {
-                Err("Orchestrator unavailable".to_string())
-            }
-        }
+        // `RasRpcCommand::ExecuteTool` is never dispatched via `host_rpc` in
+        // practice — real tool execution goes through the `execute-tool`
+        // WIT import directly (`src/wasm/imports_tool.rs`), which is what
+        // `rad-orchestrator` (and every extension) actually calls. This
+        // variant only still exists because `imports_tool.rs` constructs
+        // one to describe the call to `verify_rpc_exclude` for security
+        // checks, and `security-guard`'s policy matches on it. Kept here
+        // only to keep this match exhaustive.
+        RasRpcCommand::ExecuteTool { .. } => Err(
+            "ExecuteTool is not dispatched via host_rpc; call the execute-tool WIT import directly"
+                .to_string(),
+        ),
         RasRpcCommand::GenerateLlmStream {
             model,
             messages_json,

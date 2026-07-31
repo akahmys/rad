@@ -53,11 +53,6 @@ impl From<wit::RasCoreEvent> for CoreCoreEvent {
                     .map(rad_models::PendingToolCallInfo::from)
                     .collect(),
             },
-            wit::RasCoreEvent::McpResponse(payload) => CoreCoreEvent::McpResponse {
-                call_id: payload.call_id,
-                name: payload.name,
-                message: payload.message,
-            },
             wit::RasCoreEvent::LlmConnectorEvent(event) => {
                 CoreCoreEvent::LlmConnectorEvent { event }
             }

@@ -49,11 +49,6 @@ fn render_sub_permissions(output: &mut String, perm: &crate::config::PermissionC
             net.allow_network, net.allow_domains
         );
     }
-    let _ = writeln!(
-        output,
-        "    Allowed MCP Servers: {:?}",
-        perm.allowed_mcp_servers
-    );
 }
 
 fn render_wasm_tools(

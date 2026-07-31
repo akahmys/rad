@@ -50,8 +50,13 @@ fn test_core_auto_self_healing_integration() {
     let turn2 = "data: {\"choices\":[{\"delta\":{\"content\":\"Recovered and completed.\"}}]}\n\n\
                  data: [DONE]\n\n"
         .to_string();
+    // `execute` (not `bash`) matches the tool `mcp-tool-provider` actually
+    // advertises in `RAD_TEST_PORT` test mode — see the extensions list
+    // below. There is no host-side "built-in tool" fallback for unmatched
+    // tool names (removed as dead/unreachable code; see PLANS.md), so the
+    // tool name here must be one a registered tool-provider really serves.
     let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[\
-                 {\"index\":0,\"id\":\"call_panic\",\"type\":\"function\",\"function\":{\"name\":\"bash\",\"arguments\":\"{\\\"command\\\":\\\"echo CRASH_WASM; sleep 1\\\"}\"}}\
+                 {\"index\":0,\"id\":\"call_panic\",\"type\":\"function\",\"function\":{\"name\":\"execute\",\"arguments\":\"{\\\"command\\\":\\\"echo CRASH_WASM; sleep 1\\\"}\"}}\
                  ]}}]}\n\n\
                  data: [DONE]\n\n".to_string();
 
@@ -109,6 +114,19 @@ fn test_core_auto_self_healing_integration() {
             permissions: Some(perms.clone()),
             config: HashMap::new(),
         },
+        // Real tool-provider so the "execute" tool call above resolves to
+        // an actual provider instead of the (now removed) host-side
+        // built-in-tool fallback. `RAD_TEST_PORT` (already set above for
+        // the mock LLM server) also switches this extension into its
+        // self-contained test-tool mode.
+        rad::config::ExtensionConfig {
+            name: "mcp-tool-provider".to_string(),
+            enabled: true,
+            role: "tool-provider".to_string(),
+            source: "target/wasm32-wasip2/debug/mcp_tool_provider.wasm".to_string(),
+            permissions: Some(perms.clone()),
+            config: HashMap::new(),
+        },
     ];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
@@ -134,7 +152,12 @@ fn test_core_auto_self_healing_integration() {
 
     let start_time = Instant::now();
     let mut completed = false;
-    while start_time.elapsed() < Duration::from_secs(5) {
+    // 8s (not the original 5s): this test now also registers
+    // mcp-tool-provider (needed once the host-side built-in-tool fallback
+    // was removed — see PLANS.md), so the self-healing retry recompiles
+    // one more Wasm component than before, occasionally pushing a cold
+    // run past a tighter deadline under load.
+    while start_time.elapsed() < Duration::from_secs(8) {
         if !orchestrator.is_running() {
             completed = true;
             break;

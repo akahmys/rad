@@ -78,12 +78,6 @@ pub enum RasCoreEvent {
     Rehydrate {
         active_calls: Vec<PendingToolCallInfo>,
     },
-    /// Message response received from external MCP server.
-    McpResponse {
-        call_id: String,
-        name: String,
-        message: String,
-    },
     /// Event received from LLM connector.
     LlmConnectorEvent { event: String },
 }
@@ -194,14 +188,6 @@ pub enum RasRpcCommand {
         prompt_tokens: u32,
         completion_tokens: u32,
     },
-    /// Spawn an MCP server process.
-    SpawnMcpServer {
-        name: String,
-        command: String,
-        args: Vec<String>,
-    },
-    /// Send a request to an MCP server.
-    SendMcpRequest { name: String, message: String },
     /// Trigger LLM stream generation using a connector.
     GenerateLlmStream {
         model: String,

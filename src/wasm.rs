@@ -27,7 +27,6 @@ pub mod rpc;
 pub mod rpc_dag;
 pub mod rpc_fs;
 pub mod rpc_meta;
-mod rpc_meta_fallback;
 mod rpc_meta_llm_connector;
 mod rpc_meta_llm_fallback;
 pub mod rpc_network;
@@ -69,7 +68,6 @@ pub struct WasmState {
     pub network: Arc<dyn NetworkSubsystem>,
     pub permissions: PermissionConfig,
     pub active_processes: Arc<Mutex<HashMap<String, RunningProcess>>>,
-    pub active_mcp_servers: Arc<Mutex<HashMap<String, crate::mcp::McpProcess>>>,
     pub event_tx: std::sync::mpsc::Sender<RasCoreEvent>,
     pub llm_timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
     pub orchestrator: Option<std::sync::Weak<crate::orchestrator::Orchestrator>>,

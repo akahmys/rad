@@ -107,7 +107,6 @@ impl WasmRuntime {
             network,
             permissions,
             active_processes,
-            active_mcp_servers: Arc::new(Mutex::new(HashMap::new())),
             event_tx,
             llm_timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Dynamic {
                 heartbeat_timeout_ms: llm_stream_heartbeat_ms,

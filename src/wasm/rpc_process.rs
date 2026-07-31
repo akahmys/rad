@@ -128,25 +128,6 @@ pub(crate) fn handle_process(
                 ctx.hitl_enabled,
             )
         }
-        RasRpcCommand::SpawnMcpServer {
-            name,
-            command,
-            args,
-        } => {
-            let proc = crate::mcp::McpProcess::spawn(name, command, args, ctx.event_tx.clone())?;
-            let mut guard = ctx.active_mcp_servers.lock();
-            guard.insert(name.clone(), proc);
-            Ok(serde_json::Value::Null)
-        }
-        RasRpcCommand::SendMcpRequest { name, message } => {
-            let mut guard = ctx.active_mcp_servers.lock();
-            if let Some(proc) = guard.get_mut(name) {
-                proc.send_message(message)?;
-                Ok(serde_json::Value::Null)
-            } else {
-                Err(format!("MCP server '{name}' is not running"))
-            }
-        }
         _ => Err("Unhandled RPC command in handle_process".to_string()),
     }
 }

@@ -36,14 +36,7 @@ interface types {
         human-input-received(string),
         task-completed,
         rehydrate(list<pending-tool-call-info>),
-        mcp-response(mcp-response-payload),
         llm-connector-event(string),
-    }
-
-    record mcp-response-payload {
-        call-id: string,
-        name: string,
-        message: string,
     }
 
     record tool-call-request {
@@ -97,8 +90,6 @@ interface types {
         get-extension-config,
         ask-human-approval(string),
         report-token-usage(report-token-usage-payload),
-        spawn-mcp-server(spawn-mcp-server-payload),
-        send-mcp-request(send-mcp-request-payload),
         get-repo-map,
         get-tools,
         execute-tool(execute-tool-payload),
@@ -134,17 +125,6 @@ interface types {
         call-id: string,
         name: string,
         arguments: string,
-    }
-
-    record spawn-mcp-server-payload {
-        name: string,
-        command: string,
-        args: list<string>,
-    }
-
-    record send-mcp-request-payload {
-        name: string,
-        message: string,
     }
 
     record file-write-payload {

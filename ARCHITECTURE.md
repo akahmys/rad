@@ -136,12 +136,6 @@ pub enum RasCoreEvent {
     Rehydrate {
         active_calls: Vec<PendingToolCallInfo>,
     },
-    /// A response from an external MCP server
-    McpResponse {
-        call_id: String,
-        name: String,
-        message: String,
-    },
 
     // === Process Monitoring (PTY / Bash) ===
     /// A new process group was spawned
@@ -252,8 +246,6 @@ variant ras-rpc-command {
     get-dag,
     ask-human-approval(string),
     report-token-usage(report-token-usage-payload),
-    spawn-mcp-server(spawn-mcp-server-payload),
-    send-mcp-request(send-mcp-request-payload),
     get-repo-map,
     get-tools,
     execute-tool(execute-tool-payload),
@@ -270,7 +262,7 @@ variant ras-rpc-command {
 To prevent orphaned processes spawned by background shells or external MCP servers from running loose, the Core performs the following management:
 
 1. **Isolated Process Group Creation**:
-   Inside the child process (spawned via `spawn_bash_process` or `spawn_mcp_server`) after `fork`, the Core calls `setpgid(0, 0)` to allocate a new, independent PGID.
+   Inside the child process (spawned via `spawn_bash_process`, which is also how `mcp-tool-provider` launches external MCP servers — there is no separate MCP-specific spawn path) after `fork`, the Core calls `setpgid(0, 0)` to allocate a new, independent PGID.
 2. **Automatic Cleanup with Drop Trait**:
    The internal manager tracks active PGIDs. When the Core exits normally, receives `Ctrl+C`, or panics, the `Drop` implementation sends `kill(-pgid, SIGKILL)` to all registered PGIDs, including both spawned bash commands and external MCP servers.
 

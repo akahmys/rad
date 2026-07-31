@@ -7,7 +7,6 @@ pub mod fs;
 pub mod git;
 pub mod http;
 pub mod ipc;
-pub mod mcp;
 pub mod orchestrator;
 pub mod process;
 mod process_child;

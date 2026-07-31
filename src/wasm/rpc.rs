@@ -13,7 +13,6 @@ pub struct RpcContext<'a> {
     pub dag: &'a dyn DagSubsystem,
     pub network: &'a dyn NetworkSubsystem,
     pub active_processes: &'a Arc<Mutex<HashMap<String, RunningProcess>>>,
-    pub active_mcp_servers: &'a Arc<Mutex<HashMap<String, crate::mcp::McpProcess>>>,
     pub event_tx: &'a std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
     pub llm_timeout_policy: &'a Arc<Mutex<crate::ipc::TimeoutPolicy>>,
     pub orchestrator: Option<&'a Arc<crate::orchestrator::Orchestrator>>,
@@ -35,7 +34,6 @@ pub fn execute_rpc_command(
     dag: &dyn DagSubsystem,
     network: &dyn NetworkSubsystem,
     active_processes: &Arc<Mutex<HashMap<String, RunningProcess>>>,
-    active_mcp_servers: &Arc<Mutex<HashMap<String, crate::mcp::McpProcess>>>,
     event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>,
     llm_timeout_policy: &Arc<Mutex<crate::ipc::TimeoutPolicy>>,
     orchestrator: Option<&Arc<crate::orchestrator::Orchestrator>>,
@@ -49,7 +47,6 @@ pub fn execute_rpc_command(
         dag,
         network,
         active_processes,
-        active_mcp_servers,
         event_tx,
         llm_timeout_policy,
         orchestrator,
@@ -76,10 +73,9 @@ pub fn execute_rpc_command(
             super::rpc_meta::handle_meta(cmd, &ctx)
         }
 
-        RasRpcCommand::SpawnBashProcess { .. }
-        | RasRpcCommand::SpawnMcpServer { .. }
-        | RasRpcCommand::OpenProcess { .. }
-        | RasRpcCommand::SendMcpRequest { .. } => super::rpc_process::handle_process(cmd, &ctx),
+        RasRpcCommand::SpawnBashProcess { .. } | RasRpcCommand::OpenProcess { .. } => {
+            super::rpc_process::handle_process(cmd, &ctx)
+        }
 
         RasRpcCommand::OpenHttpStream { .. } | RasRpcCommand::SetStreamTimeoutPolicy { .. } => {
             super::rpc_network::handle_network(cmd, &ctx)

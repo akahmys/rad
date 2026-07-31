@@ -94,19 +94,6 @@ macro_rules! impl_rpc_command_wit_to_core {
                             completion_tokens: payload.completion_tokens,
                         }
                     }
-                    $wit::RasRpcCommand::SpawnMcpServer(payload) => {
-                        $crate::RasRpcCommand::SpawnMcpServer {
-                            name: payload.name,
-                            command: payload.command,
-                            args: payload.args,
-                        }
-                    }
-                    $wit::RasRpcCommand::SendMcpRequest(payload) => {
-                        $crate::RasRpcCommand::SendMcpRequest {
-                            name: payload.name,
-                            message: payload.message,
-                        }
-                    }
                     $wit::RasRpcCommand::GetRepoMap => $crate::RasRpcCommand::GetRepoMap,
                     $wit::RasRpcCommand::GetTools => $crate::RasRpcCommand::GetTools,
                     $wit::RasRpcCommand::ExecuteTool(payload) => {
