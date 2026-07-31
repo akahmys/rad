@@ -214,18 +214,6 @@ impl WasmRuntime {
         }
     }
 
-    pub fn execute_tool(&mut self, name: &str, arguments: &str) -> Result<String, String> {
-        let ext_name = self.store.data().name.clone();
-        if let Some(ref provider) = self.tool_provider {
-            let res = provider
-                .call_execute_tool(&mut self.store, name, arguments)
-                .map_err(|e| format_wasm_error(&ext_name, "execute_tool", &e))??;
-            Ok(res.rep().to_string())
-        } else {
-            Err("Tool provider bindings missing".to_string())
-        }
-    }
-
     pub fn call_extension_method(
         &mut self,
         method: &str,

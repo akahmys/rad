@@ -196,7 +196,7 @@ pub fn check_permissions(
             }
             Ok(())
         }
-        RasRpcCommand::FileRead { path } => {
+        RasRpcCommand::FileRead { path } | RasRpcCommand::ListDir { path } => {
             let canonical_target = canonicalize_path(path, workspace);
             let target_str = canonical_target.to_string_lossy();
             if target_str.contains(".rad/config.json") || target_str.contains(".rad/rad.json") || target_str.contains(".rad") {

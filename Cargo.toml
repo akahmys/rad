@@ -47,6 +47,7 @@ members = [
     "ext/rad-orchestrator",
     "ext/security-guard",
     "ext/mcp-tool-provider",
+    "ext/skill-tool-provider",
     "ext/llm-connector",
     "models",
     "templates/rust",

@@ -17,6 +17,9 @@ macro_rules! common_rpc_command_core_to_wit {
             $crate::RasRpcCommand::FileRead { path } => {
                 Some($wit::RasRpcCommand::FileRead(path.to_string_lossy().into_owned()))
             }
+            $crate::RasRpcCommand::ListDir { path } => {
+                Some($wit::RasRpcCommand::ListDir(path.to_string_lossy().into_owned()))
+            }
             $crate::RasRpcCommand::FileWrite { path, data } => {
                 Some($wit::RasRpcCommand::FileWrite($wit::FileWritePayload {
                     path: path.to_string_lossy().into_owned(),

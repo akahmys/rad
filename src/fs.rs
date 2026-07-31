@@ -163,6 +163,34 @@ impl FsSandbox {
             .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to read file: {e}"), "Fs"))
     }
 
+    /// Lists the entry names of a directory (non-recursive).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the read permission check fails or the
+    /// directory can't be read.
+    pub fn dir_list(&self, path: &Path) -> Result<Vec<String>, crate::error::UnifiedError> {
+        let resolved = self
+            .resolve_target_path(path)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
+        let read_allow = self.fs_read_allow.lock();
+        let allowed = self
+            .has_permission(&resolved, &read_allow)
+            .map_err(|e| crate::error::UnifiedError::l1(e, "Fs"))?;
+        if !allowed {
+            return Err(crate::error::UnifiedError::l2(
+                format!("Read permission denied for path: {:?}", path),
+                "FsPermission",
+            ));
+        }
+        let entries = fs::read_dir(&resolved)
+            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to read directory: {e}"), "Fs"))?;
+        Ok(entries
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .collect())
+    }
+
     /// Writes data to a file on the filesystem.
     ///
     /// # Errors
@@ -254,6 +282,10 @@ mod snapshot;
 impl crate::subsystems::FsSubsystem for FsSandbox {
     fn file_read(&self, path: &Path) -> Result<Vec<u8>, crate::error::UnifiedError> {
         self.file_read(path)
+    }
+
+    fn dir_list(&self, path: &Path) -> Result<Vec<String>, crate::error::UnifiedError> {
+        self.dir_list(path)
     }
 
     fn file_write(&self, path: &Path, data: &[u8]) -> Result<(), crate::error::UnifiedError> {

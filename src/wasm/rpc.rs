@@ -56,6 +56,7 @@ pub fn execute_rpc_command(
     };
     match cmd {
         RasRpcCommand::FileRead { .. }
+        | RasRpcCommand::ListDir { .. }
         | RasRpcCommand::FileWrite { .. }
         | RasRpcCommand::FileEditPatch { .. }
         | RasRpcCommand::TakeSnapshot { .. }

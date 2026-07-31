@@ -15,7 +15,8 @@
 *   **Wasm-based Multi-Plugins & Gateway Access Control**: Executes agent policy logic inside a secure, sandboxed WebAssembly environment. Policies are cleanly isolated into cooperating, single-responsibility micro-extensions:
     *   **LLM Orchestrator**: Manages prompt construction and the reasoning loop.
     *   **Security Guard**: Intercepts and validates host-RPC command resource creation requests for sandboxed security filtering.
-    *   **Tool/MCP Provider**: Resolves and maps dynamic schemas for external tools (e.g. MCP servers) — the sole source of tools; there are no built-in file/shell primitives.
+    *   **Tool/MCP Provider**: Resolves and maps dynamic schemas for external tools (e.g. MCP servers) — there are no built-in file/shell primitives; every callable tool comes from a Wasm tool-provider extension.
+    *   **Skill Provider**: Surfaces `.agents/skills/`/`~/.rad/skills/` Markdown skill definitions as ordinary autonomously-discoverable tools, alongside the MCP-backed ones (see [CONFIG.md](CONFIG.md) §2.5).
     *   **LLM Connector**: Translates messages and tool definitions into model-specific API payloads and parses the response stream.
     *   **Context Compactor**: Owns context-size-reduction policy (windowing, stale tool-result clearing, relevance-based retention) once the Orchestrator has assembled the raw message list.
 *   **Unified Tooling & Extension-Based Policies**: All tool-specific safety guards and context-compaction policy are decoupled from the Core and offloaded entirely to custom Wasm Extensions, communicating over WIT-defined interfaces.
@@ -84,7 +85,7 @@ When you run `rad`, you are entered into an interactive shell (REPL) where you c
 ### 3.2 Capability-Based Security & Extension Configuration
 All filesystem and process operations requested by the AI agent are validated against the extension permissions registered in `~/.rad/config.json` (user-global) or a project-local `rad.json`/`config.json` override. If an action is not authorized in this capabilities mask, the API Gateway rejects the operation.
 
-`rad` ships 5 extensions with no built-in tools of its own — file reads/writes and shell execution are only available through MCP servers registered under `mcp-tool-provider`'s own `config.mcp_servers`. Without at least one configured there, the agent has zero tools and can't act on anything.
+`rad` ships 6 extensions with no built-in tools of its own — file reads/writes and shell execution are only available through MCP servers registered under `mcp-tool-provider`'s own `config.mcp_servers` (skills add further autonomously-discoverable tools, but don't cover general-purpose file/shell access). Without at least one MCP server configured, the agent has zero tools and can't act on anything.
 
 > [!NOTE]
 > The full config schema (with a working example), the 5-tier precedence cascade, and the on-disk directory layout are documented in [CONFIG.md](CONFIG.md) — the authoritative reference, kept here as a single source of truth rather than duplicated.

@@ -61,10 +61,13 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
    - **Isolation**: Even if the Orchestrator is hijacked via prompt injection, the independent Security Guard Wasm prevents damage (sandboxed verification).
 3. **Tool/MCP Provider (Capability Bridging)**
    - **Responsibility**: Discovers, parses, and resolves dynamic schemas for external tools (e.g., via MCP servers) and marshals tool calls/replies.
-4. **LLM Connector (Model API translation & streaming)**
+4. **Skill Provider (`skill-tool-provider`)**
+   - **Responsibility**: Discovers `.agents/skills/<name>/SKILL.md` (project-local) and `~/.rad/skills/<name>/SKILL.md` (user-global) via the `list-dir`/`file-read` host RPCs, parses each one's frontmatter, and surfaces them as ordinary tools. Invoking one (inline mode) returns the `SKILL.md` body — with `$ARGUMENTS` substituted if present — as the tool result.
+   - **Isolation**: Implements the same `rad-tool-provider` WIT world as `mcp-tool-provider`; the host merges tools from every extension exporting `get-tools`/`execute-tool` (see §5.4.1), so the two coexist without either needing to know about the other.
+5. **LLM Connector (Model API translation & streaming)**
    - **Responsibility**: Translates standardized Message objects and tool definitions into model-specific API payloads, initiates connections (using Core HTTP capability), and parses SSE stream chunks.
    - **Isolation**: Decouples model-specific network packet parsing and JSON payload generation from the Orchestrator, rendering the main decision loop fully model-agnostic.
-5. **Context Compactor (`context-tools`)**
+6. **Context Compactor (`context-tools`)**
    - **Responsibility**: Owns all context-size-reduction policy once the Orchestrator has assembled the raw message list — trimming it to a configurable history-length budget (count-based windowing) and/or a character budget derived from the active LLM endpoint's real context window (size-based windowing), whichever is more restrictive. Also exposes auxiliary context-gathering utilities (`get-repo-map`, which delegates to the same semantic/tree-sitter repo map every other extension gets via the shared `GetRepoMap` RPC).
    - **Isolation**: Stateless and pure — takes a message list (and thresholds) in, returns a possibly-shortened list and a human-readable summary out. It does not read the DAG or hold session state itself. Failure degrades gracefully: the Orchestrator falls back to sending the uncompacted list rather than blocking the turn, since compaction is a quality optimization, not a correctness requirement.
    - **WIT contract**: Shares the same `radcomp:extension` WIT package and full `ras-rpc-command` surface as every other extension (unified in AWU 915's follow-up from a bespoke single-variant `command(string)` type whose raw-shell host bridge bypassed `PermissionConfig` entirely), so its declared `fs_read_allow`/`fs_write_allow` permissions are now actually enforced like any other extension's.
@@ -407,7 +410,9 @@ sequenceDiagram
 
 ### 5.4.1 Tool Abstraction & Discovery
 
-* **External Model Context Protocol (MCP)** is the sole source of tools. Connection and schema mapping for configured MCP servers are handled entirely on the `mcp-tool-provider` Extension side: it launches each server declared in its own `config.mcp_servers`, fetches their tool schemas, merges them into one pool, and forwards tool invocations to the matching server. Without at least one MCP server configured there, the agent has zero tools and cannot act on the filesystem or run commands at all — see [CONFIG.md](CONFIG.md) for the schema.
+* **Multi-provider merge**: the Core's `execute-tool`/`get-tools` WIT import (`src/wasm/imports_tool.rs`) doesn't hardcode any single Extension — it iterates every registered Wasm runtime, and any one exporting the `rad-tool-provider` world's `get-tools`/`execute-tool` functions has its tools merged into one flat pool the Orchestrator sees. Multiple tool-provider Extensions can coexist under this role with no coordination needed between them; a tool name collision is resolved by whichever provider's `get-tools` response the host consults first.
+* **External Model Context Protocol (MCP)** (`mcp-tool-provider`): launches each server declared in its own `config.mcp_servers`, fetches their tool schemas, merges them into one pool, and forwards tool invocations to the matching server. Without at least one MCP server configured there, the agent has no general-purpose file/shell tools — see [CONFIG.md](CONFIG.md) for the schema.
+* **Skills** (`skill-tool-provider`): discovers `.agents/skills/`/`~/.rad/skills/` Markdown skill definitions via the `list-dir`/`file-read` host RPCs and surfaces each as a tool whose description is the skill's own, letting the model choose to invoke one autonomously — see [CONFIG.md](CONFIG.md) §2.5.
 
 ### 5.4.2 Rollback Boundaries & External Side-Effects
 

@@ -19,7 +19,7 @@ When the `rad` Core starts, the system resolves operational parameters and crede
 > `rad.local.json` is a local-only file designed to hold personal secrets like API keys. To prevent sharing credentials in repositories, it must always be excluded from Git version control (add it to `.gitignore`).
 
 ### 1.2 Configuration Schema Example (Full Parameters with Comments)
-The config file supports JSON with comments (JSONC). The following example registers the 5 extensions `rad` ships, plus two locally-installed MCP servers — without at least one MCP server registered under `mcp-tool-provider`, `rad` has no built-in file/shell tools at all and can't act on anything (see [README.md](README.md) §3.2 for more on this):
+The config file supports JSON with comments (JSONC). The following example registers the 6 extensions `rad` ships, plus two locally-installed MCP servers — without at least one MCP server registered under `mcp-tool-provider`, `rad` has no built-in file/shell tools at all and can't act on anything (see [README.md](README.md) §3.2 for more on this):
 
 ```json
 {
@@ -62,7 +62,7 @@ The config file supports JSON with comments (JSONC). The following example regis
 
   // List of Extensions (Policy Layer) to register and launch. Extensions are
   // plain .wasm files at a path — there is no "builtin" scheme or directory
-  // auto-discovery; `./scripts/build_all.sh` builds all 5 into `~/.rad/wasm/`,
+  // auto-discovery; `./scripts/build_all.sh` builds all 6 into `~/.rad/wasm/`,
   // which is a convenient install location to point `source` at (works from
   // any project directory, not just a source checkout).
   "extensions": [
@@ -118,6 +118,23 @@ The config file supports JSON with comments (JSONC). The following example regis
           "web-access": { "command": "~/.cargo/bin/web-access-mcp", "args": [] }
         }
       }
+    },
+    {
+      "name": "skill-tool-provider",
+      "source": "~/.rad/wasm/skill_tool_provider.wasm",
+      "enabled": true,
+      "role": "tool-provider",
+      // `execute_tool`'s result is returned via `open_process(echo ...)`
+      // under the hood, so bash execution permission is required even
+      // though skills don't run arbitrary shell commands themselves.
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": [],
+        "execution": { "allow_bash": true, "allow_commands": [], "block_commands": [] }
+      },
+      // Surfaces .agents/skills/ and ~/.rad/skills/ as tools (see §2.5) —
+      // no config of its own is needed.
+      "config": {}
     },
     {
       "name": "llm-connector",
@@ -183,7 +200,9 @@ Data `rad` reads or writes lives under `.rad/` (project-local) and `~/.rad/` (us
 ├── rad.local.json             # Local-only overrides/secrets (gitignore this)
 ├── .agents/
 │   ├── AGENTS.md              # Project-specific rules appended to the system prompt
-│   └── commands/               # Custom slash commands (see §2.3)
+│   ├── commands/               # Custom slash commands (see §2.3)
+│   └── skills/                 # Skills, one directory per skill (see §2.5)
+│       └── <name>/SKILL.md
 └── .rad/                      # Project-local data storage
     ├── config.json            # [Alternative] Hidden project-local configuration file
     ├── snapshots/              # Filesystem snapshots, partitioned by DAG node_id
@@ -198,7 +217,9 @@ Data `rad` reads or writes lives under `.rad/` (project-local) and `~/.rad/` (us
 ├── config.json                 # User-global configuration (base of the precedence cascade)
 ├── wasm/                       # Convenient install location for built extensions
 │   └── rad_orchestrator.wasm   # (populated by ./scripts/build_all.sh)
-└── commands/                   # Custom slash commands shared across all projects (see §2.3)
+├── commands/                   # Custom slash commands shared across all projects (see §2.3)
+└── skills/                     # Skills shared across all projects (see §2.5)
+    └── <name>/SKILL.md
 ```
 
 ### 2.3 Custom Slash Commands
@@ -207,11 +228,29 @@ Markdown files under `.agents/commands/` (project-local, checked first) or `~/.r
 ### 2.4 Project Rules (`AGENTS.md`)
 `.agents/AGENTS.md` or `AGENTS.md` at the project root, if present, is appended to the system prompt on every turn — use it for project-specific conventions, build commands, or constraints the agent should always know about.
 
+### 2.5 Skills
+A skill is a directory containing a `SKILL.md` under `.agents/skills/<name>/` (project-local, checked first) or `~/.rad/skills/<name>/` (user-global) — same precedence direction as custom slash commands. Unlike commands, skills aren't invoked by typing `/name`: each one is surfaced as an ordinary tool (via the `skill-tool-provider` extension) with its `description` as the tool description, so the model can choose to use it autonomously when relevant, the same way it decides to call any other tool.
+
+`SKILL.md` starts with a `---`-delimited frontmatter block, then the body sent as the tool result when the skill is invoked:
+```
+---
+description: Runs the team's PR review checklist against currently staged changes.
+mode: inline
+---
+
+Check that the diff includes tests and an updated changelog entry.
+```
+- `description` (required): shown to the model in the tool list. A skill missing this is skipped.
+- `mode` (optional, defaults to `inline`): only `inline` is implemented today — the body is returned as the tool result directly. `subagent` is a reserved value for a future nested-task execution mode; specifying it now returns a clear "not yet implemented" error rather than running inline.
+- `allowed_tools` (optional): reserved for a future access-scoping mechanism, currently parsed but not enforced.
+
+Callers can pass an optional `args` string when invoking a skill; if the body contains a literal `$ARGUMENTS` placeholder it's substituted, otherwise `args` is appended on its own line (same substitution rule as custom slash commands' `$ARGUMENTS`).
+
 ---
 
 ## 3. Updating Core & Extensions
 
 `rad` requires no system-level administrative privileges and runs entirely within user space.
 
-* **Core Update**: Pull the latest source and re-run `./scripts/build_all.sh` — it rebuilds all 5 extensions, runs the test/Clippy gates, and reinstalls the `rad` binary to `~/.cargo/bin/rad` via `cargo install --path .`.
+* **Core Update**: Pull the latest source and re-run `./scripts/build_all.sh` — it rebuilds all 6 extensions, runs the test/Clippy gates, and reinstalls the `rad` binary to `~/.cargo/bin/rad` via `cargo install --path .`.
 * **Extension Update**: Overwrite the extension's `.wasm` file at its configured `source` path, then run `/reload` inside a running session (or just restart `rad`) — `/reload` re-reads the config and clears the cached WASM runtimes so the next task picks up the new binary.

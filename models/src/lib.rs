@@ -97,6 +97,8 @@ pub struct PendingToolCallInfo {
 pub enum RasRpcCommand {
     /// Read binary data from a file in the workspace.
     FileRead { path: PathBuf },
+    /// List the entry names of a directory in the workspace (non-recursive).
+    ListDir { path: PathBuf },
     /// Write binary data to a file in the workspace.
     FileWrite {
         path: PathBuf,

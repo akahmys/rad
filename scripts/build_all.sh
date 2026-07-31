@@ -11,6 +11,7 @@ cargo build --target wasm32-wasip2 --release \
     -p llm-connector \
     -p security-guard \
     -p mcp-tool-provider \
+    -p skill-tool-provider \
     -p context-tools
 
 mkdir -p ~/.rad/wasm

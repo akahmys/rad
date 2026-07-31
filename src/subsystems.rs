@@ -13,6 +13,13 @@ pub trait FsSubsystem: Send + Sync {
     /// Returns an error if reading fails.
     fn file_read(&self, path: &Path) -> Result<Vec<u8>, UnifiedError>;
 
+    /// Lists the entry names of a directory (non-recursive).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory can't be read.
+    fn dir_list(&self, path: &Path) -> Result<Vec<String>, UnifiedError>;
+
     /// Writes data to a file.
     ///
     /// # Errors

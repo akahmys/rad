@@ -72,6 +72,7 @@ interface types {
 
     variant ras-rpc-command {
         file-read(string),
+        list-dir(string),
         file-write(file-write-payload),
         file-edit-patch(file-patch-payload),
         spawn-bash-process(string),

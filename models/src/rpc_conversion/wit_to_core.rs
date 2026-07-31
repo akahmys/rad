@@ -18,6 +18,9 @@ macro_rules! impl_rpc_command_wit_to_core {
                     $wit::RasRpcCommand::FileRead(path) => {
                         $crate::RasRpcCommand::FileRead { path: std::path::PathBuf::from(path) }
                     }
+                    $wit::RasRpcCommand::ListDir(path) => {
+                        $crate::RasRpcCommand::ListDir { path: std::path::PathBuf::from(path) }
+                    }
                     $wit::RasRpcCommand::FileWrite(payload) => $crate::RasRpcCommand::FileWrite {
                         path: std::path::PathBuf::from(payload.path),
                         data: payload.data,

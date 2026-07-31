@@ -15,6 +15,12 @@ pub fn handle_fs(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_json
             serde_json::to_value(serde_bytes::Bytes::new(&data))
                 .map_err(|e| format!("Failed to serialize file_read result: {e}"))
         }
+        RasRpcCommand::ListDir { path } => {
+            let expanded = crate::config::expand_tilde(&path.to_string_lossy());
+            let entries = ctx.sandbox.dir_list(&expanded)?;
+            serde_json::to_value(entries)
+                .map_err(|e| format!("Failed to serialize list_dir result: {e}"))
+        }
         RasRpcCommand::FileWrite { path, data } => {
             if ctx.hitl_enabled {
                 request_approval(&format!("File Write to '{}'", path.display()))?;
