@@ -67,10 +67,17 @@ impl Orchestrator {
                                 && let Some(arr) = val.as_array()
                             {
                                 if arr.is_empty() {
-                                    println!(
-                                        "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools. See [MCP Diagnostic] lines above for the actual cause.\x1b[0m",
-                                        ext.name
-                                    );
+                                    if ext.name == "mcp-tool-provider" {
+                                        println!(
+                                            "\x1b[31m[FAILED] Extension '{}' initialized with 0 tools. See [MCP Diagnostic] lines above for the actual cause.\x1b[0m",
+                                            ext.name
+                                        );
+                                    } else {
+                                        println!(
+                                            "\x1b[32m[OK] Extension '{}' initialized with 0 tools\x1b[0m",
+                                            ext.name
+                                        );
+                                    }
                                 } else {
                                     println!(
                                         "\x1b[32m[OK] Verified {} tools from extension '{}'\x1b[0m",

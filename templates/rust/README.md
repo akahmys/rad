@@ -6,7 +6,7 @@ This template provides a boilerplate for building WebAssembly (Wasm) Extensions 
 
 1. Install target support for WebAssembly System Interface (WASI):
    ```bash
-   rustup target add wasm32-wasip1
+   rustup target add wasm32-wasip2
    ```
 
 2. (Optional but recommended) Install `cargo-component` for building standardized WASM components:
@@ -18,11 +18,11 @@ This template provides a boilerplate for building WebAssembly (Wasm) Extensions 
 
 Build the extension to a Wasm target:
 ```bash
-cargo build --target wasm32-wasip1 --release
+cargo build --target wasm32-wasip2 --release
 ```
 
 The compiled WASM file will be located at:
-`target/wasm32-wasip1/release/rad_extension_template.wasm`
+`target/wasm32-wasip2/release/rad_extension_template.wasm`
 
 ## Registration
 
@@ -33,12 +33,11 @@ To test your compiled extension, register it in your workspace's `rad.json` file
   "extensions": [
     {
       "name": "my-rust-extension",
-      "source": "./target/wasm32-wasip1/release/rad_extension_template.wasm",
+      "source": "./target/wasm32-wasip2/release/rad_extension_template.wasm",
       "enabled": true,
       "permissions": {
         "fs_read_allow": ["."],
-        "fs_write_allow": ["."],
-        "rpc_allow": ["WriteStdout"]
+        "fs_write_allow": ["."]
       }
     }
   ]

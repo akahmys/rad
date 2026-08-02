@@ -26,6 +26,8 @@ graph TD
         Connector["2. LLM Connector <br> (llm_connector.wasm)"]
         SecurityGuard["3. Security Guard <br> (security_guard.wasm)"]
         ToolProvider["4. Tool/MCP Provider <br> (mcp_tool_provider.wasm)"]
+        SkillProvider["5. Skill Provider <br> (skill_tool_provider.wasm)"]
+        ContextCompactor["6. Context Compactor <br> (context_tools.wasm)"]
 
         Orchestrator -->|1. Generate Stream| Connector
         Connector -->|2. Request Stream RPC| WasmRuntime
@@ -33,6 +35,8 @@ graph TD
         Orchestrator -->|4. Exec Tool RPC| WasmRuntime
         WasmRuntime -->|5. Query Hook| SecurityGuard
         WasmRuntime -->|6. Resolve Tools| ToolProvider
+        WasmRuntime -->|7. Discover Skills| SkillProvider
+        Orchestrator -->|8. Compact History| ContextCompactor
     end
 ```
 
@@ -233,6 +237,7 @@ Functions that do not require continuous byte streaming or handles are mapped th
 ```wit
 variant ras-rpc-command {
     file-read(string),
+    list-dir(string),
     file-write(file-write-payload),
     file-edit-patch(file-patch-payload),
     spawn-bash-process(string),
@@ -247,11 +252,16 @@ variant ras-rpc-command {
     write-stdout(string),
     complete-task,
     get-dag,
+    get-active-llm-profile,
+    get-extension-config,
     ask-human-approval(string),
     report-token-usage(report-token-usage-payload),
     get-repo-map,
     get-tools,
     execute-tool(execute-tool-payload),
+    generate-llm-stream(generate-llm-stream-payload),
+    call-extension(call-extension-payload),
+    log-traced-event(log-traced-event-payload),
 }
 ```
 
@@ -282,29 +292,31 @@ For a simple and robust security policy, configuration is restricted to a single
   },
   "extensions": [
     {
-      "name": "openai-orchestrator",
-      "source": "target/wasm32-wasip2/release/openai_orchestrator.wasm",
+      "name": "rad-orchestrator",
+      "source": "~/.rad/wasm/rad_orchestrator.wasm",
       "enabled": true,
-      "permissions": {
-        "fs_read_allow": ["*"],
-        "fs_write_allow": ["*"]
-      }
-    },
-    {
-      "name": "rust-template-extension",
-      "source": "templates/rust/target/wasm32-wasip1/release/rad_extension_template.wasm",
-      "enabled": true,
+      "role": "orchestrator",
       "permissions": {
         "fs_read_allow": ["*"],
         "fs_write_allow": ["*"],
-        "rpc_allow": ["WriteStdout"]
+        "execution": { "allow_bash": true, "allow_commands": [], "block_commands": [] }
+      }
+    },
+    {
+      "name": "security-guard",
+      "source": "~/.rad/wasm/security_guard.wasm",
+      "enabled": true,
+      "role": "security",
+      "permissions": {
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"]
       }
     }
   ]
 }
 ```
 
-* **Local Verification**: The Core matches every RPC call (`file_read`, `file_write`, `spawn_bash_process`, `spawn_mcp_server`) against the Extension's `permissions` mask.
+* **Local Verification**: The Core matches every RPC call (`file_read`, `file_write`, `spawn_bash_process`, etc.) against the Extension's `permissions` mask.
 * **Core Configuration**: The `core` block defines the workspace, snapshot, and log directories used by the runtime.
 * **Extension Configuration**: Each entry in `extensions` defines the Wasm module source, its enabled status, and its specific capability mask.
 

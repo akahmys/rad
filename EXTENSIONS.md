@@ -30,16 +30,21 @@ graph TD
 
 ## 2. WIT Contract Definition
 
-The contract is located at `wit/rad.wit`. It defines a single world `rad-extension` that extensions must implement.
+The contract is located at `wit/rad.wit`. It defines role-specific worlds (`rad-extension`, `rad-orchestrator`, `rad-security-guard`, `rad-tool-provider`) that extensions implement depending on their role.
 
 ### The `rad-extension` World
 
 ```wit
 world rad-extension {
-    use types.{ras-rpc-command, ras-core-event};
+    use types.{ras-rpc-command, ras-core-event, stream-handle, file-handle, execution-handle};
     
     // Host functions provided by RAD Core that the extension can call
     import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
+
+    import open-file: func(path: string, writeable: bool) -> result<file-handle, string>;
+    import open-process: func(command: string) -> result<execution-handle, string>;
+    import execute-tool: func(name: string, arguments: string) -> result<execution-handle, string>;
+    import open-http-stream: func(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>;
 
     // Guest functions that the extension must implement (export)
     export on-event: func(event: ras-core-event) -> result<_, string>;
@@ -47,9 +52,9 @@ world rad-extension {
 }
 ```
 
-* **`host-rpc`**: Allows extensions to execute physical operations (e.g., read files, run shell commands, access DAG).
+* **`host-rpc`**: Allows extensions to execute physical operations (e.g., read files, list directories, run shell commands, access DAG).
 * **`on-event`**: Dispatched by the core when an event occurs (e.g., terminal output received, file modified, HTTP stream chunk returned).
-* **`verify-rpc`**: A security hook. When another extension or component triggers an RPC call, RAD Core queries other active extensions to approve or deny the action.
+* **`verify-rpc`**: A security hook. When another extension or component triggers an RPC call, RAD Core queries active security extensions to approve or deny the action.
 
 ---
 
@@ -68,12 +73,14 @@ Events dispatched from host to guest:
 
 ### `ras-rpc-command` (Requests to Host)
 Actions extensions can request from RAD Core via `host-rpc`:
-* `file-read / file-write / file-edit-patch`: Filesystem sandbox operations.
+* `file-read / list-dir / file-write / file-edit-patch`: Filesystem sandbox operations.
 * `spawn-bash-process`: Executes commands in the workspace.
 * `create-node / set-node-text / merge-nodes / get-dag`: Management of the context history DAG.
 * `open-http-stream`: Initiates non-blocking HTTP streaming connections.
 * `ask-human-approval`: Prompts the user for permission (Human-in-the-loop).
-* `spawn-mcp-server / send-mcp-request`: Integrates with Model Context Protocol servers.
+* `get-tools / execute-tool`: Resolves and executes tools from registered tool providers.
+* `get-active-llm-profile / get-extension-config`: Fetches active endpoint profile and extension config.
+* `generate-llm-stream / call-extension`: Inter-extension and LLM routing commands.
 
 ---
 
@@ -86,17 +93,17 @@ To load an extension, declare it in `rad.json` under the `extensions` array. Ext
   "extensions": [
     {
       "name": "my-agent-extension",
-      "source": "./ext/my_extension.wasm",
+      "source": "~/.rad/wasm/my_extension.wasm",
       "enabled": true,
+      "role": "orchestrator",
       "permissions": {
-        "fs_read_allow": ["./src", "./Cargo.toml"],
-        "fs_write_allow": ["./src"],
-        "rpc_allow": [
-          "FileRead",
-          "FileWrite",
-          "SpawnBashProcess",
-          "AskHumanApproval"
-        ]
+        "fs_read_allow": ["*"],
+        "fs_write_allow": ["*"],
+        "execution": {
+          "allow_bash": true,
+          "allow_commands": [],
+          "block_commands": []
+        }
       }
     }
   ]
@@ -105,7 +112,8 @@ To load an extension, declare it in `rad.json` under the `extensions` array. Ext
 
 ### Permission Properties:
 * **`fs_read_allow` / `fs_write_allow`**: Restricts which workspace paths the extension can access via `FileRead` / `FileWrite`.
-* **`rpc_allow`**: A list of `RasRpcCommand` variants that the extension is authorized to execute. Any unlisted RPC command will be blocked automatically by RAD Core.
+* **`execution`**: Defines command execution rules (`allow_bash`, `allow_commands`, `block_commands`).
+* **`config`**: Opaque JSON configuration passed directly to the extension via `GetExtensionConfig`.
 
 ---
 
@@ -147,8 +155,8 @@ impl Guest for MyExtension {
 
 ### Step 4: Compile to Wasm Component
 Compile your binary to a Wasm Component:
-* For Rust, build with `--target wasm32-wasip1` (or use `cargo-component`).
-* For Go, use `tinygo` targeting wasi.
+* For Rust, build with `--target wasm32-wasip2`.
+* For Go, use `tinygo` targeting WASI P2.
 
 ---
 

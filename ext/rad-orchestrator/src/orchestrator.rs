@@ -2,7 +2,7 @@ pub(crate) mod reasoning;
 pub(crate) mod runner;
 
 use crate::types::{Dag, OrchestratorState, RasCoreEvent, RasRpcCommand};
-use reasoning::{RawEvent, debug_enabled, handle_content_token};
+use reasoning::{RawEvent, handle_content_token, thinking_enabled};
 use runner::{call_host, handle_done, trim_large_output};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -42,7 +42,7 @@ fn handle_human_input(text: &str) -> Result<(), String> {
         text: text.to_string(),
     })?;
 
-    if debug_enabled() {
+    if thinking_enabled() {
         let _ = call_host(RasRpcCommand::WriteStdout {
             text: "\x1b[36m[Thinking...]\x1b[0m\n".to_string(),
         });
@@ -142,14 +142,14 @@ pub fn handle_event(event: RasCoreEvent) -> Result<(), String> {
 
                 if let Some(ref reasoning) = raw.reasoning_chunk {
                     if !state.is_reasoning {
-                        if debug_enabled() {
+                        if thinking_enabled() {
                             let _ = call_host(RasRpcCommand::WriteStdout {
                                 text: "\n\x1b[2m[Thinking]\x1b[0m\n".to_string(),
                             });
                         }
                         state.is_reasoning = true;
                     }
-                    if debug_enabled() {
+                    if thinking_enabled() {
                         let _ = call_host(RasRpcCommand::WriteStdout {
                             text: format!("\x1b[2m{reasoning}\x1b[0m"),
                         });

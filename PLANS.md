@@ -50,6 +50,80 @@
 - [✅] Phase 56: Performance Audit — wasmtime Compile Cache & MCP Tool-List Caching (v0.61.0)
 - [✅] Phase 57: Legacy-Artifact Cleanup — Dead Built-in-Tool Fallback & Superseded MCP-Spawn RPC Subsystem (v0.62.0)
 - [✅] Phase 58: Skills — Autonomously-Discoverable Markdown Tool Definitions (v0.63.0)
+- [✅] Phase 59: Documentation Audit & Codebase Synchronization (v0.64.0)
+- [✅] Phase 60: Architecture Design & Codebase Alignment Re-verification (v0.65.0)
+- [✅] Phase 61: Fix False-Positive [FAILED] Tool Initialization Status for Non-MCP Extensions (v0.66.0)
+- [✅] Phase 62: Make LLM Thinking Process Display Independent of RAD_DEBUG (v0.67.0)
+- [🔄] Phase 63: Release Build, Local Installation & Push to Main (v0.68.0)
+
+---
+
+## 🛠️ Short-Term Plan: Phase 63
+
+### 💡 Current AWU Status
+- [🔄] AWU 938: Release Build, Local Installation & Push to Main (In Progress)
+
+### 📝 AWU Details
+
+#### AWU 938: Release Build, Local Installation & Push to Main
+- **Trigger**: User requested local installation and pushing current changes to git remote repository.
+- **Scope**: `Cargo.toml`, `PLANS.md`, Git repository.
+- **Definition of Done (DoD)**:
+  - Run `./scripts/build_all.sh` to compile WASM components and install `rad` locally.
+  - Commit all modified files with a clear commit message.
+  - Push changes to git remote (`main` branch).
+- **Result**: In Progress.
+
+---
+
+## 🛠️ Short-Term Plan: Phase 62
+
+### 💡 Current AWU Status
+- [✅] AWU 937: Make LLM Thinking Process Display Independent of `RAD_DEBUG` (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 937: Make LLM Thinking Process Display Independent of `RAD_DEBUG`
+- **Trigger**: User requested displaying LLM thinking/reasoning process text without requiring `RAD_DEBUG=1`.
+- **Scope**: `ext/rad-orchestrator/src/orchestrator/reasoning.rs`, `ext/rad-orchestrator/src/orchestrator.rs`, `ext/rad-orchestrator/src/orchestrator/runner/done.rs`, `PLANS.md`.
+- **Definition of Done (DoD)**:
+  - Thinking process display is enabled by default independently of `RAD_DEBUG`.
+  - Display can be suppressed if explicitly set via `RAD_SHOW_THINKING=0` or `RAD_HIDE_THINKING=1`.
+  - All workspace unit tests, clippy checks (`-D warnings`), and `./scripts/build_all.sh` pass cleanly.
+- **Result**: Success. Updated `thinking_enabled()` in `ext/rad-orchestrator/src/orchestrator/reasoning.rs` so that thinking traces and markers default to being shown. Added support for explicit opt-out via `RAD_SHOW_THINKING=0` or `RAD_HIDE_THINKING=1`. Added unit tests in `reasoning.rs`. Verified all workspace tests, zero-warning clippy audit, and clean `./scripts/build_all.sh` installation.
+
+---
+
+## 🛠️ Short-Term Plan: Phase 61
+
+### 💡 Current AWU Status
+- [✅] AWU 936: Fix False-Positive `[FAILED]` Tool Initialization Status for Non-MCP Extensions (`skill-tool-provider`) (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 936: Fix False-Positive `[FAILED]` Tool Initialization Status for Non-MCP Extensions (`skill-tool-provider`)
+- **Trigger**: Launching `rad` without any custom skills defined in `.agents/skills` or `~/.rad/skills` outputs misleading `[FAILED] Extension 'skill-tool-provider' initialized with 0 tools. See [MCP Diagnostic] lines above for the actual cause.`, mistaking empty skill discovery for a failed MCP initialization.
+- **Scope**: `src/orchestrator/runner/runtimes.rs`, `PLANS.md`.
+- **Definition of Done (DoD)**:
+  - `runtimes.rs` distinguishes between `mcp-tool-provider` (where 0 tools indicates MCP server failure/misconfiguration) and other tool-provider extensions like `skill-tool-provider` (where 0 tools is a normal state when no skills are defined).
+  - Non-MCP tool provider extensions initializing with 0 tools print `[OK] Extension '<name>' initialized with 0 tools` in green instead of `[FAILED]` in red with MCP diagnostic hints.
+  - All workspace tests and `cargo clippy --workspace -- -D warnings` pass cleanly.
+- **Result**: Success. Updated `src/orchestrator/runner/runtimes.rs` to check `ext.name == "mcp-tool-provider"` before reporting a 0-tool `[FAILED]` error with MCP diagnostics. Non-MCP tool providers like `skill-tool-provider` now output `[OK] Extension 'skill-tool-provider' initialized with 0 tools` when no local skills are present. Verified clean `cargo check --workspace`, zero-warning `cargo clippy --workspace -- -D warnings`, and full workspace test suite pass.
+
+
+### 💡 Current AWU Status
+- [✅] AWU 935: Comprehensive Re-verification of Basic Architecture Design & Implementation (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 935: Comprehensive Re-verification of Basic Architecture Design & Implementation
+- **Trigger**: User requested a fundamental re-verification starting from the basic architecture design (`ARCHITECTURE.md` and related design policies).
+- **Scope**: `ARCHITECTURE.md`, `wit/rad.wit`, `src/`, `ext/`, `models/`, `scripts/`, `PLANS.md`.
+- **Definition of Done (DoD)**:
+  - Perform thorough verification comparing basic architecture specification (`ARCHITECTURE.md`) against actual codebase implementation.
+  - Run mechanical audit checks (`cargo check`, `cargo clippy --workspace -- -D warnings`, `cargo test`, `./scripts/build_all.sh`).
+  - Document verification findings, structural compliance, and any discrepancies or confirming evidence in a structured report.
+- **Result**: Success. Verified strict alignment between `ARCHITECTURE.md` specification and physical implementation across all 6 Wasm extension crates, Trait-based Core subsystems, IPC contract in `wit/rad.wit` (27 RPC variants, zero legacy artifacts), process group (PGID) management, single capability configuration (`~/.rad/config.json`), and error handling workflows. Mechanical audit passed: `cargo check --workspace` clean, `cargo clippy --workspace -- -D warnings` clean, full workspace test suite passed cleanly.
 
 ---
 
@@ -105,6 +179,30 @@ Trigger/Fix/Result detail once work actually starts on it.
 - **Scope**: `src/command.rs`, `src/command/handlers.rs`, `src/command/compact.rs` (new), `src/command/compact/tests.rs` (new), `src/orchestrator/runner/runtimes.rs`, `src/orchestrator/runner/runtimes/tests.rs` (new), `src/wasm/rpc_meta.rs`, `ext/rad-orchestrator/src/llm.rs`, `models/src/dag.rs`, `src/dag/tests.rs`, `wit/rad.wit`, `tests/command_tests.rs`, `README.md`, `PLANS.md`.
 - **Definition of Done (DoD)**: All tests + Clippy (`-D warnings`) pass, native and `wasm32-wasip2`.
 - **Result**: Success. New tests: 2 `merge_nodes` `current_node_id` tests, 1 role-based-lookup test (registers a `context-tools`-role extension under a different name and confirms resolution), 3 `/compact` tests (too-few-messages no-op, missing-extension error, and a full end-to-end run through the real `context_tools.wasm` that actually reduces DAG node count). `./scripts/build_all.sh` clean end-to-end.
+
+---
+
+## 🛠️ Short-Term Plan: Phase 59
+
+### 💡 Current AWU Status
+- [✅] AWU 934: Documentation & Template Alignment with Current Codebase Architecture (Result: Success)
+
+### 📝 AWU Details
+
+#### AWU 934: Documentation & Template Alignment with Current Codebase Architecture
+- **Trigger**: User requested an audit to ensure `README.md`, `ARCHITECTURE.md`, `EXTENSIONS.md`, and all project documentation are fully consistent with the codebase.
+- **Audit Findings**:
+  1. `README.md` §4.3 references `cd ext/openai-orchestrator` (renamed to `ext/rad-orchestrator`).
+  2. `ARCHITECTURE.md` §1 diagram omits `skill-tool-provider` and `context-tools` micro-extensions; §3.2.3 `ras-rpc-command` variant listing omits `list-dir`, `get-active-llm-profile`, `get-extension-config`, `generate-llm-stream`, `call-extension`, `log-traced-event`; §4.2 example config references obsolete extension names (`openai-orchestrator`), obsolete `wasm32-wasip1` target, and obsolete `"rpc_allow"` permission.
+  3. `EXTENSIONS.md` §2 claims single `rad-extension` world (now multiple worlds: `rad-extension`, `rad-orchestrator`, `rad-security-guard`, `rad-tool-provider`); §3 lists deleted variants `spawn-mcp-server / send-mcp-request` and omits newer variants; §4 lists obsolete `"rpc_allow"`; §5 step 4 recommends `wasm32-wasip1` instead of `wasm32-wasip2`.
+  4. Template WIT files (`templates/rust/wit/rad.wit`, `templates/go/wit/rad.wit`) contain deleted `spawn-mcp-server` variant and lack `list-dir`, etc.
+  5. Template `README.md` files (`templates/rust/README.md`, `templates/go/README.md`) reference `wasm32-wasip1` target and `"rpc_allow"`.
+- **Scope**: `README.md`, `ARCHITECTURE.md`, `EXTENSIONS.md`, `templates/rust/README.md`, `templates/rust/wit/rad.wit`, `templates/go/README.md`, `templates/go/wit/rad.wit`, `PLANS.md`.
+- **Definition of Done (DoD)**:
+  - All identified documentation discrepancies resolved.
+  - Template `rad.wit` files synchronized with `wit/rad.wit`.
+  - All workspace tests and `./scripts/build_all.sh` pass cleanly without errors or Clippy warnings.
+- **Result**: Success. Updated `README.md`, `ARCHITECTURE.md`, and `EXTENSIONS.md`. Synchronized WIT contracts in `templates/rust/wit/rad.wit` and `templates/go/wit/rad.wit` with `wit/rad.wit`. Updated Rust and Go template READMEs to reference `wasm32-wasip2` and removed obsolete `rpc_allow`. Verified compilation of `templates/rust` (`cargo check --target wasm32-wasip2`), clean workspace tests (`cargo test --workspace -- --test-threads=1`), and Clippy audit (`cargo clippy --workspace -- -D warnings`).
 
 ---
 

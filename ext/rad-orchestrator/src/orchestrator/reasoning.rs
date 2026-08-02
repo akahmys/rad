@@ -2,10 +2,26 @@ use crate::call_host;
 use crate::types::{OrchestratorState, RasRpcCommand};
 
 /// Reasoning trace markers ([Thinking...]/[Thought End]) and the dimmed
-/// `<thought>` content itself are silent by default; set `RAD_DEBUG=1` to
-/// show them alongside the final answer.
-pub(crate) fn debug_enabled() -> bool {
-    std::env::var("RAD_DEBUG").is_ok()
+/// `<thought>` content itself are shown by default.
+/// Set `RAD_SHOW_THINKING=0` or `RAD_HIDE_THINKING=1` to suppress them.
+pub(crate) fn thinking_enabled() -> bool {
+    if let Ok(val) = std::env::var("RAD_SHOW_THINKING") {
+        if val == "0" || val.eq_ignore_ascii_case("false") {
+            return false;
+        }
+        if val == "1" || val.eq_ignore_ascii_case("true") {
+            return true;
+        }
+    }
+    if let Ok(val) = std::env::var("RAD_HIDE_THINKING")
+        && (val == "1" || val.eq_ignore_ascii_case("true"))
+    {
+        return false;
+    }
+    if std::env::var("RAD_DEBUG").is_ok() {
+        return true;
+    }
+    true
 }
 
 #[derive(serde::Deserialize)]
@@ -45,7 +61,7 @@ pub(crate) struct RawEvent {
 
 pub(crate) fn handle_content_token(state: &mut OrchestratorState, content: &str) {
     if state.is_reasoning && !content.contains("<thought>") && !content.contains("</thought>") {
-        if debug_enabled() {
+        if thinking_enabled() {
             let _ = call_host(RasRpcCommand::WriteStdout {
                 text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
             });
@@ -70,7 +86,7 @@ fn handle_thought_start_tag(state: &mut OrchestratorState, text: &str) -> String
     if let Some(pos) = text.find("<thought>") {
         let before = &text[..pos];
         if !before.is_empty() {
-            if state.is_reasoning && debug_enabled() {
+            if state.is_reasoning && thinking_enabled() {
                 let _ = call_host(RasRpcCommand::WriteStdout {
                     text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
                 });
@@ -80,7 +96,7 @@ fn handle_thought_start_tag(state: &mut OrchestratorState, text: &str) -> String
             });
             state.assistant.push_str(before);
         }
-        if debug_enabled() {
+        if thinking_enabled() {
             let _ = call_host(RasRpcCommand::WriteStdout {
                 text: "\n\x1b[2m[Thinking]\x1b[0m\n".to_string(),
             });
@@ -96,14 +112,14 @@ fn handle_reasoning_text(state: &mut OrchestratorState, text: &str) {
         if let Some(pos) = text.find("</thought>") {
             let thought_content = &text[..pos];
             if !thought_content.is_empty() {
-                if debug_enabled() {
+                if thinking_enabled() {
                     let _ = call_host(RasRpcCommand::WriteStdout {
                         text: format!("\x1b[2m{thought_content}\x1b[0m"),
                     });
                 }
                 state.reasoning_buffered.push_str(thought_content);
             }
-            if debug_enabled() {
+            if thinking_enabled() {
                 let _ = call_host(RasRpcCommand::WriteStdout {
                     text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
                 });
@@ -118,11 +134,46 @@ fn handle_reasoning_text(state: &mut OrchestratorState, text: &str) {
             }
         }
     } else {
-        if debug_enabled() {
+        if thinking_enabled() {
             let _ = call_host(RasRpcCommand::WriteStdout {
                 text: format!("\x1b[2m{text}\x1b[0m"),
             });
         }
         state.reasoning_buffered.push_str(text);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_thinking_enabled_defaults_to_true() {
+        // SAFETY: Test execution in single-threaded context.
+        unsafe {
+            std::env::remove_var("RAD_SHOW_THINKING");
+            std::env::remove_var("RAD_HIDE_THINKING");
+            std::env::remove_var("RAD_DEBUG");
+        }
+
+        assert!(thinking_enabled());
+    }
+
+    #[test]
+    fn test_thinking_enabled_suppressed_by_env() {
+        // SAFETY: Test execution in single-threaded context.
+        unsafe {
+            std::env::remove_var("RAD_HIDE_THINKING");
+            std::env::remove_var("RAD_DEBUG");
+
+            std::env::set_var("RAD_SHOW_THINKING", "0");
+            assert!(!thinking_enabled());
+
+            std::env::remove_var("RAD_SHOW_THINKING");
+            std::env::set_var("RAD_HIDE_THINKING", "1");
+            assert!(!thinking_enabled());
+
+            std::env::remove_var("RAD_HIDE_THINKING");
+        }
     }
 }

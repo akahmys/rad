@@ -36,14 +36,7 @@ interface types {
         human-input-received(string),
         task-completed,
         rehydrate(list<pending-tool-call-info>),
-        mcp-response(mcp-response-payload),
         llm-connector-event(string),
-    }
-
-    record mcp-response-payload {
-        call-id: string,
-        name: string,
-        message: string,
     }
 
     record tool-call-request {
@@ -79,6 +72,7 @@ interface types {
 
     variant ras-rpc-command {
         file-read(string),
+        list-dir(string),
         file-write(file-write-payload),
         file-edit-patch(file-patch-payload),
         spawn-bash-process(string),
@@ -93,21 +87,33 @@ interface types {
         write-stdout(string),
         complete-task,
         get-dag,
+        get-active-llm-profile,
+        get-extension-config,
         ask-human-approval(string),
         report-token-usage(report-token-usage-payload),
-        spawn-mcp-server(spawn-mcp-server-payload),
-        send-mcp-request(send-mcp-request-payload),
         get-repo-map,
         get-tools,
         execute-tool(execute-tool-payload),
         generate-llm-stream(generate-llm-stream-payload),
         call-extension(call-extension-payload),
+        log-traced-event(log-traced-event-payload),
     }
 
     record call-extension-payload {
+        // Selects the target by its declared *role* (`ExtensionConfig.role`
+        // in `~/.rad/config.json`), not a literal extension name — e.g.
+        // "context-tools". Lets a caller ask for "whichever extension
+        // currently serves this role" without needing to know what a given
+        // deployment happens to have named it.
         extension-id: string,
         method: string,
         arguments: string,
+    }
+
+    record log-traced-event-payload {
+        trace-id: string,
+        module: string,
+        message: string,
     }
 
     record generate-llm-stream-payload {
@@ -120,17 +126,6 @@ interface types {
         call-id: string,
         name: string,
         arguments: string,
-    }
-
-    record spawn-mcp-server-payload {
-        name: string,
-        command: string,
-        args: list<string>,
-    }
-
-    record send-mcp-request-payload {
-        name: string,
-        message: string,
     }
 
     record file-write-payload {

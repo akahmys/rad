@@ -111,9 +111,9 @@ All filesystem and process operations requested by the AI agent are validated ag
 3. **Pillar 3: Dual-Track Feedback**: Separates technical error traces (sent to the LLM for self-correction) from clean, semantic notification strings (displayed to the user, e.g., `"Error: Model stopped because it reached the maximum output token limit. The response may be incomplete."`).
 
 ### 4.3 Building WebAssembly Extensions
-To build Wasm extensions (e.g. the default OpenAI orchestrator):
+To build Wasm extensions (e.g. the LLM orchestrator):
 ```bash
-cd ext/openai-orchestrator
+cd ext/rad-orchestrator
 cargo build --target wasm32-wasip2 --release
 ```
 The compiled WASM binary is copied to the location configured in `rad.json` (under `extensions` configuration).

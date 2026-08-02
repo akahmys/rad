@@ -36,8 +36,7 @@ To test your compiled extension, register it in your workspace's `rad.json` file
       "enabled": true,
       "permissions": {
         "fs_read_allow": ["."],
-        "fs_write_allow": ["."],
-        "rpc_allow": ["WriteStdout"]
+        "fs_write_allow": ["."]
       }
     }
   ]

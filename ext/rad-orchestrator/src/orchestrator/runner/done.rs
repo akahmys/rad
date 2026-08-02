@@ -120,9 +120,11 @@ pub(crate) fn handle_done(
 ) -> Result<(), String> {
     let state = state_guard.as_mut().ok_or("State is None in handle_done")?;
     if state.is_reasoning {
-        let _ = call_host(RasRpcCommand::WriteStdout {
-            text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
-        });
+        if crate::orchestrator::reasoning::thinking_enabled() {
+            let _ = call_host(RasRpcCommand::WriteStdout {
+                text: "\n\x1b[2m[Thought End]\x1b[0m\n\n".to_string(),
+            });
+        }
         state.is_reasoning = false;
     }
 
