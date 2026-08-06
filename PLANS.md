@@ -61,10 +61,101 @@
 - [✅] Phase 66: Rebuild WASM Components & Local Installation of rad Binary (v0.71.0)
 - [✅] Phase 67: Spec-First Architecture Reconciliation — ARCHITECTURE.md & README.md Realigned, L3 Recovery Implemented, FS Watcher Deleted (v0.72.0)
 - [✅] Phase 68: Repository Hygiene & Convention Audit — Authorship Rewrite, CI Workspace Fix, Rule Documents Corrected (v0.73.0)
-- [🔄] Phase 69: Microkernel Migration — Preparation & Stage 0
-- [ ] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
+- [✅] Phase 69: Microkernel Migration — Preparation & Stage 0 (v0.74.0)
+- [🔄] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
 - [ ] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8)
 - [ ] Phase 72: Microkernel Migration — DAG/UI Extraction and Author Tooling (§9 stages 9–10)
+
+---
+
+## 🛠️ Short-Term Plan: Phase 70 (Kernel Surface Alongside the Existing One)
+
+**Stages 1–2 of `ARCHITECTURE-NEXT.md` §9.** Adds the kernel's WIT package, the
+guest SDK, and the dispatch machinery — all *next to* the existing extension
+surface, which is left untouched. Nothing is ported yet; the deliverable is that
+a trivial module can be loaded and called while the six current extensions carry
+on working.
+
+Three design questions that blocked this are now settled (§3.6.7, §5.3, §5.3.1):
+`rad-abi` holds only the manifest schema, since opaque dispatch means the kernel
+never parses payloads; `rad-sdk` uses a declarative `module!` macro rather than a
+proc-macro attribute; and modules are configured in a separate `modules` array,
+so migration never has to guess whether an entry is old or new.
+
+### 💡 Current AWU Status
+- [ ] AWU 949: Add `wit/kernel.wit` and register its bindings
+- [ ] AWU 950: `rad-abi` — manifest schema
+- [ ] AWU 951: `rad-sdk` — `module!` macro and syscall wrappers
+- [ ] AWU 952: Module loading, `manifest()` reading, routing table
+- [ ] AWU 953: `dispatch.call`/`post` with cycle detection
+- [ ] AWU 954: Async wasmtime, epoch interruption, scheduler loop
+- [ ] AWU 955: `modules` config array and an echo module proving the path
+
+### 📝 AWU Details
+
+#### AWU 949: Add `wit/kernel.wit` and register its bindings
+- **Objective**: Land the kernel contract without disturbing anything.
+- **Scope**: `wit/kernel.wit` (new), `src/wasm/bindings.rs`.
+- **Context**: A seventh world across a fourth package. §2's second experiment
+  proves a *new* package cannot break existing extensions; this AWU is where that
+  claim gets exercised for real rather than in a throwaway probe.
+- **DoD**: `cargo build` succeeds, and `rad` still loads all six extensions and
+  completes a real task against the live endpoint. **If any extension fails to
+  instantiate, the §2 conclusion is wrong and the whole migration plan needs
+  revisiting** — so this is deliberately the first step.
+
+#### AWU 950: `rad-abi` — manifest schema
+- **Objective**: One shared type, agreed by guest and kernel.
+- **Scope**: `crates/rad-abi/` (new, ~2 files).
+- **Context**: The only thing both sides must agree on. Payload types stay out
+  until a second consumer actually exists (§5.3.1).
+- **DoD**: Builds for native and `wasm32-wasip2`; round-trips a manifest.
+
+#### AWU 951: `rad-sdk` — `module!` macro and syscall wrappers
+- **Objective**: Make writing a module short enough to be worth doing (§5.3).
+- **Scope**: `crates/rad-sdk/` (new, ~3 files).
+- **Context**: `macro_rules!`, not a proc macro. Generates `manifest()` from the
+  method map so `provides` cannot drift from the implementation, plus `handle()`
+  dispatch with serde on both sides, plus the `export!` wiring.
+- **DoD**: A module written against the SDK compiles to `wasm32-wasip2`, and its
+  generated `manifest()` lists exactly the declared methods.
+
+#### AWU 952: Module loading, `manifest()` reading, routing table
+- **Objective**: The kernel can find out what a module provides.
+- **Scope**: `src/wasm/` (module loader), routing table.
+- **Context**: `manifest()` must be callable before the module has any
+  capabilities — it is required to be pure (§3.2). Duplicate `provides` entries
+  are a startup error, never implicit first-wins (§3.6.8).
+- **DoD**: Loading two modules with overlapping `provides` fails at startup with
+  a message naming both.
+
+#### AWU 953: `dispatch.call`/`post` with cycle detection
+- **Objective**: The two dispatch primitives, including the anti-deadlock rule.
+- **Scope**: dispatch host implementation.
+- **Context**: `call` tracks the call stack and rejects re-entry with an explicit
+  error rather than hanging (§3.6.3); `post` queues for delivery when the target
+  is idle (§3.6.2). The kernel itself registers as a dispatch target so modules
+  reach `kernel.config` the same way they reach each other (§3.6.7).
+- **DoD**: A deliberate A→B→A `call` returns the cycle error; the same shape via
+  `post` completes.
+
+#### AWU 954: Async wasmtime, epoch interruption, scheduler loop
+- **Objective**: The execution model of §3.6.
+- **Scope**: `src/wasm/loader.rs` (Config), scheduler.
+- **Context**: `async_support` so a blocking syscall suspends only its caller;
+  `epoch_interruption` so a runaway module can be preempted, which
+  `src/esc_abort.rs`'s cooperative flag cannot do. Both confirmed present in
+  wasmtime 29.0.1. **The existing extension path must keep working under async.**
+- **DoD**: A module spinning in an infinite loop is interrupted; all 157 existing
+  tests still pass.
+
+#### AWU 955: `modules` config array and an echo module proving the path
+- **Objective**: End-to-end proof on the smallest possible module.
+- **Scope**: `src/config.rs`, `modules/echo/` (new).
+- **Context**: `#[serde(default)]` so existing configs are untouched (§3.6.7).
+- **DoD**: With `echo` configured, a `dispatch.call("echo", "echo.say", …)`
+  returns the payload — while the six extensions continue to serve a real task in
+  the same process.
 
 ---
 
@@ -87,7 +178,7 @@ whole thing throughout.
 **Do not treat `ARCHITECTURE-NEXT.md` as current.** Nothing in it is implemented.
 
 ### 💡 Current AWU Status
-- [ ] AWU 946: Verify CI is green after the workspace fix
+- [⏸] AWU 946: Verify CI is green after the workspace fix (Blocked: GitHub Actions major outage — the full CI command set passes locally, 157 tests)
 - [✅] AWU 947: Settle `net-open` vs `wasi:http` (Result: Success — keep `net-open`; WASI 0.3 deleted `wasi:io`, so importing `wasi:http` would break every module at once)
 - [✅] AWU 948: Stage 0 — dialect table in `ext/llm-connector` (Result: Success — Gemini and Azure now expressible; existing profiles verified bit-identical, end-to-end against the live llama.cpp endpoint)
 

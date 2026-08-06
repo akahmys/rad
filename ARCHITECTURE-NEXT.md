@@ -406,6 +406,24 @@ Storeが独立なため他モジュールは無傷である。
 
 `ui-repl` は他モジュールと同格であり、`term-read-line` にサスペンドしているだけである。
 
+設定は既存の `extensions` とは**別の配列**にする。移行中は両方が同時に存在するため
+(§9.1)、混ぜると「これは旧拡張か新モジュールか」を毎回判定することになる。
+
+```json
+"modules": [
+  { "name": "context", "source": "~/.rad/wasm/context.wasm", "enabled": true,
+    "config": { } }
+]
+```
+
+`#[serde(default)]` なので既存の設定ファイルは無変更で動く。旧 `extensions` にあった
+`role` と `permissions` は持たない — 役割は `manifest().provides` が申告し(§3.2)、
+権限機構は存在しない(§3.4)。
+
+`config` はカーネルが保持し、モジュールは `dispatch.call("kernel", "kernel.config", …)`
+で取得する。**カーネル自身がディスパッチ先の一つとして登録される**ため、モジュールから
+見れば他のモジュールと区別する必要がない。
+
 #### 3.6.8 ルーティングの衝突
 
 2つのモジュールが同じメソッドを `provides` に申告した場合、**起動時エラーとする**。
@@ -711,16 +729,51 @@ radだけを触る利用者に影響を与えないこと。
 pi-coding-agent の拡張はTypeScriptのプロセス内モジュールで、書く敷居が極めて低い。
 radがプラットフォームを名乗るなら、ここが勝負どころになる。
 
+`rad-sdk` が生のWITバインディングを包み、`manifest()` を生成し、payloadのserde変換を
+隠す。モジュール作者が書くのはこれだけになる。
+
 ```rust
-#[rad::module(name = "my-tools", version = "0.1.0")]
-impl MyTools {
-    #[rad::method]                        // provides に自動登録
-    fn greet(&self, req: GreetReq) -> Result<GreetRes, Error> { ... }
+rad_sdk::module! {
+    name:    "context",
+    version: "0.3.1",
+    methods: {
+        "context.optimize" => optimize,
+        "context.digest"   => digest,
+    }
 }
+
+fn optimize(req: OptimizeReq) -> Result<OptimizeRes, rad_sdk::Error> { ... }
+fn digest(req: DigestReq) -> Result<DigestRes, rad_sdk::Error> { ... }
 ```
 
-`rad-sdk` が生のWITバインディングを包み、`manifest()` をマクロで生成し、
-payloadのserde変換を隠す。`cargo xtask new-module <name>` で雛形を作る。
+マクロが生成するもの:
+
+- `manifest()` — `name` / `version` / `abi` と、`methods` のキーから導いた `provides`。
+  **手で書いた `provides` と実装がずれる余地をなくす**
+- `handle(method, payload)` — メソッド名で分岐し、payloadを `serde_json` で
+  デシリアライズして関数に渡し、戻り値をシリアライズして返す。未知のメソッドは
+  「そのメソッドは非対応」として返す(§3.5 の「粒度が細かく継続できる」検証)
+- `wit_bindgen` の `export!` 配線
+
+**宣言的マクロ (`macro_rules!`) で実装する。** 手続きマクロにすれば
+`#[rad::module]` 属性形式にできて見た目は良くなるが、proc-macroクレートと `syn` 依存が
+増える。上の形で目的は足りているので、属性形式は必要になってから検討する
+(CODING.md §3「投機的な実装をしない」)。
+
+#### 5.3.1 `rad-abi` — 共有するのは manifest だけ
+
+初版は `rad-abi` を「ディスパッチ封筒 / manifestスキーマ / 版定数」としていたが、
+**不透明ディスパッチではカーネルは payload を一切解釈しない**ため、封筒は共有物ではない。
+
+実際に両側が合意する必要があるのは **`manifest()` のスキーマひとつ**である。ゲストが
+生成し、カーネルがルーティング表を組むために読む。ここがずれると起動時に静かに壊れる。
+
+したがって `rad-abi` は manifest 型だけの小さなクレートとして始める。
+`serde` のみに依存し、native と wasm32-wasip2 の両方でビルドされる。
+
+ファーストパーティのモジュール同士が共有する payload 型(`OptimizeReq` など)は、
+**実際に2つ目の利用者が現れてから** `rad-abi` に置く。最初から置くのは、
+まだ存在しない共有のための投機である。
 
 ---
 
