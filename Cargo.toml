@@ -49,5 +49,8 @@ members = [
     "ext/skill-tool-provider",
     "ext/llm-connector",
     "models",
+    "crates/rad-abi",
+    "crates/rad-sdk",
+    "modules/echo",
     "templates/rust",
 ]

@@ -686,6 +686,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
+name = "echo-module"
+version = "0.1.0"
+dependencies = [
+ "rad-sdk",
+ "serde",
+ "wit-bindgen 0.36.0",
+]
+
+[[package]]
 name = "either"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1876,6 +1885,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rad-abi"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rad-extension-template"
 version = "0.1.0"
 dependencies = [
@@ -1898,6 +1915,16 @@ dependencies = [
  "rad-models",
  "serde",
  "serde_bytes",
+ "serde_json",
+ "wit-bindgen 0.36.0",
+]
+
+[[package]]
+name = "rad-sdk"
+version = "0.1.0"
+dependencies = [
+ "rad-abi",
+ "serde",
  "serde_json",
  "wit-bindgen 0.36.0",
 ]

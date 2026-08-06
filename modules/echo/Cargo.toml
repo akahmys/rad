@@ -1,0 +1,14 @@
+[package]
+name = "echo-module"
+version = "0.1.0"
+edition = "2024"
+
+# The smallest possible module. Its job is to prove the path end to end —
+# SDK to wasm component to kernel — not to be useful.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+serde = { workspace = true }
+wit-bindgen = { workspace = true }

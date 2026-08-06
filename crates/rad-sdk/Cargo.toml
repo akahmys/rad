@@ -1,0 +1,12 @@
+[package]
+name = "rad-sdk"
+version = "0.1.0"
+edition = "2024"
+
+# The only crate a module author depends on. Wraps the raw WIT bindings so that
+# writing a module is a `module!` invocation and a set of plain functions.
+[dependencies]
+rad-abi = { path = "../rad-abi" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

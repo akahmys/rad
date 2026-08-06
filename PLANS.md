@@ -84,8 +84,8 @@ so migration never has to guess whether an entry is old or new.
 
 ### 💡 Current AWU Status
 - [✅] AWU 949: Add `wit/kernel/kernel.wit` and register its bindings (Result: Success — §2's claim holds on the real build; all six extensions still load and complete a live task)
-- [ ] AWU 950: `rad-abi` — manifest schema
-- [ ] AWU 951: `rad-sdk` — `module!` macro and syscall wrappers
+- [✅] AWU 950: `rad-abi` — manifest schema (Result: Success — manifest types only; builds native and wasm32-wasip2)
+- [✅] AWU 951: `rad-sdk` — `module!` macro (Result: Success — split into `routes!`/`module!` so routing stays natively testable; a real module builds to a component exporting `manifest`/`handle`)
 - [ ] AWU 952: Module loading, `manifest()` reading, routing table
 - [ ] AWU 953: `dispatch.call`/`post` with cycle detection
 - [ ] AWU 954: Async wasmtime, epoch interruption, scheduler loop
@@ -117,7 +117,10 @@ so migration never has to guess whether an entry is old or new.
 - **Scope**: `crates/rad-abi/` (new, ~2 files).
 - **Context**: The only thing both sides must agree on. Payload types stay out
   until a second consumer actually exists (§5.3.1).
-- **DoD**: Builds for native and `wasm32-wasip2`; round-trips a manifest.
+- **Result**: `Manifest` + `ManifestError`, six tests. Kept to manifest types
+  only, as decided in §5.3.1. One test pins `ABI_VERSION` against the WIT
+  package version — they live in separate files with nothing linking them, so
+  silent divergence is the failure worth guarding.
 
 #### AWU 951: `rad-sdk` — `module!` macro and syscall wrappers
 - **Objective**: Make writing a module short enough to be worth doing (§5.3).
@@ -125,8 +128,22 @@ so migration never has to guess whether an entry is old or new.
 - **Context**: `macro_rules!`, not a proc macro. Generates `manifest()` from the
   method map so `provides` cannot drift from the implementation, plus `handle()`
   dispatch with serde on both sides, plus the `export!` wiring.
-- **DoD**: A module written against the SDK compiles to `wasm32-wasip2`, and its
-  generated `manifest()` lists exactly the declared methods.
+- **Result**: `modules/echo` compiles to a component whose exports are exactly
+  `manifest` and `handle` (verified by instantiating it under wasmtime and
+  reading the component type). `provides` is derived from the method map, so it
+  cannot drift from the implementation.
+  Two things forced design changes. The SDK cannot own the WIT bindings and
+  re-export `export!`: wit-bindgen emits `#[export_name]` shims that edition
+  2024 requires to be `#[unsafe(export_name)]`, and across a crate boundary
+  they land where nothing can accept them — a hard error, not a lint. Bindings
+  are generated in the module's crate instead, taking a *path* to the single
+  `wit/kernel/kernel.wit` rather than a copy, so no drift is possible. And the
+  macro is split in two: `routes!` generates manifest/handle and is testable
+  natively, `module!` adds the bindings and can only build on-target.
+  Also observed: a module imports only what it uses — `echo` touches neither
+  syscall nor dispatch, and its component declares no `rad:kernel` imports at
+  all. The kernel's linker must therefore tolerate modules that import nothing
+  from it (relevant to AWU 952).
 
 #### AWU 952: Module loading, `manifest()` reading, routing table
 - **Objective**: The kernel can find out what a module provides.
