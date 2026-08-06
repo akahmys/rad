@@ -74,7 +74,6 @@ fn test_security_verification_hook_rejection() {
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
-        ..Default::default()
     };
 
     let mut config = Config {

@@ -87,7 +87,6 @@ fn run_hitl_task(
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
-        ..Default::default()
     };
 
     config.extensions = vec![

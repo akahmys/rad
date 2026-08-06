@@ -27,7 +27,6 @@ fn test_async_task_cancellation_on_rollback() {
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
-        ..Default::default()
     };
 
     let mut config = rad::config::Config::default();

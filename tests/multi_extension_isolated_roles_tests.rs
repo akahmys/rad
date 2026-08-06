@@ -108,7 +108,6 @@ fn test_multi_extension_isolated_roles() {
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
-        ..Default::default()
     };
 
     // Instantiate with isolated roles (Orchestrator, Security Guard, and Tool Provider)

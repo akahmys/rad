@@ -93,7 +93,6 @@ fn test_security_guard_blocklist_is_opt_in_and_blocks_nothing_when_unconfigured(
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
-        ..Default::default()
     };
 
     // Same shape as `test_multi_extension_isolated_roles`, but the

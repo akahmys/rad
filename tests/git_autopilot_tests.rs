@@ -77,7 +77,6 @@ fn setup_autopilot_orchestrator(
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
-        ..Default::default()
     };
 
     let conn_perms = PermissionConfig {

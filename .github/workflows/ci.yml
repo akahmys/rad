@@ -40,11 +40,44 @@ jobs:
           toolchain: stable
           components: clippy
 
+      # `--workspace` is required, not decorative: without it cargo selects only
+      # the root package, silently skipping every test in `ext/*` and `models/`
+      # — 52 of 149, about a third of the suite. See README §2.3.
       - name: Cargo check
-        run: cargo check --all-targets
+        run: cargo check --workspace --all-targets
 
       - name: Cargo clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Cargo test
-        run: cargo test --all-targets
+        run: cargo test --workspace
+
+  wasm-extensions:
+    name: Build & Lint Wasm Extensions
+    needs: check-secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-wasip2
+          components: clippy
+
+      # Extensions ship as wasm32-wasip2 components. A native-only check misses
+      # target-specific breakage, so lint and build them for the real target.
+      - name: Clippy (wasm32-wasip2)
+        run: |
+          cargo clippy --target wasm32-wasip2 \
+            -p rad-orchestrator -p llm-connector -p security-guard \
+            -p mcp-tool-provider -p skill-tool-provider -p context-tools \
+            -- -D warnings
+
+      - name: Build (wasm32-wasip2)
+        run: |
+          cargo build --target wasm32-wasip2 \
+            -p rad-orchestrator -p llm-connector -p security-guard \
+            -p mcp-tool-provider -p skill-tool-provider -p context-tools

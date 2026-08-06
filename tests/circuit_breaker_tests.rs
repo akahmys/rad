@@ -51,7 +51,9 @@ fn tool_call_turn(call_id: &str, command: &str) -> String {
 }
 
 fn text_turn(content: &str) -> String {
-    format!("data: {{\"choices\":[{{\"delta\":{{\"content\":\"{content}\"}}}}]}}\n\ndata: [DONE]\n\n")
+    format!(
+        "data: {{\"choices\":[{{\"delta\":{{\"content\":\"{content}\"}}}}]}}\n\ndata: [DONE]\n\n"
+    )
 }
 
 /// Runs one task to completion against the mocked LLM. `turns` is in
@@ -99,7 +101,6 @@ fn run_task(turns: Vec<String>) -> (Arc<Mutex<Dag>>, Arc<Mutex<Vec<String>>>) {
             allow_network: true,
             allow_domains: vec!["127.0.0.1".to_string()],
         }),
-        ..Default::default()
     };
 
     config.extensions = vec![
