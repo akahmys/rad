@@ -44,7 +44,20 @@ graph TD
 The Core focuses on executing low-level physical operations (primitives) on the OS, filesystem, and network streams, as well as detecting and dispatching physical events from each subsystem.
 * **Statelessness**: The Core does not maintain or interpret any logical state related to semantics, such as prompts or conversation history. However, it manages the physical `DAG` representing history nodes to allow context preservation.
 * **Trait-based Subsystem Isolation**: To keep the implementation clean and modular, all physical operations are encapsulated under internal Rust Traits (e.g., `FsSubsystem`, `ProcessSubsystem`).
-* **API Gateway & Capability Check**: Wasm resource handle instantiation requests (like `open-file`, `open-process`, `execute-tool`) pass through a single gateway that enforces the whitelists/blocklists configured in `rad.json` before returning resource handles to Wasm guests.
+* **API Gateway & Capability Check**: Wasm resource-instantiation and RPC requests pass through a single gateway before any handle is returned. Two distinct checks apply, and they do **not** cover the same set of calls:
+  * **Capability mask** (`permissions::check_permissions`, driven by `rad.json`): applied to calls that name a physical resource — `open-file`/`file-read`/`file-write`/`list-dir`, `open-process`/`spawn-bash-process`, `open-http-stream`. This is what applies `fs_read_allow`/`fs_write_allow`/`execution`/`network` **to calls that come through this gateway** — see the enforcement note below.
+  * **Security-guard hook** (`verify_rpc_exclude`): applied additionally, delegating an approve/deny decision to the `security` role extension.
+  * `execute-tool` is deliberately **only** subject to the security-guard hook, not the capability mask: `PermissionConfig` has no dimension describing "which tools may be invoked", so a mask check there would be structurally vacuous. Introducing a real per-extension tool allowlist would be a new permission dimension, not a fix to this layer.
+
+> [!IMPORTANT]
+> **What the capability mask actually enforces.** The mask governs calls that pass through the host RPC surface. It is not a containment boundary, for two independent reasons — both verified against the running system, not inferred:
+>
+> 1. **Extensions can bypass it with `std::fs`.** `src/wasm/loader.rs` gives every extension WASI preopens for `.` and `$HOME` with `DirPerms::all()` / `FilePerms::all()`. An extension that calls `std::fs` directly reads and writes the entire home directory without touching the gateway, the mask, or the security guard. This was demonstrated by adding three lines to `mcp-tool-provider` and observing the write succeed. Every extension `rad` ships routes through the RPC surface by convention, and the mask constrains those calls — but nothing forces that choice.
+> 2. **Tools do not run inside the sandbox at all.** Tools come from MCP servers, which are separate OS processes holding the user's full privileges. `core-utilities-mcp` calls `std::fs::write` in its own process; `rad` never observes those writes, so no mask can apply to them.
+>
+> What *is* genuinely enforced is the WebAssembly sandbox itself — an extension cannot reach outside its preopens, corrupt host memory, or call a host function the world does not export — together with process-group cleanup (§2.1). Treat `fs_read_allow`/`fs_write_allow` as a guard rail for cooperating extensions and a statement of intent, not as a security boundary against hostile code.
+>
+> Narrowing the preopens would make the mask real; no shipped extension currently calls `std::fs`, so the change is plausible but untested.
 
 ### 1.2 Extension Responsibility: Policy Layer
 The Extension subscribes to the event stream from the Core and makes all logical control decisions.
@@ -52,7 +65,8 @@ The Extension subscribes to the event stream from the Core and makes all logical
 * **Unified Capability-Centric Architecture (UCCA)**: The Wasm guest interacts with the host through strongly-typed resource handles (`stream-handle`, `file-handle`, `execution-handle`) instead of generic JSON messages. For example, reading logs or process stdout is done by pulling bytes through a `stream-handle`, preventing unwanted side-effects.
 * **Statelessness (v0.2.2+)**: Instead of holding chat history in memory-based state arrays, the Extension fetches history dynamically from Core's DAG (`GetDag`) to ensure robustness across restarts.
 * **Conversation/Thought Context Construction**: The LLM Orchestrator walks the DAG from `current_node_id`, deserializes each node into a `Message`, filters orphaned tool-call nodes, and assembles the system prompt. This step is mechanical (no judgment about what to keep or discard) and stays tightly coupled to the DAG data model, so it remains in the Orchestrator rather than being delegated.
-* **Compaction**: All policy decisions about what to keep, discard, or summarize once history grows too large are delegated to the `context-tools` extension via RPC. `context-tools` receives the assembled message list plus a length/threshold parameter and returns a trimmed result. Currently this is count-based windowing only (keep the first message plus the most recent ones); an earlier role-based squashing pass that collapsed consecutive `tool` messages was removed because it could silently drop a tool result still referenced by a preceding `assistant` message's `tool_calls` array, producing API-invalid requests. Any future compaction strategy (e.g. token-aware or LLM-based summarization) must preserve the invariant that every `tool_calls` entry keeps its matching `tool` reply, and stays isolated in `context-tools` rather than the Orchestrator's control loop.
+* **Compaction**: All policy decisions about what to keep, discard, or summarize once history grows too large are delegated to the `context-tools` extension via RPC. `context-tools` receives the assembled message list plus count/size budgets and returns a trimmed result. Its `optimize` entry point applies, in order: size-aware stale tool-result clearing, then history windowing constrained by *both* a message-count budget and a character budget derived from the active endpoint's real context window (whichever is more restrictive), with lexical relevance-based retention allowed to reinstate an earlier turn that the raw window would have dropped. An earlier role-based squashing pass that collapsed consecutive `tool` messages was removed because it could silently drop a tool result still referenced by a preceding `assistant` message's `tool_calls` array, producing API-invalid requests. Any future compaction strategy (e.g. LLM-based summarization) must preserve the invariant that every `tool_calls` entry keeps its matching `tool` reply, and stays isolated in `context-tools` rather than the Orchestrator's control loop.
+* **Budget estimation is approximate by design**: the character budget is derived from a `chars/4` approximation rather than a real tokenizer (exact per-backend tokenization was evaluated and deliberately declined — it would only cover some backends, making budgeting inconsistent across profiles, for a hot-path HTTP round-trip on every turn). The approximation reserves an output allowance plus a safety margin, so it normally *under*-uses the budget. Because it is an approximation, it can still be wrong in the other direction (unusual tokenization, e.g. CJK or dense code), which is precisely what §5.1.2's reactive L3 recovery exists to catch. Proactive budgeting and reactive recovery are complementary, not redundant.
 
 ### 1.3 Multi-Extension Cooperation & Responsibility Isolation
 To maximize modularity and robustness, `rad` supports chaining multiple extensions simultaneously. Instead of a single monolithic extension, policies are isolated into micro-extensions:
@@ -62,7 +76,7 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
    - **Isolation**: Focuses strictly on token completion and reasoning, calling tools abstractly via Core APIs.
 2. **Security Guard (Validation / verify-rpc)**
    - **Responsibility**: Implements deep inspect rules to approve or deny resource instantiation requests before the host returns the handle. The blocklist (path/command substring patterns) is config-driven, not hardcoded: on first `verify_rpc` call it fetches its own `ExtensionConfig.config` (`~/.rad/config.json`) via the generic `GetExtensionConfig` RPC and caches it for the life of the component instance. No configured patterns means the policy blocks nothing — it's opt-in, not a fallback demo.
-   - **Isolation**: Even if the Orchestrator is hijacked via prompt injection, the independent Security Guard Wasm prevents damage (sandboxed verification).
+   - **Isolation**: Runs as a separate component, so its decision is not reachable from the Orchestrator's own logic — a prompt-injected Orchestrator cannot rewrite the rules it is judged by. It is **not** a containment boundary, however: it only sees calls that arrive on the host RPC surface, and both `std::fs` inside an extension and MCP server processes bypass that surface entirely (see the enforcement note in §1.1). Its practical value is catching an injected Orchestrator that is still cooperating with the RPC contract, not stopping code that has decided not to.
 3. **Tool/MCP Provider (Capability Bridging)**
    - **Responsibility**: Discovers, parses, and resolves dynamic schemas for external tools (e.g., via MCP servers) and marshals tool calls/replies.
 4. **Skill Provider (`skill-tool-provider`)**
@@ -74,7 +88,7 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
 6. **Context Compactor (`context-tools`)**
    - **Responsibility**: Owns all context-size-reduction policy once the Orchestrator has assembled the raw message list — trimming it to a configurable history-length budget (count-based windowing) and/or a character budget derived from the active LLM endpoint's real context window (size-based windowing), whichever is more restrictive. Also exposes auxiliary context-gathering utilities (`get-repo-map`, which delegates to the same semantic/tree-sitter repo map every other extension gets via the shared `GetRepoMap` RPC).
    - **Isolation**: Stateless and pure — takes a message list (and thresholds) in, returns a possibly-shortened list and a human-readable summary out. It does not read the DAG or hold session state itself. Failure degrades gracefully: the Orchestrator falls back to sending the uncompacted list rather than blocking the turn, since compaction is a quality optimization, not a correctness requirement.
-   - **WIT contract**: Shares the same `radcomp:extension` WIT package and full `ras-rpc-command` surface as every other extension (unified in AWU 915's follow-up from a bespoke single-variant `command(string)` type whose raw-shell host bridge bypassed `PermissionConfig` entirely), so its declared `fs_read_allow`/`fs_write_allow` permissions are now actually enforced like any other extension's.
+   - **WIT contract**: Shares the same `radcomp:extension` WIT package and full `ras-rpc-command` surface as every other extension (unified in AWU 915's follow-up from a bespoke single-variant `command(string)` type whose raw-shell host bridge bypassed `PermissionConfig` entirely), so its declared `fs_read_allow`/`fs_write_allow` permissions are applied at the gateway on the same terms as any other extension's — subject to the limits in §1.1's enforcement note.
 
 ---
 
@@ -92,8 +106,8 @@ The Core tracks and measures physical states through its subsystems and dispatch
    * **Tracked Data**: Process Group ID (PGID) list of child processes spawned by the Core, last activity time of standard I/O (`stdout`/`stderr`) for each PGID, and OS exit codes (`ExitStatus`).
    * **Events**: Process spawns, stdout/stderr data reception, and process exits.
 3. **Filesystem State (FS Subsystem)**
-   * **Tracked Data**: File addition, modification, and deletion events within the workspace (using crates like `notify`), and the index of snapshots under `.rad/snapshots/`.
-   * **Events**: Physical changes on the filesystem.
+   * **Tracked Data**: The index of snapshots under `.rad/snapshots/`, used for rollback (§5.1.1 Pillar 2).
+   * **Events**: None. The FS subsystem is *passive*: it performs reads/writes/snapshots on demand and does not watch the workspace. A `notify`-based watcher emitting `FileChanged` events was previously specified here and existed as code, but nothing ever consumed those events, so it was removed rather than left as an unreachable subsystem. Detecting externally-modified files is instead handled where it actually matters — a content-addressed edit whose expected text no longer matches fails loudly with a diagnostic, rather than silently applying to stale content.
 4. **Graph State (DAG Subsystem)**
    * **Tracked Data**: Topology of the Directed Acyclic Graph (DAG) representing the session history (LLM thought paths, user instructions, tool results, etc.), and the current node identifier.
    * **Events**: Node creation, editing, deletion, and current node transitions.
@@ -143,6 +157,13 @@ pub enum RasCoreEvent {
     Rehydrate {
         active_calls: Vec<PendingToolCallInfo>,
     },
+    /// A decoded event from the LLM Connector extension (content token,
+    /// reasoning token, tool-call delta, completion/usage, or error),
+    /// carried as a JSON string so the Core stays unaware of model-specific
+    /// shapes. This is the Orchestrator's primary input during a turn.
+    LlmConnectorEvent {
+        event: String,
+    },
 
     // === Process Monitoring (PTY / Bash) ===
     /// A new process group was spawned
@@ -169,11 +190,6 @@ pub enum RasCoreEvent {
     },
 
     // === Passive Sensors & Exception Detection ===
-    /// A file in the workspace was modified
-    FileChanged {
-        path: PathBuf,
-        change_type: String, // "create" | "modify" | "remove"
-    },
     /// A timeout occurred for the specified target
     StreamTimeout {
         target: String, // "llm" | "process_<pgid>"
@@ -281,7 +297,7 @@ To prevent orphaned processes spawned by background shells or external MCP serve
 
 ### 4.2 Capability Access Control via a Single Config File (Capability Mask)
 
-For a simple and robust security policy, configuration is restricted to a single `rad.json` file. Each Extension is constrained by specific permissions:
+Configuration is restricted to a single `rad.json` file so the policy is readable in one place. Each Extension declares specific permissions, applied at the gateway to calls that arrive on the host RPC surface — read §1.1's enforcement note for what that does and does not cover:
 
 ```json
 {
@@ -334,7 +350,9 @@ For a simple and robust security policy, configuration is restricted to a single
    Every physical error detected by the host core (IO errors, execution failures, HTTP connection timeouts, or token limits) is standardized into a serialized `UnifiedError` JSON payload inside the WIT boundary's `result<T, string>`. This avoids breaking interface compatibility while permitting rich, structured classification on the guest extension side.
    * **L1 (Adaptation)**: Transient API drops or tool/command errors. **Strategy**: Append error node to DAG, feed back to LLM, and retry.
    * **L2 (Rollback)**: LLM parsing failures (e.g. truncated JSON from output token limit) or capability violations. **Strategy**: Roll back current DAG pointer and physically restore the filesystem state.
-   * **L3 (Reset)**: Context window exhaustion (token budget exceeded). **Strategy**: Re-invoke `context-tools`'s compaction (count-based windowing) against the assembled message list to shrink it below budget, then reset state.
+   * **L3 (Reset)**: Context window exhaustion (token budget exceeded). **Strategy**: shrink the context budget and re-run the turn — see §5.1.2.
+
+   **Layer placement matters**: L1/L2 are classified from *tool execution* failures and are therefore handled on the tool path (`done.rs`'s error classifier). L3 cannot be — context exhaustion is reported by the LLM backend when the request is rejected, so it surfaces on the *LLM response* path (`LlmConnectorEvent` with an error payload), never as a tool result. Handling all three in one place would mean L3 is classified somewhere it can never actually be observed.
 
 2. **Pillar 2: Deterministic State Transition & File Rollback Synchronization**
    * **File Snapshots**: The Core automatically takes directories snapshot backups (`src/fs/snapshot.rs`) before entering LLM thinking phases and executing tools.
@@ -370,6 +388,27 @@ sequenceDiagram
     Ext->>LLM: Send "Tool call edit was not executed: arguments truncated. Re-issue."
 ```
 
+#### 5.1.2 L3 Recovery: Bounded Context Backoff
+
+Compaction (§1.2) sizes each request proactively using a `chars/4` approximation. When that estimate is wrong and the backend rejects the request for exceeding its context window, the Orchestrator does not simply abandon the turn:
+
+1. The error payload from `LlmConnectorEvent` is matched against context-exhaustion signals.
+2. If matched *and* the retry budget is not exhausted, the Orchestrator shrinks its character budget by a backoff factor, re-runs `context-tools`'s `optimize` against the DAG-derived message list with that smaller budget, and re-issues the turn.
+3. **The per-turn streaming buffers are cleared before re-issuing** (accumulated assistant text, buffered reasoning, partial `tool_calls` deltas, reasoning-mode flag). A retry re-runs the *whole* turn, so anything the rejected attempt streamed before failing must not survive into it — otherwise the two attempts' output concatenate into a single corrupted assistant message, carrying tool-call deltas that never received their closing arguments.
+4. Each retry decrements a counter held in the Orchestrator's session state. When the counter is exhausted the turn stops with an explicit user-facing message rather than retrying forever.
+
+The bound is the essential part: an unbounded "shrink and retry" would loop indefinitely whenever the failure is not actually budget-related. This mirrors the tool-side circuit breaker (§5.1.3) — both convert a potentially infinite retry into a bounded one that terminates with a clear diagnosis.
+
+#### 5.1.3 Tool Failure Circuit Breaker
+
+A model that keeps re-issuing a failing tool call can otherwise loop without limit, since nothing in the loop is inherently self-terminating. The Orchestrator therefore tracks a *consecutive same-tool failure* streak in its session state:
+
+* A tool result is classified as a failure by an `Error:` prefix. Every producer guarantees this prefix: `mcp-tool-provider` normalizes MCP's `isError` flag into it (servers signal tool-level failure through `isError`, not a protocol-level error, so the flag would otherwise be lost when the result is flattened to a string), and the L1/L2 classifier formats its messages the same way.
+* A success, or a failure of a *different* tool, resets the streak (a different tool's failure starts a new streak at 1 rather than continuing the old one).
+* On crossing the threshold, remaining queued calls from that turn are skipped, an explicit message is printed, and the task completes instead of feeding another turn to the model.
+
+The threshold is deliberately generous rather than minimal: two or three retries while a model converges on correct arguments is normal behavior, not a stuck loop. The breaker targets unbounded repetition, not ordinary self-correction.
+
 ### 5.2 Diversity Protocol (Handling Different API Connectors)
 
 The Core is completely unaware of LLM-specific API differences (OpenAI, Anthropic, Ollama, etc.) or MCP (Model Context Protocol) schemas. Model adaptation is offloaded to a specialized, hot-swappable **LLM Connector** Wasm extension.
@@ -395,38 +434,47 @@ sequenceDiagram
 
 ### 5.3 Slash Commands (Meta Commands)
 
-For slash commands (commands starting with `/`) entered by users, the Core simply passes the text event, and the Extension handles parsing and execution control.
+Slash commands are **host-side meta-operations, not agent turns**. They are resolved entirely inside the Core and never reach an Extension as an event. This is deliberate: a command like `/rollback` or `/reload` must be able to act *on* the extension runtimes themselves (rewinding the DAG, discarding cached Wasm instances), so it cannot be implemented by the very extensions it manipulates. Only input that is *not* a recognized command becomes an agent task.
+
+Input is resolved in a fixed order in `process_input` (`src/main.rs`):
+
+1. **`!`-prefixed** → executed directly as a shell command, bypassing the agent entirely.
+2. **Built-in command registry** → a single static `CommandSpec` table (`src/command.rs`) is the one source of truth generating the parser, the dispatcher, `/help` text, and tab-completion together. Each spec maps a name (plus aliases) to a handler receiving `(args, orchestrator)`. Handlers return a `CommandResult` — `Continue`, `Quit`, `StatusInfo(String)`, or `RunTask(String)` (used by commands that expand into an agent task rather than acting directly).
+3. **Markdown templates** → `.agents/commands/<name>.md` (project-local, checked first) or `~/.rad/commands/<name>.md`, expanded with `$ARGUMENTS` substitution and dispatched as an agent task. This second tier exists because a static function-pointer table cannot hold entries discovered from the filesystem at runtime; user-facing behavior is nevertheless unified — `/foo` resolves the same way whether `foo` is a built-in or a template.
+4. **Fallthrough** → anything unmatched, including an unrecognized `/whatever`, is sent to the agent as an ordinary task.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant User as User Input
-    participant Core as rad Core
-    participant Ext as Extension (Parser)
+    participant Core as rad Core (process_input)
+    participant Reg as CommandSpec Registry
+    participant Orch as Orchestrator (host struct)
     participant FS as File System (Snapshots)
 
-    User->>Core: PTY / Terminal Input: "/rollback node_a1b2"
-    Core->>Ext: Event: HumanInputReceived { text: "/rollback node_a1b2" }
-    Note over Ext: Detect leading "/" and parse command
-    Note over Ext: Extract argument "node_a1b2" from rollback command
-    Ext->>Core: RPC: checkout_snapshot("node_a1b2")
-    Core->>FS: Restore files from .rad/snapshots/node_a1b2/
-    Core-->>Ext: Result: Ok(())
-    Ext->>Core: RPC: create_node(parent, "system")
-    Ext->>Core: RPC: set_node_text(node, "Physically restored state to node_a1b2")
+    User->>Core: Terminal Input: "/rollback node_a1b2"
+    Core->>Reg: CommandParser::parse("/rollback node_a1b2")
+    Reg-->>Core: Command { name: "rollback", args: "node_a1b2" }
+    Core->>Orch: CommandManager::execute -> cmd_rollback(args)
+    Orch->>FS: orchestrator.rollback("node_a1b2") -> restore snapshot
+    FS-->>Orch: Ok(())
+    Orch-->>Core: CommandResult::Continue
+    Note over Core: No extension involved; no agent turn started
 ```
 
 ### 5.4 Unified Tooling, Policy Offloading, and Rollback Boundaries
 
-`rad` follows a strict philosophy of keeping the Core simple and offloading all logical policy decisions and safety wrappers to Wasm Extensions. The Core exposes no tool primitives of its own — every tool the LLM sees comes from external Model Context Protocol (MCP) servers, aggregated and presented as a unified, flat Tool Call list.
+`rad` follows a strict philosophy of keeping the Core simple and offloading all logical policy decisions and safety wrappers to Wasm Extensions. **The Core exposes no tool primitives of its own** — this is a hard invariant, not an incidental property: every tool the LLM sees is contributed by a Wasm tool-provider Extension, and the Core's role is limited to merging their contributions into a unified, flat Tool Call list. Tools reach that list from more than one kind of provider (external MCP servers, local Markdown skills — see §5.4.1); the invariant is about *where tools may come from*, not about there being only one source.
 
-### 5.4.1 Tool Abstraction & Discovery
+A corollary worth stating explicitly, because it has been violated before: any new capability that "the model can call" must be added as a tool-provider Extension, never as a special case inside the Core's RPC handlers. A host-side built-in-tool fallback existed at one point and was removed once it was found to be both unreachable and in direct contradiction with this invariant.
+
+#### 5.4.1 Tool Abstraction & Discovery
 
 * **Multi-provider merge**: the Core's `execute-tool`/`get-tools` WIT import (`src/wasm/imports_tool.rs`) doesn't hardcode any single Extension — it iterates every registered Wasm runtime, and any one exporting the `rad-tool-provider` world's `get-tools`/`execute-tool` functions has its tools merged into one flat pool the Orchestrator sees. Multiple tool-provider Extensions can coexist under this role with no coordination needed between them; a tool name collision is resolved by whichever provider's `get-tools` response the host consults first.
 * **External Model Context Protocol (MCP)** (`mcp-tool-provider`): launches each server declared in its own `config.mcp_servers`, fetches their tool schemas, merges them into one pool, and forwards tool invocations to the matching server. Without at least one MCP server configured there, the agent has no general-purpose file/shell tools — see [CONFIG.md](CONFIG.md) for the schema.
 * **Skills** (`skill-tool-provider`): discovers `.agents/skills/`/`~/.rad/skills/` Markdown skill definitions via the `list-dir`/`file-read` host RPCs and surfaces each as a tool whose description is the skill's own, letting the model choose to invoke one autonomously — see [CONFIG.md](CONFIG.md) §2.5.
 
-### 5.4.2 Rollback Boundaries & External Side-Effects
+#### 5.4.2 Rollback Boundaries & External Side-Effects
 
 Because `rad` provides filesystem snapshot backups under `.rad/snapshots/`, there is a clear physical boundary between rollback-capable operations and non-rollback-capable operations:
 
@@ -439,7 +487,7 @@ Because `rad` provides filesystem snapshot backups under `.rad/snapshots/`, ther
 
 ### 5.5 Human-in-the-Loop (HITL) & YOLO Mode Workflows
 
-When the Extension intercepts a critical action (e.g., executing shell scripts or writing files) and decides to request human authorization, it invokes the Core RPC `request_human_approval`. The response is dictated by the `"hitl_enabled"` configuration in `rad.json`.
+When the Extension intercepts a critical action (e.g., executing shell scripts or writing files) and decides to request human authorization, it invokes the Core RPC `ask-human-approval`. The response is dictated by the `"hitl_enabled"` configuration in `rad.json`.
 
 #### 5.5.1 YOLO Mode (Default: `hitl_enabled: false`)
 When HITL is disabled, the Core operates in YOLO mode and instantly returns approval to the Wasm extension without prompt interruption.
@@ -452,7 +500,7 @@ sequenceDiagram
     participant User as Terminal / User
 
     Note over Ext: Critial tool call detected
-    Ext->>Core: RPC: request_human_approval("Write to file X?")
+    Ext->>Core: RPC: ask-human-approval("Write to file X?")
     Note over Core: "hitl_enabled" is false
     Core-->>Ext: Result: Ok(true) (Immediate bypass)
     Note over Ext: Proceed to execute tool call
@@ -469,7 +517,7 @@ sequenceDiagram
     participant User as Terminal / User
 
     Note over Ext: Critial tool call detected
-    Ext->>Core: RPC: request_human_approval("Write to file X?")
+    Ext->>Core: RPC: ask-human-approval("Write to file X?")
     Note over Core: "hitl_enabled" is true
     Core->>User: Print prompt & block for input
     User-->>Core: Type "yes" or "no"
