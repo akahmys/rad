@@ -62,9 +62,9 @@
 - [✅] Phase 67: Spec-First Architecture Reconciliation — ARCHITECTURE.md & README.md Realigned, L3 Recovery Implemented, FS Watcher Deleted (v0.72.0)
 - [✅] Phase 68: Repository Hygiene & Convention Audit — Authorship Rewrite, CI Workspace Fix, Rule Documents Corrected (v0.73.0)
 - [🔄] Phase 69: Microkernel Migration — Preparation & Stage 0
-- [ ] Phase 70: Microkernel Migration — Kernel & SDK (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
-- [ ] Phase 71: Microkernel Migration — Module Porting (§9 stages 3–5)
-- [ ] Phase 72: Microkernel Migration — Remaining Modules & Wasmtime-Only Kernel (§9 stages 6–8)
+- [ ] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
+- [ ] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8)
+- [ ] Phase 72: Microkernel Migration — DAG/UI Extraction and Author Tooling (§9 stages 9–10)
 
 ---
 
@@ -73,9 +73,16 @@
 **Direction**: `ARCHITECTURE-NEXT.md` defines the target: the Core becomes a Wasm
 runtime and dispatcher, and every capability becomes a module above it. The
 contract splits in two — typed syscalls that may only grow by new functions, and
-an opaque `dispatch(target, method, payload)` whose type never changes. This is a
-rebuild, not a refactor: stages 1–8 run in a new directory alongside the current
-implementation, which stays working until stage 5.
+an opaque `dispatch(target, method, payload)` whose type never changes.
+
+**The migration happens in place, one extension at a time.** `wit/kernel.wit` is
+added as a *new* WIT package, which §2's second experiment proves cannot break
+the existing extensions — and the Core already hosts six worlds across three
+packages, so a seventh is routine. The old RPC surface and the new dispatch
+surface coexist while extensions move across one by one; the kernel is what
+remains after the last old surface is deleted, not something built separately
+and swapped in. **rad works at every step**, and the `--workspace` CI covers the
+whole thing throughout.
 
 **Do not treat `ARCHITECTURE-NEXT.md` as current.** Nothing in it is implemented.
 
