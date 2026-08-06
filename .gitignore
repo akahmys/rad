@@ -1,2 +1,5 @@
 /target
 .rad/
+
+# macOS
+.DS_Store
