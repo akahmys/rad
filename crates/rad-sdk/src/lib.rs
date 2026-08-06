@@ -138,6 +138,11 @@ macro_rules! module {
             use super::__RadModule;
             export!(__RadModule);
         }
+
+        /// The kernel's imports, re-exported at the module's crate root so a
+        /// module author writes `crate::syscall::proc_spawn(..)` rather than
+        /// reaching into generated-binding paths.
+        pub use __rad_bindings::rad::kernel::{dispatch, syscall, types};
     };
 }
 

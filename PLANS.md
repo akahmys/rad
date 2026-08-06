@@ -87,7 +87,7 @@ so migration never has to guess whether an entry is old or new.
 - [✅] AWU 950: `rad-abi` — manifest schema (Result: Success — manifest types only; builds native and wasm32-wasip2)
 - [✅] AWU 951: `rad-sdk` — `module!` macro (Result: Success — split into `routes!`/`module!` so routing stays natively testable; a real module builds to a component exporting `manifest`/`handle`)
 - [✅] AWU 952: Module loading, `manifest()` reading, routing table (Result: Success — the real `modules/echo` component loads, answers, and conflicts are caught at registration)
-- [ ] AWU 953: `dispatch.call`/`post` with cycle detection
+- [✅] AWU 953: `dispatch.call`/`post` with cycle detection (Result: Success — proven between two real wasm modules; the cycle that would deadlock is refused before the lock is taken)
 - [ ] AWU 954: Async wasmtime, epoch interruption, scheduler loop
 - [ ] AWU 955: `modules` config array and an echo module proving the path
 
@@ -174,8 +174,22 @@ so migration never has to guess whether an entry is old or new.
   error rather than hanging (§3.6.3); `post` queues for delivery when the target
   is idle (§3.6.2). The kernel itself registers as a dispatch target so modules
   reach `kernel.config` the same way they reach each other (§3.6.7).
-- **DoD**: A deliberate A→B→A `call` returns the cycle error; the same shape via
-  `post` completes.
+- **Result**: Both demonstrated with real components (`modules/relay` forwards,
+  `modules/echo` answers). The locking shape is what makes cycle detection
+  necessary rather than merely tidy: `dispatch.call` runs while the caller's
+  `Store` is borrowed, so runtimes cannot share one lock — each has its own, and
+  re-entering a module already on the call stack would block on a lock the
+  in-flight call still holds. The check therefore happens *before* the target's
+  lock is taken; afterwards it is a hang nobody could report. The stack unwinds
+  on rejection, verified by making a second call succeed after a refused cycle.
+  Also landed: routing by method name as well as module name, so a caller can
+  ask for a capability without knowing which module currently provides it; and a
+  bounded drain, so a module posting to itself on every message cannot spin the
+  queue forever.
+  One SDK ergonomics issue surfaced: every handler must return `Result` even when
+  it cannot fail, and clippy's `unnecessary_wraps` then fires in the module
+  author's crate. Worked around legitimately here; a `methods` form accepting
+  infallible handlers is worth adding before third parties write modules.
 
 #### AWU 954: Async wasmtime, epoch interruption, scheduler loop
 - **Objective**: The execution model of §3.6.

@@ -8,6 +8,7 @@
 mod host;
 mod loader;
 mod registry;
+mod shared;
 
 #[cfg(test)]
 mod tests;
@@ -15,3 +16,4 @@ mod tests;
 pub use host::KernelState;
 pub use loader::ModuleRuntime;
 pub use registry::{Registry, RegistryError};
+pub use shared::{KernelShared, Posted};

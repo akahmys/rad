@@ -2,9 +2,11 @@
 //! manifest to the registry.
 
 use super::host::KernelState;
+use super::shared::KernelShared;
 use crate::wasm::bindings::rad_kernel;
 use rad_abi::Manifest;
 use std::path::Path;
+use std::sync::Weak;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::WasiCtxBuilder;
@@ -25,7 +27,7 @@ impl ModuleRuntime {
     /// Returns a message if the component fails to load or instantiate, if
     /// `manifest()` traps, or if the manifest is malformed or declares a
     /// different ABI.
-    pub fn load(name: &str, wasm_path: &Path) -> Result<Self, String> {
+    pub fn load(name: &str, wasm_path: &Path, shared: Weak<KernelShared>) -> Result<Self, String> {
         let mut config = wasmtime::Config::new();
         config.wasm_component_model(true);
         if let Err(e) = config.cache_config_load_default() {
@@ -55,7 +57,12 @@ impl ModuleRuntime {
             wasmtime_wasi::FilePerms::all(),
         );
 
-        let state = KernelState::new(name.to_string(), wasi_builder.build(), ResourceTable::new());
+        let state = KernelState::new(
+            name.to_string(),
+            shared,
+            wasi_builder.build(),
+            ResourceTable::new(),
+        );
         let mut store = Store::new(&engine, state);
         let bindings = rad_kernel::Module::instantiate(&mut store, &component, &linker)
             .map_err(|e| format!("Failed to instantiate module '{name}': {e}"))?;

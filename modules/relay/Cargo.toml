@@ -1,0 +1,15 @@
+[package]
+name = "relay-module"
+version = "0.1.0"
+edition = "2024"
+
+# Forwards a message to another module. Exists to exercise dispatch from inside
+# a module — cross-module calls, and the cycle that must be an error rather than
+# a deadlock.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+serde = { workspace = true }
+wit-bindgen = { workspace = true }

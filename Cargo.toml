@@ -53,5 +53,6 @@ members = [
     "crates/rad-abi",
     "crates/rad-sdk",
     "modules/echo",
+    "modules/relay",
     "templates/rust",
 ]

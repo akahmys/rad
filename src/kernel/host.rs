@@ -11,7 +11,9 @@
 //! `modules/echo` uses neither interface and its component declares no
 //! `rad:kernel` imports at all.
 
+use super::shared::KernelShared;
 use crate::wasm::bindings::rad_kernel::rad::kernel::{dispatch, syscall, types};
+use std::sync::Weak;
 
 /// Per-module store state.
 pub struct KernelState {
@@ -19,6 +21,9 @@ pub struct KernelState {
     /// attributable because the kernel owns the store — the identity never
     /// comes from the guest.
     pub module_name: String,
+    /// Weak because `KernelShared` owns the runtimes, and each runtime's store
+    /// holds this state — a strong reference either way would be a cycle.
+    pub shared: Weak<KernelShared>,
     pub wasi: wasmtime_wasi::WasiCtx,
     pub table: wasmtime::component::ResourceTable,
 }
@@ -27,11 +32,13 @@ impl KernelState {
     #[must_use]
     pub fn new(
         module_name: String,
+        shared: Weak<KernelShared>,
         wasi: wasmtime_wasi::WasiCtx,
         table: wasmtime::component::ResourceTable,
     ) -> Self {
         Self {
             module_name,
+            shared,
             wasi,
             table,
         }
@@ -152,17 +159,18 @@ impl syscall::Host for KernelState {
 }
 
 impl dispatch::Host for KernelState {
-    fn call(&mut self, target: String, method: String, _payload: String) -> Result<String, String> {
-        Err(format!(
-            "dispatch.call({target}, {method}) from '{}': routing is not implemented yet",
-            self.module_name
-        ))
+    fn call(&mut self, target: String, method: String, payload: String) -> Result<String, String> {
+        let Some(shared) = self.shared.upgrade() else {
+            return Err("kernel is shutting down".to_string());
+        };
+        shared.call(&self.module_name, &target, &method, &payload)
     }
 
-    fn post(&mut self, target: String, method: String, _payload: String) {
-        crate::log_host!(
-            "[kernel] dropped post({target}, {method}) from '{}': queue not implemented yet",
-            self.module_name
-        );
+    fn post(&mut self, target: String, method: String, payload: String) {
+        // Returns nothing by design: a caller must not be able to observe
+        // whether delivery has happened, or it would start depending on timing.
+        if let Some(shared) = self.shared.upgrade() {
+            shared.post(&self.module_name, &target, &method, &payload);
+        }
     }
 }
