@@ -86,7 +86,7 @@ so migration never has to guess whether an entry is old or new.
 - [✅] AWU 949: Add `wit/kernel/kernel.wit` and register its bindings (Result: Success — §2's claim holds on the real build; all six extensions still load and complete a live task)
 - [✅] AWU 950: `rad-abi` — manifest schema (Result: Success — manifest types only; builds native and wasm32-wasip2)
 - [✅] AWU 951: `rad-sdk` — `module!` macro (Result: Success — split into `routes!`/`module!` so routing stays natively testable; a real module builds to a component exporting `manifest`/`handle`)
-- [ ] AWU 952: Module loading, `manifest()` reading, routing table
+- [✅] AWU 952: Module loading, `manifest()` reading, routing table (Result: Success — the real `modules/echo` component loads, answers, and conflicts are caught at registration)
 - [ ] AWU 953: `dispatch.call`/`post` with cycle detection
 - [ ] AWU 954: Async wasmtime, epoch interruption, scheduler loop
 - [ ] AWU 955: `modules` config array and an echo module proving the path
@@ -151,8 +151,21 @@ so migration never has to guess whether an entry is old or new.
 - **Context**: `manifest()` must be callable before the module has any
   capabilities — it is required to be pure (§3.2). Duplicate `provides` entries
   are a startup error, never implicit first-wins (§3.6.8).
-- **DoD**: Loading two modules with overlapping `provides` fails at startup with
-  a message naming both.
+- **Result**: `src/kernel/` — deliberately a separate tree from `src/wasm/`, so
+  the final step is a deletion rather than a disentangling. Registration rejects
+  both a duplicate method (naming the method and both modules) and a duplicate
+  module name, and validates all methods before inserting any: a conflict on a
+  module's second method would otherwise leave its first already routed to a
+  module that was then refused.
+  Also enforced: a module whose configured name disagrees with its self-declared
+  one is rejected, since routing and diagnostics would otherwise disagree about
+  what to call it.
+  Syscall and dispatch hosts are stubs returning explicit errors — the linker
+  must supply every import for a component to instantiate at all, and
+  instantiation is what this AWU verifies. Confirmed against the real component:
+  `modules/echo` loads, `manifest()` is readable before anything is granted,
+  `handle()` round-trips, a handler error crosses as a message rather than a
+  trap, and an unknown method leaves the module still working.
 
 #### AWU 953: `dispatch.call`/`post` with cycle detection
 - **Objective**: The two dispatch primitives, including the anti-deadlock rule.

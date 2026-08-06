@@ -33,6 +33,7 @@ bytes = "1"
 rustyline = "14.0"
 crossterm = "0.27"
 rad-models = { path = "models" }
+rad-abi = { path = "crates/rad-abi" }
 tree-sitter = "0.20"
 tree-sitter-rust = "0.20"
 
