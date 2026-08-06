@@ -1,8 +1,9 @@
 # CODING.md (Rust Coding Policy)
 
 ## 1. Clippy Compliance
-- **Zero Warnings**: Must pass `cargo clippy --all-targets` with `#![deny(clippy::pedantic)]`.
-- **No Bypassing**: NEVER use `#![allow(...)]` to suppress pedantic lints.
+- **Zero Warnings**: Must pass `cargo clippy --workspace --all-targets -- -D warnings` with `#![deny(clippy::pedantic)]`. `--workspace` is required: without it cargo checks only the root package and skips `ext/*` and `models/` entirely.
+- **Both Targets**: Extensions ship as `wasm32-wasip2`. Lint that target too — a native-only pass misses target-specific breakage.
+- **No Bypassing**: NEVER use `#[allow(...)]` to suppress a pedantic lint in code you wrote. The sole exception is a module wrapping generated code (`wit_bindgen::generate!`), which cannot be edited to satisfy the lint; keep the attribute on that module and nowhere else.
 
 ## 2. Size & Complexity
 - **File Limit**: < 300 lines.

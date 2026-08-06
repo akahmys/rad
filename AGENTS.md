@@ -9,7 +9,7 @@
 
 - **Precision:** Every action must follow established technical policies. No guesswork.
 - **Integrity:** Never delete history or roadmap items in `PLANS.md` without explicit instruction.
-- **Safety:** Strictly respect security boundaries in `rad.json` and `ARCHITECTURE.md`.
+- **Safety:** Respect the permission declarations in `rad.json`. Note that they are a guard rail, not a containment boundary — WASI preopens let an extension reach the filesystem directly, and MCP servers run as unsandboxed OS processes (`ARCHITECTURE.md` §1.1). Do not rely on them to catch a mistake.
 - **Token Efficiency:** Minimize context overhead. Follow the "On-Demand Loading" principle.
 
 ---
@@ -37,9 +37,9 @@
 ### 2. Implementation Phase
 **Trigger:** Writing code or modifying files.
 - **Action:**
-  1. Read `ARCHITECTURE.md` (Structural design).
+  1. Read the **relevant sections** of `ARCHITECTURE.md` — it is ~530 lines, larger than every rule document combined. Never load it whole out of habit.
   2. Read `CODING.md` (Technical constraints).
-  3. Execute task using available physical primitives (`spawn_bash_process`, `file_read`, `file_write`, `file_edit_patch`, etc.).
+  3. Execute the task with the tools the configured MCP servers provide. Prefer `edit_file` (content-addressed: it locates the target by surrounding text, not line numbers) over rewriting whole files.
 - **Goal:** Produce high-quality, "Clippy-clean" code.
 
 ### 3. Audit Phase
@@ -78,18 +78,22 @@
 | :--- | :--- | :--- | :--- | :--- |
 | **`AGENTS.md`** | **Hub** | **Operational Rules** | Always | - |
 | `PLANNING.md` | Rule | Task Decomposition | Planning | - |
-| `AUDITING.md` | Rule | Quality Checklists | Audit | - |
-| `ARCHITECTURE.md`| Policy | System Design | Implementation| - |
-| `CODING.md` | Policy | Code Style/Constraints | Implementation| - |
-| `PLANS.md` | **State** | **Project Roadmap** | Planning/Audit| **Every AWU** |
+| `AUDITING.md` | Rule | Quality Checklists + Violation Protocol | Audit | - |
+| `CODING.md` | Policy | Code Style/Constraints | Implementation | - |
+| `TESTING.md` | Policy | Test Hierarchy, Mocking, CI | Writing/changing tests | - |
+| `ARCHITECTURE.md`| Policy | System Design (~530 lines — read sections, not the file) | Implementation | - |
+| `CONFIG.md` | Reference | Config schema, precedence, on-disk layout | Touching config | - |
+| `EXTENSIONS.md` | Reference | Extension authoring | Touching `ext/*` | - |
+| `PLANS.md` | **State** | **Project Roadmap** | Planning/Audit | **Every AWU** |
+| `TASKS.md` | State | Task log | On demand | - |
+| `ARCHITECTURE-NEXT.md` | Design | Target architecture — **not implemented** | Design discussion only | - |
+
+Do not treat `ARCHITECTURE-NEXT.md` as current: it describes where the project
+intends to go, and nothing in it exists yet.
 
 ---
 
 ## ⚠️ Violation Protocol
 
-**If an audit fails or a conflict is detected:**
-1. **STOP** execution immediately.
-2. **Analyze**: Identify the breached rule (`AUDITING.md` or `CODING.md`).
-3. **Remediate**: Correct the code or the plan.
-4. **Re-Audit**: Repeat the process.
-5. **Report**: Inform the user of the discrepancy and the fix.
+See `AUDITING.md`. Same rule for a failed audit and a detected conflict:
+**stop, identify, remediate, re-audit, report.**

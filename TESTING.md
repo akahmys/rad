@@ -40,8 +40,8 @@ The `rad` architecture relies heavily on Rust Traits for subsystem abstraction (
 
 ### 2.2 Wasm Boundary Mocking (Extension)
 When testing Extensions:
-- **Mock the Core API**: Implement a mock version of the `RasExtensionFacingApi` to simulate Core responses (e.g., successful file reads, erroring RPCs, or specific event dispatches).
-- **Simulate Events**: Manually inject `RasCoreEvent` variants into the Extension's event loop to test its reaction to various system changes.
+- **Test pure logic directly**: Most extension logic (frontmatter parsing, windowing, context-exhaustion classification, budget scaling) takes plain data in and returns plain data out. Test those functions without a host at all — this is where the bulk of extension coverage should live.
+- **Simulate Events**: Drive an extension end-to-end by injecting `RasCoreEvent` variants and observing the resulting `RasRpcCommand` calls, as `tests/tool_loop_tests.rs` and `tests/circuit_breaker_tests.rs` do with a real runtime plus a mock LLM server.
 
 ---
 
@@ -60,19 +60,30 @@ Maintaining a consistent and reproducible test state is critical, especially for
 
 ---
 
-## 4. Quality & Coverage
+## 4. Continuous Integration
 
-### 4.1 Code Coverage Target
-- **Minimum Threshold**: We aim for a minimum of **85%** total code coverage.
-- **Critical Path Requirement**: 100% coverage is expected for the Core's `API Gateway`, `Security Guard` logic, and `Subsystem Trait` definitions.
-- **Monitoring**: Coverage reports must be generated in CI to prevent regressions.
+`.github/workflows/ci.yml` gates every push and pull request to `main`:
 
-### 4.2 Continuous Integration (CI)
-- Every Pull Request must pass:
-  1. `cargo check` (Compile check)
-  2. `cargo clippy` (Linting)
-  3. `cargo test` (All unit and integration tests)
-- Coverage regression checks are part of the CI pipeline.
+1. `scripts/check_secrets.sh --all`
+2. `cargo check --workspace --all-targets` (ubuntu / macOS / windows)
+3. `cargo clippy --workspace --all-targets -- -D warnings`
+4. `cargo test --workspace`
+5. Clippy and build for `wasm32-wasip2` across all six extension crates
+
+**`--workspace` is required, not decorative.** Without it cargo selects only the
+root package and silently skips every test in `ext/*` and `models/` — 52 of 149.
+Any locally run check must use it too.
+
+### 4.1 Coverage
+
+There is no coverage measurement today: no `tarpaulin`, `llvm-cov`, or `grcov`
+is configured, and CI has no coverage step. Earlier revisions of this document
+stated an 85% minimum and required coverage reports in CI; both described
+tooling that does not exist, so neither could be enforced or even evaluated.
+
+If coverage becomes a requirement, add the tooling first and state the
+threshold afterwards — a number with no measurement behind it is worse than
+no number, because it reads as satisfied.
 
 ---
 
