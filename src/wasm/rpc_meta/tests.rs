@@ -17,7 +17,12 @@ fn orchestrator_with_profile(model: Option<&str>, context_length: Option<u32>) -
             context_length,
         },
     );
-    Orchestrator::new(config, "test".to_string(), Arc::new(Mutex::new(Dag::new())), None)
+    Orchestrator::new(
+        config,
+        "test".to_string(),
+        Arc::new(Mutex::new(Dag::new())),
+        None,
+    )
 }
 
 #[test]

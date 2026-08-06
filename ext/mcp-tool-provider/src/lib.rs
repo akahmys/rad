@@ -152,7 +152,8 @@ impl Guest for ToolProviderImpl {
                     },
                 },
             ];
-            return serde_json::to_string(&tools).map_err(|e| format!("Failed to serialize tools: {e}"));
+            return serde_json::to_string(&tools)
+                .map_err(|e| format!("Failed to serialize tools: {e}"));
         }
 
         let mut tools = Vec::new();
@@ -251,6 +252,7 @@ impl Guest for ToolProviderImpl {
         } else if let Ok(call_result) =
             serde_json::from_value::<CallToolResult>(res.get("result").cloned().unwrap_or_default())
         {
+            let is_error = call_result.is_error.unwrap_or(false);
             let texts: Vec<String> = call_result
                 .content
                 .into_iter()
@@ -260,6 +262,14 @@ impl Guest for ToolProviderImpl {
                 })
                 .collect();
             result_text = texts.join("\n");
+            // Servers signal tool-level failure via `isError`, not a
+            // JSON-RPC-level error — normalize it into a guaranteed
+            // `Error:` prefix so callers (rad-orchestrator's
+            // consecutive-failure circuit breaker) can detect failure
+            // without depending on any one server's own wording.
+            if is_error && !result_text.trim_start().starts_with("Error:") {
+                result_text = format!("Error: {result_text}");
+            }
         }
         if result_text.is_empty() {
             result_text = "No content returned from MCP server.".to_string();

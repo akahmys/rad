@@ -69,7 +69,12 @@ fn test_orchestrator() -> TestCtx {
     };
 
     let dag = Arc::new(Mutex::new(Dag::new()));
-    let orchestrator = Arc::new(Orchestrator::new(config, "test_session".to_string(), dag, None));
+    let orchestrator = Arc::new(Orchestrator::new(
+        config,
+        "test_session".to_string(),
+        dag,
+        None,
+    ));
 
     TestCtx {
         _lock: lock,
@@ -91,7 +96,10 @@ fn test_llm_add_sets_api_key_without_model() {
     // The old positional-only `add <name> <url> [model] [api_key]` form
     // made this impossible without also supplying a model.
     let msg = execute_llm(&format!("add local {DEAD_URL} --api-key secret123"), orch);
-    assert!(msg.contains("Added LLM profile"), "unexpected message: {msg}");
+    assert!(
+        msg.contains("Added LLM profile"),
+        "unexpected message: {msg}"
+    );
 
     let listing = list(orch);
     assert!(listing.contains("local"));
@@ -103,8 +111,14 @@ fn test_llm_add_sets_api_key_without_model() {
 fn test_llm_add_accepts_flags_in_either_order() {
     let ctx = test_orchestrator();
     let orch = &ctx.orchestrator;
-    let msg = execute_llm(&format!("add local {DEAD_URL} --api-key secret --model qwen"), orch);
-    assert!(msg.contains("Added LLM profile"), "unexpected message: {msg}");
+    let msg = execute_llm(
+        &format!("add local {DEAD_URL} --api-key secret --model qwen"),
+        orch,
+    );
+    assert!(
+        msg.contains("Added LLM profile"),
+        "unexpected message: {msg}"
+    );
 
     let listing = list(orch);
     assert!(listing.contains("[model: qwen]"));
@@ -116,7 +130,10 @@ fn test_llm_add_rejects_unrecognized_flag() {
     let ctx = test_orchestrator();
     let orch = &ctx.orchestrator;
     let msg = execute_llm(&format!("add local {DEAD_URL} --bogus x"), orch);
-    assert!(msg.contains("Unrecognized argument"), "unexpected message: {msg}");
+    assert!(
+        msg.contains("Unrecognized argument"),
+        "unexpected message: {msg}"
+    );
     assert!(!list(orch).contains("local"));
 }
 
@@ -128,7 +145,10 @@ fn test_llm_delete_removes_profile() {
     assert!(list(orch).contains("local"));
 
     let msg = execute_llm("delete local", orch);
-    assert!(msg.contains("Removed LLM profile"), "unexpected message: {msg}");
+    assert!(
+        msg.contains("Removed LLM profile"),
+        "unexpected message: {msg}"
+    );
     assert!(!list(orch).contains("local"));
 }
 
@@ -165,13 +185,19 @@ fn test_llm_profile_name_takes_priority_over_reserved_keyword() {
     // A bare `/llm test` must switch to the profile named "test", not run
     // the health-check subcommand, since an exact profile-name match wins.
     let msg = execute_llm("test", orch);
-    assert!(msg.contains("Switched active LLM server profile"), "unexpected message: {msg}");
+    assert!(
+        msg.contains("Switched active LLM server profile"),
+        "unexpected message: {msg}"
+    );
     assert!(list(orch).contains("test \x1b[1;32m(active)"));
 
     // The explicit escape hatch always reaches the real subcommand
     // regardless of any profile name.
     let msg = execute_llm("switch primary", orch);
-    assert!(msg.contains("Switched active LLM server profile"), "unexpected message: {msg}");
+    assert!(
+        msg.contains("Switched active LLM server profile"),
+        "unexpected message: {msg}"
+    );
     assert!(list(orch).contains("primary \x1b[1;32m(active)"));
 }
 
@@ -193,11 +219,17 @@ fn test_llm_context_sets_manual_override_on_active_profile() {
     let _ = execute_llm(&format!("add local {DEAD_URL}"), orch);
 
     let msg = execute_llm("context 8192", orch);
-    assert!(msg.contains("Set context window"), "unexpected message: {msg}");
+    assert!(
+        msg.contains("Set context window"),
+        "unexpected message: {msg}"
+    );
     assert!(msg.contains("8192"));
 
     let listing = list(orch);
-    assert!(listing.contains("[ctx: 8192 tok]"), "unexpected listing: {listing}");
+    assert!(
+        listing.contains("[ctx: 8192 tok]"),
+        "unexpected listing: {listing}"
+    );
 }
 
 #[test]
@@ -207,12 +239,18 @@ fn test_llm_context_rejects_non_numeric_argument() {
     let _ = execute_llm(&format!("add local {DEAD_URL}"), orch);
 
     let msg = execute_llm("context not-a-number", orch);
-    assert!(msg.contains("Usage: /llm context"), "unexpected message: {msg}");
+    assert!(
+        msg.contains("Usage: /llm context"),
+        "unexpected message: {msg}"
+    );
 }
 
 #[test]
 fn test_llm_context_errors_when_no_active_profile() {
     let ctx = test_orchestrator();
     let msg = execute_llm("context 8192", &ctx.orchestrator);
-    assert!(msg.contains("No active LLM profile"), "unexpected message: {msg}");
+    assert!(
+        msg.contains("No active LLM profile"),
+        "unexpected message: {msg}"
+    );
 }

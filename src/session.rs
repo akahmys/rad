@@ -125,7 +125,10 @@ mod tests {
             .map(|e| e.file_name().to_string_lossy().to_string())
             .collect();
         remaining.sort();
-        assert_eq!(remaining, vec!["s3.json".to_string(), "s4.json".to_string()]);
+        assert_eq!(
+            remaining,
+            vec!["s3.json".to_string(), "s4.json".to_string()]
+        );
     }
 
     #[test]

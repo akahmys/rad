@@ -67,7 +67,6 @@ pub mod rad_context_tools {
     });
 }
 
-
 pub use rad_extension::RadExtension;
 pub use rad_extension::RadExtensionImports;
 pub use rad_extension::radcomp::extension::types as wit;
@@ -102,4 +101,3 @@ impl From<CorePendingToolCallInfo> for wit::PendingToolCallInfo {
         }
     }
 }
-

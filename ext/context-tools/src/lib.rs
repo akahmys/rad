@@ -45,8 +45,9 @@ impl Guest for MyContextTools {
         // `assistant` message's `tool_calls` array still references,
         // producing a request the LLM API will reject. There is no role in
         // this system for which squashing is safe, so it was removed rather
-        // than left in as dead/unsafe code. Count-based windowing below is
-        // the only compaction strategy.
+        // than left in as dead/unsafe code. What remains below is stale
+        // tool-result clearing followed by count- and size-bounded
+        // windowing (with relevance-based retention).
         if request.messages.is_empty() {
             return Ok(OptimizationResponse {
                 optimized_messages: Vec::new(),

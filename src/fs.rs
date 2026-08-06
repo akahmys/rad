@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub mod watcher;
 
 #[cfg(test)]
 mod tests;
@@ -183,8 +182,9 @@ impl FsSandbox {
                 "FsPermission",
             ));
         }
-        let entries = fs::read_dir(&resolved)
-            .map_err(|e| crate::error::UnifiedError::l1(format!("Failed to read directory: {e}"), "Fs"))?;
+        let entries = fs::read_dir(&resolved).map_err(|e| {
+            crate::error::UnifiedError::l1(format!("Failed to read directory: {e}"), "Fs")
+        })?;
         Ok(entries
             .filter_map(|entry| entry.ok())
             .filter_map(|entry| entry.file_name().into_string().ok())

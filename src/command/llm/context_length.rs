@@ -18,7 +18,10 @@ fn detect_context_length(base_url: &str, model: Option<&str>) -> Option<u32> {
     let root = rad_models::normalize_base_url(base_url);
     let model = model.map(ToString::to_string);
 
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?;
     rt.block_on(async {
         let client = reqwest::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(3))
@@ -34,8 +37,14 @@ fn detect_context_length(base_url: &str, model: Option<&str>) -> Option<u32> {
 }
 
 async fn probe_llama_cpp_context_length(client: &reqwest::Client, root: &str) -> Option<u32> {
-    let body: serde_json::Value =
-        client.get(format!("{root}/props")).send().await.ok()?.json().await.ok()?;
+    let body: serde_json::Value = client
+        .get(format!("{root}/props"))
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
     body.get("default_generation_settings")
         .and_then(|s| s.get("n_ctx"))
         .or_else(|| body.get("n_ctx"))
@@ -82,9 +91,15 @@ pub struct EndpointStatus {
 #[must_use]
 pub fn check_endpoint(base_url: &str, model: Option<&str>) -> EndpointStatus {
     let reachable = probe_endpoint(base_url);
-    let context_length =
-        if reachable.is_ok() { detect_context_length(base_url, model) } else { None };
-    EndpointStatus { reachable, context_length }
+    let context_length = if reachable.is_ok() {
+        detect_context_length(base_url, model)
+    } else {
+        None
+    };
+    EndpointStatus {
+        reachable,
+        context_length,
+    }
 }
 
 /// Probes an LLM endpoint with a real HTTP round-trip (GET `/v1/models`),

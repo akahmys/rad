@@ -21,6 +21,7 @@ use rad_models::{RasCoreEvent as CoreCoreEvent, RasRpcCommand as CoreRpcCommand}
 
 use self::radcomp::extension::types as wit;
 
+mod context_recovery;
 mod conv;
 mod digest;
 mod llm;

@@ -42,7 +42,8 @@ pub(crate) fn call_host(command: CoreRpcCommand) -> Result<serde_json::Value, St
             if json_str.is_empty() || json_str == "null" {
                 Ok(serde_json::Value::Null)
             } else {
-                serde_json::from_str(&json_str).map_err(|e| format!("JSON parse error from host: {e}"))
+                serde_json::from_str(&json_str)
+                    .map_err(|e| format!("JSON parse error from host: {e}"))
             }
         }
         Err(err_msg) => Err(err_msg),

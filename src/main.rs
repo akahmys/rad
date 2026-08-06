@@ -97,8 +97,6 @@ fn main() {
     );
 }
 
-
-
 fn run_agent_task(
     task: &str,
     orchestrator: &std::sync::Arc<rad::orchestrator::Orchestrator>,
@@ -122,8 +120,7 @@ fn run_agent_task(
         {
             aborted = true;
             orchestrator.abort();
-            rad::terminal::get_terminal()
-                .write_log("\x1b[33m[Aborted by user]\x1b[0m".to_string());
+            rad::terminal::get_terminal().write_log("\x1b[33m[Aborted by user]\x1b[0m".to_string());
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }

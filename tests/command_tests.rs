@@ -28,7 +28,10 @@ fn test_slash_command_parsing() {
     assert_eq!(CommandParser::parse("/tree"), Some(parsed("tree", "")));
     assert_eq!(CommandParser::parse("/tools"), Some(parsed("tools", "")));
     assert_eq!(CommandParser::parse("/new"), Some(parsed("new", "")));
-    assert_eq!(CommandParser::parse("/compact"), Some(parsed("compact", "")));
+    assert_eq!(
+        CommandParser::parse("/compact"),
+        Some(parsed("compact", ""))
+    );
     // `/status` and `/clear` no longer exist: `/session` absorbed
     // `/status`'s output, and `/clear` was removed (no external precedent
     // for it — pi-coding-agent doesn't have one either — and terminals

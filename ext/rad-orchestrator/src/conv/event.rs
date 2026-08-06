@@ -35,10 +35,6 @@ impl From<wit::RasCoreEvent> for CoreCoreEvent {
                 pgid: payload.pgid.to_string(),
                 exit_code: payload.exit_code,
             },
-            wit::RasCoreEvent::FileChanged(payload) => CoreCoreEvent::FileChanged {
-                path: std::path::PathBuf::from(payload.path),
-                change_type: payload.change_type,
-            },
             wit::RasCoreEvent::StreamTimeout(payload) => CoreCoreEvent::StreamTimeout {
                 target: payload.target,
                 duration_ms: payload.duration_ms,

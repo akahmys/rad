@@ -39,7 +39,9 @@ impl WasmRuntime {
         // malformed cache config file) only logs and falls back to
         // always-recompile rather than blocking extension load.
         if let Err(e) = config.cache_config_load_default() {
-            crate::log_host!("[WASM] wasmtime compile cache unavailable, recompiling every load: {e}");
+            crate::log_host!(
+                "[WASM] wasmtime compile cache unavailable, recompiling every load: {e}"
+            );
         }
         let engine = Engine::new(&config).map_err(|e| format!("Failed to create Engine: {e}"))?;
         let component = Component::from_file(&engine, wasm_path)
@@ -76,10 +78,7 @@ impl WasmRuntime {
         }
 
         let mut wasi_builder = WasiCtxBuilder::new();
-        wasi_builder
-            .inherit_stdout()
-            .inherit_stderr()
-            .inherit_env();
+        wasi_builder.inherit_stdout().inherit_stderr().inherit_env();
 
         let _ = wasi_builder.preopened_dir(
             ".",

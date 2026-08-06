@@ -17,8 +17,14 @@ mod tests;
 #[must_use]
 pub fn normalize_base_url(base_url: &str) -> String {
     let trimmed = base_url.trim().trim_end_matches('/');
-    let trimmed = trimmed.strip_suffix("/chat/completions").unwrap_or(trimmed).trim_end_matches('/');
-    let trimmed = trimmed.strip_suffix("/v1").unwrap_or(trimmed).trim_end_matches('/');
+    let trimmed = trimmed
+        .strip_suffix("/chat/completions")
+        .unwrap_or(trimmed)
+        .trim_end_matches('/');
+    let trimmed = trimmed
+        .strip_suffix("/v1")
+        .unwrap_or(trimmed)
+        .trim_end_matches('/');
     trimmed.to_string()
 }
 

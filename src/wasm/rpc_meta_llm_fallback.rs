@@ -76,9 +76,14 @@ fn handle_sse_data_line(
         .and_then(serde_json::Value::as_array)
     {
         for tc in tool_calls {
-            let index = tc.get("index").and_then(serde_json::Value::as_u64).unwrap_or(0);
+            let index = tc
+                .get("index")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
             let id = tc.get("id").and_then(serde_json::Value::as_str);
-            let name = tc.pointer("/function/name").and_then(serde_json::Value::as_str);
+            let name = tc
+                .pointer("/function/name")
+                .and_then(serde_json::Value::as_str);
             let arguments_chunk = tc
                 .pointer("/function/arguments")
                 .and_then(serde_json::Value::as_str)

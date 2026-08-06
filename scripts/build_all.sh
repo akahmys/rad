@@ -16,16 +16,57 @@ cargo build --target wasm32-wasip2 --release \
 
 mkdir -p ~/.rad/wasm
 mkdir -p target/wasm32-wasip2/debug
-cp target/wasm32-wasip2/release/*.wasm ~/.rad/wasm/
-cp target/wasm32-wasip2/release/*.wasm target/wasm32-wasip2/debug/
 
-echo "🧪 Step 2: Running Unit and Integration Tests..."
+WASM_FILES=(
+    "rad_orchestrator.wasm"
+    "llm_connector.wasm"
+    "security_guard.wasm"
+    "mcp_tool_provider.wasm"
+    "skill_tool_provider.wasm"
+    "context_tools.wasm"
+)
+
+for file in "${WASM_FILES[@]}"; do
+    cp "target/wasm32-wasip2/release/${file}" ~/.rad/wasm/
+    cp "target/wasm32-wasip2/release/${file}" target/wasm32-wasip2/debug/
+done
+
+echo "🔍 Step 2: Running Code Quality & Safety Audits..."
+echo "  - WIT contract sync check..."
+# `wit/rad.wit` is the single source of truth; the template copies exist only
+# so a scaffolded extension compiles standalone. Nothing keeps them in sync
+# automatically, and they have silently drifted after WIT edits more than once
+# (spawn-mcp-server removal, then file-changed removal), so the drift is
+# checked here rather than discovered later by a confused extension author.
+for template_wit in templates/*/wit/rad.wit; do
+    if ! diff -q wit/rad.wit "$template_wit" >/dev/null; then
+        echo "  ❌ $template_wit has drifted from wit/rad.wit"
+        diff wit/rad.wit "$template_wit" || true
+        echo "  Fix with: cp wit/rad.wit $template_wit"
+        exit 1
+    fi
+done
+
+echo "  - Formatting check (cargo fmt)..."
+cargo fmt --check
+
+echo "  - License compliance audit..."
+python3 scripts/check_licenses.py
+
+echo "  - Secret & path scanner..."
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    ./scripts/check_secrets.sh --all
+else
+    echo "  (Skipping git secret scanner: not in a git repository context)"
+fi
+
+echo "🧪 Step 3: Running Unit and Integration Tests..."
 cargo test --workspace
 
-echo "🔍 Step 3: Running Clippy Audit..."
+echo "🔍 Step 4: Running Clippy Audit..."
 cargo clippy --workspace -- -D warnings
 
-echo "⚙️ Step 4: Installing rad binary locally..."
+echo "⚙️ Step 5: Installing rad binary locally..."
 cargo install --path .
 
 echo "=========================================="

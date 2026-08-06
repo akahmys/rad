@@ -11,7 +11,9 @@
 // arguments on every `generate_stream` invocation instead — this test
 // exercises the exact eager-loading order and a *real* (non-`RAD_TEST_PORT`)
 // `llm.endpoints` config to prove the first attempt now succeeds outright.
-use rad::config::{Config, CoreConfig, ExtensionConfig, LlmConfig, LlmEndpointProfile, PermissionConfig};
+use rad::config::{
+    Config, CoreConfig, ExtensionConfig, LlmConfig, LlmEndpointProfile, PermissionConfig,
+};
 use rad::dag::Dag;
 use rad::orchestrator::Orchestrator;
 
@@ -156,9 +158,19 @@ fn test_first_task_after_eager_load_succeeds_with_real_base_url_config() {
     assert!(
         !found_error,
         "First task after eager load should not hit the stale-env-snapshot bug: {:?}",
-        dag_guard.nodes.values().map(|n| &n.text).collect::<Vec<_>>()
+        dag_guard
+            .nodes
+            .values()
+            .map(|n| &n.text)
+            .collect::<Vec<_>>()
     );
 
-    let found_completion = dag_guard.nodes.values().any(|n| n.text.contains("Task complete."));
-    assert!(found_completion, "Expected the mock LLM response to reach the DAG");
+    let found_completion = dag_guard
+        .nodes
+        .values()
+        .any(|n| n.text.contains("Task complete."));
+    assert!(
+        found_completion,
+        "Expected the mock LLM response to reach the DAG"
+    );
 }

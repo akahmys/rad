@@ -40,7 +40,12 @@ fn test_find_extension_arc_by_role_resolves_by_role_not_name() {
     };
 
     let dag = Arc::new(Mutex::new(Dag::new()));
-    let orch = Arc::new(Orchestrator::new(config, "test_session".to_string(), dag, None));
+    let orch = Arc::new(Orchestrator::new(
+        config,
+        "test_session".to_string(),
+        dag,
+        None,
+    ));
 
     let (tx, _rx) = std::sync::mpsc::channel();
     orch.get_or_init_runtimes(&tx).unwrap();
@@ -49,5 +54,8 @@ fn test_find_extension_arc_by_role_resolves_by_role_not_name() {
         orch.find_extension_arc_by_role("context-tools").is_some(),
         "should resolve the extension named 'my-custom-compactor' by its declared role"
     );
-    assert!(orch.find_extension_arc_by_role("nonexistent-role").is_none());
+    assert!(
+        orch.find_extension_arc_by_role("nonexistent-role")
+            .is_none()
+    );
 }

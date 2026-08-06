@@ -29,7 +29,8 @@ impl RawInputGuard {
         let stdin = std::io::stdin();
         let original = termios::tcgetattr(&stdin).ok()?;
         let mut raw = original.clone();
-        raw.local_flags.remove(termios::LocalFlags::ICANON | termios::LocalFlags::ECHO);
+        raw.local_flags
+            .remove(termios::LocalFlags::ICANON | termios::LocalFlags::ECHO);
         raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 0;
         raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
         termios::tcsetattr(&stdin, SetArg::TCSANOW, &raw).ok()?;

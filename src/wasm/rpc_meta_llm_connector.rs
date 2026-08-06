@@ -79,8 +79,8 @@ pub(crate) fn generate(
     let remote_messages: Vec<RemoteMessage> = serde_json::from_str(messages_json)
         .map_err(|e| format!("Failed to parse messages JSON: {e}"))?;
 
-    let remote_tools: Vec<RemoteTool> = serde_json::from_str(tools_json)
-        .map_err(|e| format!("Failed to parse tools JSON: {e}"))?;
+    let remote_tools: Vec<RemoteTool> =
+        serde_json::from_str(tools_json).map_err(|e| format!("Failed to parse tools JSON: {e}"))?;
 
     use crate::wasm::bindings::rad_llm_connector::radcomp::connector::types as conn_types;
 
@@ -120,14 +120,16 @@ pub(crate) fn generate(
         .collect();
 
     let active_profile = super::rpc_meta::resolve_active_llm_profile(orch);
-    let stream_res = match conn_bindings.radcomp_connector_producer().call_generate_stream(
-        &mut connector_ref.store,
-        model,
-        active_profile.base_url.as_deref(),
-        active_profile.api_key.as_deref(),
-        &wit_messages,
-        &wit_tools,
-    ) {
+    let stream_res = match conn_bindings
+        .radcomp_connector_producer()
+        .call_generate_stream(
+            &mut connector_ref.store,
+            model,
+            active_profile.base_url.as_deref(),
+            active_profile.api_key.as_deref(),
+            &wit_messages,
+            &wit_tools,
+        ) {
         Ok(Ok(stream)) => stream,
         Ok(Err(e)) => {
             eprintln!("\x1b[31m[LLM Connector Error] {e}\x1b[0m");

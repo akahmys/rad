@@ -23,12 +23,16 @@ pub(super) fn switch_llm_profile(orchestrator: &Orchestrator, target: &str) -> S
     };
 
     let Some(profile_name) = matched_name else {
-        return format!("\x1b[1;31mError: LLM profile '{target}' not found.\x1b[0m\nUse `/llm` to list available profiles.");
+        return format!(
+            "\x1b[1;31mError: LLM profile '{target}' not found.\x1b[0m\nUse `/llm` to list available profiles."
+        );
     };
 
     cfg.llm.active = Some(profile_name.clone());
     save_global_config(&cfg);
-    format!("\x1b[32mSwitched active LLM server profile to '\x1b[1m{profile_name}\x1b[0;32m'.\x1b[0m")
+    format!(
+        "\x1b[32mSwitched active LLM server profile to '\x1b[1m{profile_name}\x1b[0;32m'.\x1b[0m"
+    )
 }
 
 pub(super) fn set_active_model(orchestrator: &Orchestrator, new_model: &str) -> String {
@@ -38,7 +42,11 @@ pub(super) fn set_active_model(orchestrator: &Orchestrator, new_model: &str) -> 
             return "\x1b[1;31mError: No active LLM profile selected to change model.\x1b[0m"
                 .to_string();
         };
-        let Some(base_url) = cfg.llm.endpoints.get(&active_name).map(|p| p.base_url.clone())
+        let Some(base_url) = cfg
+            .llm
+            .endpoints
+            .get(&active_name)
+            .map(|p| p.base_url.clone())
         else {
             return format!("\x1b[1;31mError: Active profile '{active_name}' not found.\x1b[0m");
         };

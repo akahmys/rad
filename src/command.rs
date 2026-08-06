@@ -161,7 +161,10 @@ impl CommandManager {
     /// Executes the given parsed command and returns the result.
     #[must_use]
     pub fn execute(command: &ParsedCommand, orchestrator: &Arc<Orchestrator>) -> CommandResult {
-        match command_specs().iter().find(|spec| spec.name == command.name) {
+        match command_specs()
+            .iter()
+            .find(|spec| spec.name == command.name)
+        {
             Some(spec) => (spec.handler)(&command.args, orchestrator),
             None => CommandResult::StatusInfo(format!("Unknown command: /{}", command.name)),
         }

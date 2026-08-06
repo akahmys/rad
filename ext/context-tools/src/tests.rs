@@ -1,5 +1,5 @@
-use super::*;
 use self::bindings::exports::radcomp::extension::context_tools::Message;
+use super::*;
 
 fn msg(id: &str, role: &str, content: &str) -> Message {
     Message {

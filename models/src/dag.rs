@@ -75,8 +75,10 @@ impl Dag {
         // `delete_node`'s existing conditional-clear. Without this,
         // merging a historical (non-tip) range would silently rewind the
         // active conversation pointer to the merge node.
-        let current_is_merged =
-            self.current_node_id.as_deref().is_some_and(|cur| node_ids.iter().any(|id| id == cur));
+        let current_is_merged = self
+            .current_node_id
+            .as_deref()
+            .is_some_and(|cur| node_ids.iter().any(|id| id == cur));
 
         for id in node_ids {
             let node = self

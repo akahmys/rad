@@ -38,8 +38,8 @@ pub(crate) fn open_http_stream(
             id: Some("wasm_call".to_string()),
             command: cmd.clone(),
         };
-        let buf = serde_json::to_vec(&req)
-            .map_err(|e| format!("Failed to serialize request: {e}"))?;
+        let buf =
+            serde_json::to_vec(&req).map_err(|e| format!("Failed to serialize request: {e}"))?;
         if let Err(e) = orch.verify_rpc_exclude(&state.name, &req, &buf) {
             return Err(format!("Security verification failed: {e}"));
         }
@@ -119,7 +119,11 @@ async fn run_stream(
 
     let (connect_wait, heartbeat) = timeout_values(timeout_policy);
 
-    let req_future = client.post(url).headers(req_headers).body(body.to_string()).send();
+    let req_future = client
+        .post(url)
+        .headers(req_headers)
+        .body(body.to_string())
+        .send();
     let response_res = match connect_wait {
         Some(dur) => match tokio::time::timeout(dur, req_future).await {
             Ok(res) => res,

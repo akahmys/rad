@@ -27,7 +27,13 @@ pub(crate) fn parse_inline_tool_calls(
             if let Some(end_idx) = find_balanced_brace_end(after_call, brace_pos) {
                 let json_slice = &after_call[brace_pos..end_idx];
                 let norm_args = normalize_args_str(json_slice);
-                push_tool_call(name, norm_args, &mut call_count, assistant_tool_calls, pending_calls);
+                push_tool_call(
+                    name,
+                    norm_args,
+                    &mut call_count,
+                    assistant_tool_calls,
+                    pending_calls,
+                );
                 search_str = &after_call[end_idx..];
                 continue;
             }
@@ -140,7 +146,13 @@ fn parse_bare_json_tool_calls(
                     serde_json::Value::String(s) => s.clone(),
                     other => other.to_string(),
                 };
-                push_tool_call(name, norm_args, call_count, assistant_tool_calls, pending_calls);
+                push_tool_call(
+                    name,
+                    norm_args,
+                    call_count,
+                    assistant_tool_calls,
+                    pending_calls,
+                );
             }
         }
         search_from = end_idx;

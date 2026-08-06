@@ -119,7 +119,9 @@ fn has_path_permission(path: &Path, allowed_patterns: &[String], workspace: &Pat
         let target_str = canonical_target.to_string_lossy();
         let is_rad_config = target_str.contains(".rad/") || target_str.contains(".rad");
         if canonical_target.starts_with(&canonical_pattern)
-            && (canonical_target.starts_with(&canonical_workspace) || is_rad_config || pattern == "*")
+            && (canonical_target.starts_with(&canonical_workspace)
+                || is_rad_config
+                || pattern == "*")
         {
             return true;
         }
@@ -199,7 +201,10 @@ pub fn check_permissions(
         RasRpcCommand::FileRead { path } | RasRpcCommand::ListDir { path } => {
             let canonical_target = canonicalize_path(path, workspace);
             let target_str = canonical_target.to_string_lossy();
-            if target_str.contains(".rad/config.json") || target_str.contains(".rad/rad.json") || target_str.contains(".rad") {
+            if target_str.contains(".rad/config.json")
+                || target_str.contains(".rad/rad.json")
+                || target_str.contains(".rad")
+            {
                 return Ok(());
             }
             if !has_path_permission(path, &perms.fs_read_allow, workspace) {

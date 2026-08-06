@@ -1,5 +1,5 @@
-use super::*;
 use super::merge::{merge_json_value, parse_jsonc};
+use super::*;
 use std::fs;
 use std::path::PathBuf;
 
@@ -215,7 +215,10 @@ fn test_llm_config_deserialization_and_env_resolution() {
 
     let openai_profile = config.llm.endpoints.get("openai").unwrap();
     assert_eq!(openai_profile.base_url, "https://api.openai.com/v1");
-    assert_eq!(openai_profile.resolved_api_key().as_deref(), Some("secret_123"));
+    assert_eq!(
+        openai_profile.resolved_api_key().as_deref(),
+        Some("secret_123")
+    );
 
     unsafe {
         std::env::remove_var("TEST_RAD_LLM_KEY");

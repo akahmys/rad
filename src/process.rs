@@ -69,7 +69,21 @@ impl ProcessManager {
         let is_in_path = std::env::var_os("PATH").is_some_and(|paths| {
             std::env::split_paths(&paths).any(|p| p.join(&first_bin).is_file())
         });
-        let has_shell_features = command.contains(';') || command.contains('|') || command.contains('>') || command.contains('<') || command.contains('&');
+        // The direct-exec fast path splits arguments on plain whitespace,
+        // which silently mangles any quoted argument (`echo -n 'a b'`
+        // would run as three literal args `'a`, `b`, `b'`, emitting the
+        // quotes verbatim). Quotes therefore need a real shell just as
+        // much as redirection does — this matters because tool providers
+        // return their results through `open_process("echo -n '<result>'")`,
+        // so treating quotes as inert corrupted every tool result with
+        // spurious surrounding quotes.
+        let has_shell_features = command.contains(';')
+            || command.contains('|')
+            || command.contains('>')
+            || command.contains('<')
+            || command.contains('&')
+            || command.contains('\'')
+            || command.contains('"');
         let is_direct_executable = (bin_path.is_file() || is_in_path) && !has_shell_features;
 
         let mut cmd = if is_direct_executable {
@@ -116,8 +130,10 @@ impl ProcessManager {
             spawn_reader_thread(stderr, stderr_tx);
         }
 
-        let stdin_writer: Option<Mutex<Box<dyn std::io::Write + Send>>> =
-            child.stdin.take().map(|sin| Mutex::new(Box::new(sin) as Box<dyn std::io::Write + Send>));
+        let stdin_writer: Option<Mutex<Box<dyn std::io::Write + Send>>> = child
+            .stdin
+            .take()
+            .map(|sin| Mutex::new(Box::new(sin) as Box<dyn std::io::Write + Send>));
 
         Ok(RunningProcess {
             child: Box::new(StdioChild { child }),

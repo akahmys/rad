@@ -31,13 +31,19 @@ fn test_parse_skill_md_returns_none_without_description() {
 #[test]
 fn test_parse_skill_md_defaults_to_inline_mode() {
     let content = "---\ndescription: Something.\n---\n\nBody.";
-    assert_eq!(parse_skill_md("s", content).unwrap().mode, SkillMode::Inline);
+    assert_eq!(
+        parse_skill_md("s", content).unwrap().mode,
+        SkillMode::Inline
+    );
 }
 
 #[test]
 fn test_parse_skill_md_recognizes_subagent_mode() {
     let content = "---\ndescription: Something.\nmode: subagent\n---\n\nBody.";
-    assert_eq!(parse_skill_md("s", content).unwrap().mode, SkillMode::Subagent);
+    assert_eq!(
+        parse_skill_md("s", content).unwrap().mode,
+        SkillMode::Subagent
+    );
 }
 
 #[test]

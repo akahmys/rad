@@ -17,7 +17,11 @@ pub(crate) fn count_based_start(len: usize, max_history: Option<u32>) -> Option<
     }
     let remaining_len = len - 1;
     let limit = max_history.saturating_sub(1);
-    Some(if remaining_len > limit { len - limit } else { 1 })
+    Some(if remaining_len > limit {
+        len - limit
+    } else {
+        1
+    })
 }
 
 /// Size-based cutoff: the index into `messages` where the "recent tail"
@@ -25,7 +29,10 @@ pub(crate) fn count_based_start(len: usize, max_history: Option<u32>) -> Option<
 /// stays within `max_content_chars`. Walks backward from the end, greedily
 /// keeping the most recent messages that still fit. `None` if this
 /// constraint doesn't require trimming.
-pub(crate) fn size_based_start(messages: &[Message], max_content_chars: Option<u32>) -> Option<usize> {
+pub(crate) fn size_based_start(
+    messages: &[Message],
+    max_content_chars: Option<u32>,
+) -> Option<usize> {
     let budget = usize::try_from(max_content_chars?).unwrap_or(usize::MAX);
     let mut used = messages[0].content.len();
     let mut start = messages.len();
@@ -128,7 +135,8 @@ pub(crate) fn apply_history_window(
     };
 
     let original_len = messages.len();
-    let trimmed = trim_with_relevance_retention(&messages, start_idx, max_content_chars, summary_parts);
+    let trimmed =
+        trim_with_relevance_retention(&messages, start_idx, max_content_chars, summary_parts);
 
     summary_parts.push(format!(
         "Windowed history from {original_len} to {} messages (kept first + most recent).",
@@ -152,8 +160,10 @@ fn tokenize_lowercase_words(text: &str) -> std::collections::HashSet<String> {
 
 /// Count of distinct goal words that also appear anywhere in `turn`.
 fn relevance_score(turn: &[Message], goal_words: &std::collections::HashSet<String>) -> usize {
-    let turn_words: std::collections::HashSet<String> =
-        turn.iter().flat_map(|m| tokenize_lowercase_words(&m.content)).collect();
+    let turn_words: std::collections::HashSet<String> = turn
+        .iter()
+        .flat_map(|m| tokenize_lowercase_words(&m.content))
+        .collect();
     goal_words.intersection(&turn_words).count()
 }
 
@@ -169,7 +179,10 @@ fn split_into_turns(messages: &[Message]) -> Vec<Vec<Message>> {
         if m.role == "user" || turns.is_empty() {
             turns.push(vec![m.clone()]);
         } else {
-            turns.last_mut().expect("just ensured non-empty").push(m.clone());
+            turns
+                .last_mut()
+                .expect("just ensured non-empty")
+                .push(m.clone());
         }
     }
     turns
@@ -203,7 +216,10 @@ fn trim_with_relevance_retention(
     }
 
     let kept_chars: usize = messages[0].content.len()
-        + messages[start_idx..].iter().map(|m| m.content.len()).sum::<usize>();
+        + messages[start_idx..]
+            .iter()
+            .map(|m| m.content.len())
+            .sum::<usize>();
     let mut remaining = budget.saturating_sub(kept_chars);
 
     let goal_words = tokenize_lowercase_words(&messages[0].content);

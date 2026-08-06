@@ -64,7 +64,14 @@ pub fn llm_subcommand_specs() -> &'static [LlmSubcommandSpec] {
 
 fn cmd_test(args: &str, orchestrator: &Orchestrator) -> String {
     let target = args.trim();
-    test_llm_profiles(orchestrator, if target.is_empty() { None } else { Some(target) })
+    test_llm_profiles(
+        orchestrator,
+        if target.is_empty() {
+            None
+        } else {
+            Some(target)
+        },
+    )
 }
 
 /// Flag-based, not positional: `/llm add <name> <url> [--model <m>] [--api-key <k>]`.
@@ -99,7 +106,13 @@ fn cmd_add(args: &str, orchestrator: &Orchestrator) -> String {
             }
         }
     }
-    add_llm_profile(orchestrator, name, url, model.as_deref(), api_key.as_deref())
+    add_llm_profile(
+        orchestrator,
+        name,
+        url,
+        model.as_deref(),
+        api_key.as_deref(),
+    )
 }
 
 fn cmd_delete(args: &str, orchestrator: &Orchestrator) -> String {
@@ -123,7 +136,9 @@ pub fn execute_llm(args: &str, orchestrator: &Orchestrator) -> String {
     if trimmed.is_empty() {
         return render_llm_profiles(&orchestrator.config.lock());
     }
-    let (word, rest) = trimmed.split_once(char::is_whitespace).unwrap_or((trimmed, ""));
+    let (word, rest) = trimmed
+        .split_once(char::is_whitespace)
+        .unwrap_or((trimmed, ""));
 
     let is_known_profile = orchestrator.config.lock().llm.endpoints.contains_key(word);
     if is_known_profile || word.parse::<usize>().is_ok() {
@@ -153,12 +168,20 @@ pub fn render_llm_profiles(config: &Config) -> String {
             let num = idx + 1;
             let profile = &config.llm.endpoints[*name];
             let is_active = config.llm.active.as_deref() == Some(*name);
-            let active_mark = if is_active { " \x1b[1;32m(active)\x1b[0m" } else { "" };
+            let active_mark = if is_active {
+                " \x1b[1;32m(active)\x1b[0m"
+            } else {
+                ""
+            };
             let model_info = profile
                 .model
                 .as_deref()
                 .map_or_else(String::new, |m| format!(" [model: {m}]"));
-            let key_info = if profile.api_key.is_some() { " [auth: yes]" } else { "" };
+            let key_info = if profile.api_key.is_some() {
+                " [auth: yes]"
+            } else {
+                ""
+            };
             let ctx_info = profile
                 .context_length
                 .map_or_else(String::new, |n| format!(" [ctx: {n} tok]"));
@@ -175,6 +198,9 @@ pub fn render_llm_profiles(config: &Config) -> String {
     for spec in llm_subcommand_specs() {
         let _ = writeln!(out, "  {}", spec.usage);
     }
-    let _ = writeln!(out, "  /llm <name_or_index>   switch directly by name or list position");
+    let _ = writeln!(
+        out,
+        "  /llm <name_or_index>   switch directly by name or list position"
+    );
     out
 }

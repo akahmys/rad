@@ -67,7 +67,8 @@ fn test_merge_nodes_preserves_current_node_id_when_merging_non_current_nodes() {
     // the pointer to the new merge node.
     assert_eq!(dag.current_node_id.as_deref(), Some(tip.as_str()));
 
-    dag.merge_nodes(&[child1, child2], "old history summary").unwrap();
+    dag.merge_nodes(&[child1, child2], "old history summary")
+        .unwrap();
     assert_eq!(
         dag.current_node_id.as_deref(),
         Some(tip.as_str()),

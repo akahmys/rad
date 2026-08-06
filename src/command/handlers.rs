@@ -13,7 +13,10 @@ pub(super) fn cmd_help(_args: &str, orchestrator: &Arc<Orchestrator>) -> Command
     let workspace = orchestrator.config.lock().core.workspace.clone();
     let template_names = templates::list_names(&workspace);
     if !template_names.is_empty() {
-        let _ = writeln!(out, "\nCustom commands (.agents/commands/, ~/.rad/commands/):");
+        let _ = writeln!(
+            out,
+            "\nCustom commands (.agents/commands/, ~/.rad/commands/):"
+        );
         for name in template_names {
             let _ = writeln!(out, "  /{name}");
         }
@@ -70,9 +73,9 @@ pub(super) fn cmd_reload(_args: &str, orchestrator: &Arc<Orchestrator>) -> Comma
         Ok(()) => CommandResult::StatusInfo(
             "\x1b[32mConfiguration reloaded successfully!\x1b[0m".to_string(),
         ),
-        Err(e) => {
-            CommandResult::StatusInfo(format!("\x1b[1;31mFailed to reload configuration: {e}\x1b[0m"))
-        }
+        Err(e) => CommandResult::StatusInfo(format!(
+            "\x1b[1;31mFailed to reload configuration: {e}\x1b[0m"
+        )),
     }
 }
 
@@ -81,7 +84,9 @@ pub(super) fn cmd_new(_args: &str, orchestrator: &Arc<Orchestrator>) -> CommandR
         Ok(new_id) => CommandResult::StatusInfo(format!(
             "\x1b[32mSession reset successfully. Started new session: \x1b[1;36m{new_id}\x1b[0m"
         )),
-        Err(e) => CommandResult::StatusInfo(format!("\x1b[1;31mFailed to reset session: {e}\x1b[0m")),
+        Err(e) => {
+            CommandResult::StatusInfo(format!("\x1b[1;31mFailed to reset session: {e}\x1b[0m"))
+        }
     }
 }
 

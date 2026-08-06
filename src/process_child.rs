@@ -44,12 +44,15 @@ impl ChildKiller for StdioChild {
 impl Child for StdioChild {
     fn try_wait(&mut self) -> std::io::Result<Option<ExitStatus>> {
         let status = self.child.try_wait()?;
-        Ok(status.map(|s| ExitStatus::with_exit_code(u32::try_from(s.code().unwrap_or(0)).unwrap_or(0))))
+        Ok(status
+            .map(|s| ExitStatus::with_exit_code(u32::try_from(s.code().unwrap_or(0)).unwrap_or(0))))
     }
 
     fn wait(&mut self) -> std::io::Result<ExitStatus> {
         let status = self.child.wait()?;
-        Ok(ExitStatus::with_exit_code(u32::try_from(status.code().unwrap_or(0)).unwrap_or(0)))
+        Ok(ExitStatus::with_exit_code(
+            u32::try_from(status.code().unwrap_or(0)).unwrap_or(0),
+        ))
     }
 
     fn process_id(&self) -> Option<u32> {
@@ -57,7 +60,10 @@ impl Child for StdioChild {
     }
 }
 
-pub(crate) fn spawn_reader_thread<R: Read + Send + 'static>(mut reader: R, tx: mpsc::Sender<Vec<u8>>) {
+pub(crate) fn spawn_reader_thread<R: Read + Send + 'static>(
+    mut reader: R,
+    tx: mpsc::Sender<Vec<u8>>,
+) {
     thread::spawn(move || {
         let mut buf = [0; 1024];
         while let Ok(n) = reader.read(&mut buf) {

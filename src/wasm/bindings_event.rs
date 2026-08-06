@@ -43,12 +43,6 @@ impl From<CoreRasCoreEvent> for wit::RasCoreEvent {
                     exit_code,
                 })
             }
-            CoreRasCoreEvent::FileChanged { path, change_type } => {
-                wit::RasCoreEvent::FileChanged(wit::FileChangeInfo {
-                    path: path.to_string_lossy().into_owned(),
-                    change_type,
-                })
-            }
             CoreRasCoreEvent::StreamTimeout {
                 target,
                 duration_ms,

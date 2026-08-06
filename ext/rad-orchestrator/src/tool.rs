@@ -82,7 +82,10 @@ pub fn execute_tool_sync(name: &str, arguments: &str) -> Result<String, String> 
         .and_then(|g| g.as_ref().map(|s| s.is_rehydrated))
         .unwrap_or(false);
 
-    assert!(!res_str.contains("CRASH_WASM") || is_rehydrating, "Simulated Wasm panic via CRASH_WASM stdout backdoor");
+    assert!(
+        !res_str.contains("CRASH_WASM") || is_rehydrating,
+        "Simulated Wasm panic via CRASH_WASM stdout backdoor"
+    );
     Ok(res_str)
 }
 

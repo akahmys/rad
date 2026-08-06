@@ -1,13 +1,16 @@
-use std::fmt::Write;
 use crate::call_host;
 use crate::tool::{Message, get_available_tools};
 use crate::types::{Dag, RasRpcCommand};
 use context_tools_wire::{CtMessage, CtOptimizationRequest, CtOptimizationResponse};
+use std::fmt::Write;
 
 mod context_tools_wire;
 
 fn read_rule_file(p: &str) -> Option<String> {
-    let val = call_host(RasRpcCommand::FileRead { path: std::path::PathBuf::from(p) }).ok()?;
+    let val = call_host(RasRpcCommand::FileRead {
+        path: std::path::PathBuf::from(p),
+    })
+    .ok()?;
     let bytes = serde_json::from_value::<Vec<u8>>(val).ok()?;
     String::from_utf8(bytes).ok()
 }
@@ -76,7 +79,10 @@ fn traverse_dag_messages(dag: &Dag) -> Vec<Message> {
 
     while let Some(ref id) = current_id {
         if let Some(node) = dag.nodes.get(id) {
-            let is_valid_role = matches!(node.node_type.as_str(), "user" | "assistant" | "tool" | "system");
+            let is_valid_role = matches!(
+                node.node_type.as_str(),
+                "user" | "assistant" | "tool" | "system"
+            );
 
             if is_valid_role {
                 let msg = if let Ok(mut parsed_msg) = serde_json::from_str::<Message>(&node.text) {
@@ -121,7 +127,9 @@ fn traverse_dag_messages(dag: &Dag) -> Vec<Message> {
 /// to count-based windowing only in that case.
 fn active_llm_context_length() -> Option<u32> {
     let val = call_host(RasRpcCommand::GetActiveLlmProfile).ok()?;
-    val.get("context_length")?.as_u64().and_then(|n| u32::try_from(n).ok())
+    val.get("context_length")?
+        .as_u64()
+        .and_then(|n| u32::try_from(n).ok())
 }
 
 /// Asks the host for the active LLM profile's configured model name, so the
@@ -139,15 +147,17 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
         serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
     let messages = traverse_dag_messages(&dag);
 
-    // Count-based history windowing is handled by the `context-tools`
-    // extension's `optimize` call below (alongside role-based compaction),
-    // not here. This function only reconstructs the raw message list from
-    // the DAG.
-    let max_history_messages = crate::orchestrator::STATE
+    // Windowing/compaction happens in the `context-tools` `optimize` call
+    // below, not here; this function only reconstructs the raw list.
+    let (history_limit, budget_scale) = crate::orchestrator::STATE
         .lock()
         .ok()
-        .and_then(|guard| guard.as_ref().and_then(|s| s.max_history_messages))
-        .unwrap_or(30);
+        .and_then(|g| {
+            g.as_ref()
+                .map(|s| (s.max_history_messages, s.context_budget_scale_percent))
+        })
+        .unwrap_or((None, 100));
+    let max_history_messages = history_limit.unwrap_or(30);
 
     let filtered_messages = filter_orphaned_tool_messages(messages);
 
@@ -183,8 +193,12 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 
     let mut optimized_non_system = non_system_msgs;
 
-    let max_content_chars =
-        active_llm_context_length().map(rad_models::budget_chars_from_context_length);
+    // The scale is 100 normally; L3 recovery reduces it so a re-issued turn
+    // is strictly smaller than the one the backend just rejected
+    // (`context_recovery`, ARCHITECTURE.md §5.1.2).
+    let max_content_chars = active_llm_context_length()
+        .map(rad_models::budget_chars_from_context_length)
+        .map(|base| crate::context_recovery::scale_budget(base, budget_scale));
 
     let ct_req = CtOptimizationRequest {
         messages: optimized_non_system
@@ -233,10 +247,7 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
                 let temp_msgs = filter_orphaned_tool_messages(temp_msgs);
                 if !temp_msgs.is_empty() {
                     let _ = call_host(RasRpcCommand::WriteStdout {
-                        text: format!(
-                            "\n\x1b[2m[Context optimized: {}]\x1b[0m\n",
-                            ct_resp.summary
-                        ),
+                        text: format!("\n\x1b[2m[Context optimized: {}]\x1b[0m\n", ct_resp.summary),
                     });
                     optimized_non_system = temp_msgs;
                 }
@@ -256,7 +267,10 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
 pub fn trigger_llm_stream(messages: &[Message]) -> Result<(), String> {
     crate::log_trace("session", "Getting available tools...");
     let tools = get_available_tools().unwrap_or_default();
-    crate::log_trace("session", &format!("Got {} available tools. Serializing...", tools.len()));
+    crate::log_trace(
+        "session",
+        &format!("Got {} available tools. Serializing...", tools.len()),
+    );
 
     let messages_json = serde_json::to_string(&messages)
         .map_err(|e| format!("Failed to serialize messages: {e}"))?;
@@ -271,7 +285,10 @@ pub fn trigger_llm_stream(messages: &[Message]) -> Result<(), String> {
     // a clear server-side error instead of a silent wrong-model request.
     let model = active_llm_model().unwrap_or_default();
 
-    crate::log_trace("session", &format!("Calling GenerateLlmStream host RPC with model '{model}'..."));
+    crate::log_trace(
+        "session",
+        &format!("Calling GenerateLlmStream host RPC with model '{model}'..."),
+    );
     call_host(RasRpcCommand::GenerateLlmStream {
         model,
         messages_json,
@@ -280,4 +297,3 @@ pub fn trigger_llm_stream(messages: &[Message]) -> Result<(), String> {
     crate::log_trace("session", "GenerateLlmStream host RPC call completed.");
     Ok(())
 }
-

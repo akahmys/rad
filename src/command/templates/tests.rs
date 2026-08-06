@@ -17,7 +17,11 @@ fn test_expand_appends_args_when_no_placeholder() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join(".agents/commands");
     fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("review.md"), "Review the current diff for correctness.").unwrap();
+    fs::write(
+        dir.join("review.md"),
+        "Review the current diff for correctness.",
+    )
+    .unwrap();
 
     let expanded = expand(tmp.path().to_str().unwrap(), "review", "focus on security").unwrap();
     assert_eq!(

@@ -58,7 +58,8 @@ pub fn run_compact(orchestrator: &Arc<Orchestrator>) -> String {
         return "\x1b[1;31mNo extension registered for role \"context-tools\" — nothing to compact against.\x1b[0m".to_string();
     };
 
-    let max_content_chars = active_llm_context_length(orchestrator).map(rad_models::budget_chars_from_context_length);
+    let max_content_chars =
+        active_llm_context_length(orchestrator).map(rad_models::budget_chars_from_context_length);
     let req = CompactRequest {
         messages: candidates
             .iter()
@@ -89,11 +90,15 @@ pub fn run_compact(orchestrator: &Arc<Orchestrator>) -> String {
         Err(e) => return format!("\x1b[1;31mCompaction failed: {e}\x1b[0m"),
     };
     let Ok(resp) = serde_json::from_str::<CompactResponse>(&res_str) else {
-        return "\x1b[1;31mCompaction failed: could not parse context-tools' response.\x1b[0m".to_string();
+        return "\x1b[1;31mCompaction failed: could not parse context-tools' response.\x1b[0m"
+            .to_string();
     };
 
-    let surviving_ids: HashSet<String> =
-        resp.optimized_messages.into_iter().filter_map(|m| m.node_id).collect();
+    let surviving_ids: HashSet<String> = resp
+        .optimized_messages
+        .into_iter()
+        .filter_map(|m| m.node_id)
+        .collect();
 
     persist_compaction(orchestrator, &candidates, &surviving_ids, &resp.summary)
 }
@@ -112,7 +117,9 @@ fn collect_candidates(orchestrator: &Arc<Orchestrator>) -> Vec<(String, String, 
     let mut current_id = dag.current_node_id.clone();
 
     while let Some(id) = current_id {
-        let Some(node) = dag.nodes.get(&id) else { break };
+        let Some(node) = dag.nodes.get(&id) else {
+            break;
+        };
         let role = match node.node_type.as_str() {
             "user" | "assistant" | "tool" | "system" => Some(node.node_type.clone()),
             "merge" => Some("system".to_string()),
@@ -136,7 +143,11 @@ fn collect_candidates(orchestrator: &Arc<Orchestrator>) -> Vec<(String, String, 
 /// be asking itself for).
 fn active_llm_context_length(orchestrator: &Arc<Orchestrator>) -> Option<u32> {
     let cfg = orchestrator.config.lock();
-    cfg.llm.active.as_deref().and_then(|name| cfg.llm.endpoints.get(name)).and_then(|p| p.context_length)
+    cfg.llm
+        .active
+        .as_deref()
+        .and_then(|name| cfg.llm.endpoints.get(name))
+        .and_then(|p| p.context_length)
 }
 
 /// Splits the dropped (non-surviving) candidates into contiguous runs

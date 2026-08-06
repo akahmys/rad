@@ -16,7 +16,9 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             module,
             message,
         } => {
-            crate::log_host!("\x1b[36m[TRACE {trace_id}]\x1b[0m \x1b[33m[{module}]\x1b[0m {message}");
+            crate::log_host!(
+                "\x1b[36m[TRACE {trace_id}]\x1b[0m \x1b[33m[{module}]\x1b[0m {message}"
+            );
             Ok(serde_json::Value::Null)
         }
         RasRpcCommand::AskHumanApproval { prompt } => {
@@ -152,9 +154,15 @@ pub(crate) struct ActiveLlmProfile {
     pub(crate) api_key: Option<String>,
 }
 
-pub(crate) fn resolve_active_llm_profile(orch: &crate::orchestrator::Orchestrator) -> ActiveLlmProfile {
+pub(crate) fn resolve_active_llm_profile(
+    orch: &crate::orchestrator::Orchestrator,
+) -> ActiveLlmProfile {
     let cfg = orch.config.lock();
-    let profile = cfg.llm.active.as_deref().and_then(|name| cfg.llm.endpoints.get(name));
+    let profile = cfg
+        .llm
+        .active
+        .as_deref()
+        .and_then(|name| cfg.llm.endpoints.get(name));
     ActiveLlmProfile {
         model: profile.and_then(|p| p.model.clone()),
         context_length: profile.and_then(|p| p.context_length),
@@ -184,7 +192,10 @@ fn active_llm_profile_json(orch: &crate::orchestrator::Orchestrator) -> serde_js
 /// without the host needing to know anything about the shape of that
 /// configuration. Empty object if the extension isn't registered or has no
 /// configured `config`.
-fn extension_config_json(orch: &crate::orchestrator::Orchestrator, caller_name: &str) -> serde_json::Value {
+fn extension_config_json(
+    orch: &crate::orchestrator::Orchestrator,
+    caller_name: &str,
+) -> serde_json::Value {
     let cfg = orch.config.lock();
     cfg.extensions
         .iter()

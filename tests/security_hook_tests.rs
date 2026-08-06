@@ -103,7 +103,10 @@ fn test_security_verification_hook_rejection() {
             source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
             permissions: Some(perms.clone()),
             config: HashMap::from([
-                ("block_path_patterns".to_string(), serde_json::json!(["blocked.txt"])),
+                (
+                    "block_path_patterns".to_string(),
+                    serde_json::json!(["blocked.txt"]),
+                ),
                 (
                     "block_command_patterns".to_string(),
                     serde_json::json!(["blocked_command", "blocked.txt"]),

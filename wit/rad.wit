@@ -31,7 +31,6 @@ interface types {
         process-stdout(process-output),
         process-stderr(process-output),
         process-exited(process-exit-info),
-        file-changed(file-change-info),
         stream-timeout(stream-timeout-info),
         human-input-received(string),
         task-completed,
@@ -58,11 +57,6 @@ interface types {
     record process-exit-info {
         pgid: s32,
         exit-code: option<s32>,
-    }
-
-    record file-change-info {
-        path: string,
-        change-type: string,
     }
 
     record stream-timeout-info {

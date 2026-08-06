@@ -20,7 +20,12 @@ fn minimal_orchestrator() -> Arc<Orchestrator> {
         ..Default::default()
     };
     let dag = Arc::new(Mutex::new(Dag::new()));
-    let orch = Arc::new(Orchestrator::new(config, "test_session".to_string(), dag, None));
+    let orch = Arc::new(Orchestrator::new(
+        config,
+        "test_session".to_string(),
+        dag,
+        None,
+    ));
     // Keep the tempdir alive for the orchestrator's lifetime by leaking it
     // — these are short-lived unit tests, not a resource-sensitive loop.
     std::mem::forget(temp);
@@ -91,7 +96,10 @@ fn test_run_compact_merges_dropped_range_via_real_context_tools() {
     assert!(msg.contains("Compacted"), "unexpected message: {msg}");
 
     let after_count = orch.dag.lock().nodes.len();
-    assert!(after_count < before_count, "compaction should have reduced node count: {after_count} vs {before_count}");
+    assert!(
+        after_count < before_count,
+        "compaction should have reduced node count: {after_count} vs {before_count}"
+    );
 
     // The goal must survive untouched.
     assert!(orch.dag.lock().nodes.contains_key(&ids[0]));

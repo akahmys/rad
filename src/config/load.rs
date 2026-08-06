@@ -12,7 +12,11 @@ impl Config {
             self.core.workspace = ws;
         }
 
-        let active_name = self.llm.active.clone().unwrap_or_else(|| "default".to_string());
+        let active_name = self
+            .llm
+            .active
+            .clone()
+            .unwrap_or_else(|| "default".to_string());
         let profile = self.llm.endpoints.entry(active_name.clone()).or_default();
 
         if let Ok(url) = std::env::var("RAD_BASE_URL").or_else(|_| std::env::var("LLM_BASE_URL")) {
@@ -74,11 +78,16 @@ pub fn load_config(explicit_path: Option<&str>) -> Result<Config, crate::error::
     let config_path = discover_config_path(explicit_path);
     if let Some(path) = config_path {
         // If config_path is the same as global config, skip duplicate read
-        let is_global = super::global_config_path().map(|h| h == path).unwrap_or(false);
+        let is_global = super::global_config_path()
+            .map(|h| h == path)
+            .unwrap_or(false);
 
         if !is_global {
             let content = fs::read_to_string(&path).map_err(|e| {
-                crate::error::UnifiedError::l1(format!("Failed to read project config: {e}"), "Config")
+                crate::error::UnifiedError::l1(
+                    format!("Failed to read project config: {e}"),
+                    "Config",
+                )
             })?;
             let local_project_val = parse_jsonc(&content)?;
             merge_json_value(&mut base_val, local_project_val);

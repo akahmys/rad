@@ -2,13 +2,22 @@ use super::{budget_chars_from_context_length, normalize_base_url};
 
 #[test]
 fn test_normalize_bare_root_is_unchanged() {
-    assert_eq!(normalize_base_url("http://localhost:8080"), "http://localhost:8080");
+    assert_eq!(
+        normalize_base_url("http://localhost:8080"),
+        "http://localhost:8080"
+    );
 }
 
 #[test]
 fn test_normalize_strips_v1_suffix() {
-    assert_eq!(normalize_base_url("http://localhost:8080/v1"), "http://localhost:8080");
-    assert_eq!(normalize_base_url("http://localhost:8080/v1/"), "http://localhost:8080");
+    assert_eq!(
+        normalize_base_url("http://localhost:8080/v1"),
+        "http://localhost:8080"
+    );
+    assert_eq!(
+        normalize_base_url("http://localhost:8080/v1/"),
+        "http://localhost:8080"
+    );
 }
 
 #[test]

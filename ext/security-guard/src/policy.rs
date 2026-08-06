@@ -34,7 +34,11 @@ fn string_array(config: &serde_json::Value, key: &str) -> Vec<String> {
     config
         .get(key)
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -49,14 +53,19 @@ pub(crate) fn evaluate(cmd: &CoreRpcCommand) -> bool {
         match cmd {
             CoreRpcCommand::FileWrite { path, .. } => {
                 let path_str = path.to_string_lossy();
-                !policy.block_path_patterns.iter().any(|p| path_str.contains(p.as_str()))
+                !policy
+                    .block_path_patterns
+                    .iter()
+                    .any(|p| path_str.contains(p.as_str()))
             }
-            CoreRpcCommand::SpawnBashProcess { command } => {
-                !policy.block_command_patterns.iter().any(|p| command.contains(p.as_str()))
-            }
-            CoreRpcCommand::ExecuteTool { arguments, .. } => {
-                !policy.block_command_patterns.iter().any(|p| arguments.contains(p.as_str()))
-            }
+            CoreRpcCommand::SpawnBashProcess { command } => !policy
+                .block_command_patterns
+                .iter()
+                .any(|p| command.contains(p.as_str())),
+            CoreRpcCommand::ExecuteTool { arguments, .. } => !policy
+                .block_command_patterns
+                .iter()
+                .any(|p| arguments.contains(p.as_str())),
             _ => true,
         }
     })

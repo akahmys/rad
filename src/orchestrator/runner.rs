@@ -106,7 +106,10 @@ impl Orchestrator {
                 crate::log_host!("[DEBUG] No WASM runtimes found, sending init_event to event_tx");
                 let _ = event_tx.send(init_event);
             } else {
-                crate::log_host!("[DEBUG] Dispatching HumanInputReceived to {} runtimes...", wasm_runtimes.len());
+                crate::log_host!(
+                    "[DEBUG] Dispatching HumanInputReceived to {} runtimes...",
+                    wasm_runtimes.len()
+                );
                 for (name, runtime_arc) in &wasm_runtimes {
                     let is_orchestrator = {
                         let runtime = runtime_arc.lock();

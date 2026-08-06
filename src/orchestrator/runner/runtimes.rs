@@ -93,7 +93,10 @@ impl Orchestrator {
                             }
                         }
                         Err(e) => {
-                            println!("\x1b[31m[FAILED] Extension '{}' get_tools error: {e}\x1b[0m", ext.name);
+                            println!(
+                                "\x1b[31m[FAILED] Extension '{}' get_tools error: {e}\x1b[0m",
+                                ext.name
+                            );
                         }
                     }
                 }
@@ -121,8 +124,13 @@ impl Orchestrator {
     /// pattern AWU 900 fixed away from. `None` if no enabled extension
     /// declares that role, or it hasn't been initialized yet.
     pub(crate) fn find_extension_arc_by_role(&self, role: &str) -> Option<Arc<Mutex<WasmRuntime>>> {
-        let resolved_name =
-            self.config.lock().extensions.iter().find(|e| e.role == role).map(|e| e.name.clone())?;
+        let resolved_name = self
+            .config
+            .lock()
+            .extensions
+            .iter()
+            .find(|e| e.role == role)
+            .map(|e| e.name.clone())?;
         self.wasm_runtime.lock().get(&resolved_name).cloned()
     }
 }

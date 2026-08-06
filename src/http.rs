@@ -99,7 +99,11 @@ async fn run_http_stream_async(
     let response = connect_with_timeout(url, req_future, max_silent_wait, event_tx).await?;
 
     if !response.status().is_success() {
-        return Err(format!("HTTP status error: {} for {}", response.status(), url));
+        return Err(format!(
+            "HTTP status error: {} for {}",
+            response.status(),
+            url
+        ));
     }
 
     let stream = response.bytes_stream();

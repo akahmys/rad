@@ -19,7 +19,11 @@ pub(crate) fn load_config_and_session(
     if let Some(ref ws) = args.workspace {
         cfg.core.workspace.clone_from(ws);
     }
-    let active_name = cfg.llm.active.clone().unwrap_or_else(|| "default".to_string());
+    let active_name = cfg
+        .llm
+        .active
+        .clone()
+        .unwrap_or_else(|| "default".to_string());
     let profile = cfg.llm.endpoints.entry(active_name).or_default();
     if let Some(ref url) = args.base_url {
         profile.base_url.clone_from(url);
@@ -78,7 +82,11 @@ pub(crate) fn load_config_and_session(
 fn check_active_llm_endpoint(cfg: &mut rad::config::Config) {
     use std::io::Write as _;
 
-    let active_name = cfg.llm.active.clone().unwrap_or_else(|| "default".to_string());
+    let active_name = cfg
+        .llm
+        .active
+        .clone()
+        .unwrap_or_else(|| "default".to_string());
     let (base_url, model) = {
         let Some(profile) = cfg.llm.endpoints.get(&active_name) else {
             return;

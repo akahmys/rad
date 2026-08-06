@@ -40,7 +40,10 @@ fn setup_context_tools_runtime(
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
         fs_write_allow: vec!["*".to_string()],
-        execution: Some(ExecutionConfig { allow_bash: true, ..Default::default() }),
+        execution: Some(ExecutionConfig {
+            allow_bash: true,
+            ..Default::default()
+        }),
         ..Default::default()
     };
 
@@ -93,7 +96,9 @@ fn test_context_tools_optimize_via_call_extension_method() {
         "max_history": 1,
         "max_content_chars": null,
     });
-    let res = runtime.call_extension_method("optimize", &req.to_string()).unwrap();
+    let res = runtime
+        .call_extension_method("optimize", &req.to_string())
+        .unwrap();
     let val: serde_json::Value = serde_json::from_str(&res).unwrap();
     let optimized = val["optimized_messages"].as_array().unwrap();
     assert_eq!(optimized.len(), 1);

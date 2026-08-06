@@ -26,7 +26,10 @@ struct TestContext {
 /// `~/.rad/config.json`.
 fn blocklist_config() -> HashMap<String, serde_json::Value> {
     HashMap::from([
-        ("block_path_patterns".to_string(), serde_json::json!(["blocked.txt"])),
+        (
+            "block_path_patterns".to_string(),
+            serde_json::json!(["blocked.txt"]),
+        ),
         (
             "block_command_patterns".to_string(),
             serde_json::json!(["blocked_command", "blocked.txt"]),

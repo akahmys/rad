@@ -210,4 +210,3 @@ pub struct Config {
     #[serde(default)]
     pub extensions: Vec<ExtensionConfig>,
 }
-

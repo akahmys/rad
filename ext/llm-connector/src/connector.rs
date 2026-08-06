@@ -5,8 +5,8 @@ use crate::event_stream::EventStreamImpl;
 use crate::exports;
 use crate::radcomp::connector::types as conn_types;
 use crate::serialize_types::{
-    ChatCompletionsRequest, FunctionDefinitionSerialize, MessageSerialize,
-    StreamOptionsSerialize, ToolCallFunctionSerialize, ToolCallSerialize, ToolSerialize,
+    ChatCompletionsRequest, FunctionDefinitionSerialize, MessageSerialize, StreamOptionsSerialize,
+    ToolCallFunctionSerialize, ToolCallSerialize, ToolSerialize,
 };
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -83,7 +83,10 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
         let mut headers = vec![("Content-Type".to_string(), "application/json".to_string())];
 
         if let Some(key) = api_key.as_ref().filter(|k| !k.trim().is_empty()) {
-            headers.push(("Authorization".to_string(), format!("Bearer {}", key.trim())));
+            headers.push((
+                "Authorization".to_string(),
+                format!("Bearer {}", key.trim()),
+            ));
         }
 
         // RAD_TEST_PORT is test infrastructure (redirects every call to a
@@ -93,12 +96,15 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
         let url = if let Ok(test_port) = std::env::var("RAD_TEST_PORT") {
             format!("http://127.0.0.1:{test_port}/v1/chat/completions")
         } else if let Some(base_url) = base_url.filter(|b| !b.trim().is_empty()) {
-            format!("{}/v1/chat/completions", rad_models::normalize_base_url(&base_url))
+            format!(
+                "{}/v1/chat/completions",
+                rad_models::normalize_base_url(&base_url)
+            )
         } else if api_key.is_some() {
             "https://api.openai.com/v1/chat/completions".to_string()
         } else {
             return Err(
-                "No LLM endpoint configured. Set one up with /llm add <name> <url>.".to_string()
+                "No LLM endpoint configured. Set one up with /llm add <name> <url>.".to_string(),
             );
         };
 

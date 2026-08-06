@@ -34,7 +34,10 @@ fn write_skill(workspace: &std::path::Path, name: &str, content: &str) {
 /// `get_tools` discovery is exercised directly against a standalone
 /// `WasmRuntime` (no full `Orchestrator` needed — it only touches
 /// `ListDir`/`FileRead`, which just need `ctx.sandbox`).
-fn setup_tool_provider_runtime(workspace: &std::path::Path, snapshots: &std::path::Path) -> WasmRuntime {
+fn setup_tool_provider_runtime(
+    workspace: &std::path::Path,
+    snapshots: &std::path::Path,
+) -> WasmRuntime {
     let perms = PermissionConfig {
         fs_read_allow: vec!["*".to_string()],
         fs_write_allow: vec!["*".to_string()],
@@ -96,7 +99,10 @@ fn test_get_tools_discovers_project_local_skill() {
     assert_eq!(tools.len(), 1);
     let function = &tools[0]["function"];
     assert_eq!(function["name"], "review-checklist");
-    assert_eq!(function["description"], "Runs the team's PR review checklist.");
+    assert_eq!(
+        function["description"],
+        "Runs the team's PR review checklist."
+    );
 }
 
 #[test]
@@ -107,7 +113,11 @@ fn test_get_tools_skips_skill_missing_description() {
     fs::create_dir_all(&workspace).unwrap();
     fs::create_dir_all(&snapshots).unwrap();
 
-    write_skill(&workspace, "broken", "---\nmode: inline\n---\n\nNo description.");
+    write_skill(
+        &workspace,
+        "broken",
+        "---\nmode: inline\n---\n\nNo description.",
+    );
 
     let mut runtime = setup_tool_provider_runtime(&workspace, &snapshots);
     let tools_json = runtime.get_tools().unwrap();
@@ -150,7 +160,11 @@ fn run_mock_http_server(
 
 static TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-fn run_skill_task(turns: Vec<String>, workspace: &std::path::Path, snapshots: &std::path::Path) -> Arc<Mutex<Dag>> {
+fn run_skill_task(
+    turns: Vec<String>,
+    workspace: &std::path::Path,
+    snapshots: &std::path::Path,
+) -> Arc<Mutex<Dag>> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
@@ -287,14 +301,17 @@ fn test_execute_tool_errors_for_unknown_skill() {
     fs::create_dir_all(&snapshots).unwrap();
 
     let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_x\",\"type\":\"function\",\"function\":{\"name\":\"does-not-exist\",\"arguments\":\"{}\"}}]}}]}\n\ndata: [DONE]\n\n".to_string();
-    let turn2 = "data: {\"choices\":[{\"delta\":{\"content\":\"Got the error.\"}}]}\n\ndata: [DONE]\n\n".to_string();
+    let turn2 =
+        "data: {\"choices\":[{\"delta\":{\"content\":\"Got the error.\"}}]}\n\ndata: [DONE]\n\n"
+            .to_string();
 
     let dag = run_skill_task(vec![turn2, turn1], &workspace, &snapshots);
 
     let dag_guard = dag.lock();
-    let found_error = dag_guard.nodes.values().any(|n| {
-        n.text.contains("Unknown skill") || n.text.contains("does-not-exist")
-    });
+    let found_error = dag_guard
+        .nodes
+        .values()
+        .any(|n| n.text.contains("Unknown skill") || n.text.contains("does-not-exist"));
     assert!(
         found_error,
         "Expected the unknown-skill error to surface as a tool result in the DAG"

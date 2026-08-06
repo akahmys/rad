@@ -32,18 +32,29 @@ fn test_build_digest_addendum_none_when_no_activity() {
 
 #[test]
 fn test_build_digest_addendum_extracts_file_path() {
-    let messages =
-        vec![assistant_with_call("write_file", r#"{"path": "src/main.rs", "content": "x"}"#)];
+    let messages = vec![assistant_with_call(
+        "write_file",
+        r#"{"path": "src/main.rs", "content": "x"}"#,
+    )];
     let digest = build_digest_addendum(&messages).unwrap();
-    assert!(digest.contains("Files touched this session: src/main.rs"), "{digest}");
+    assert!(
+        digest.contains("Files touched this session: src/main.rs"),
+        "{digest}"
+    );
     assert!(!digest.contains("Commands run"), "{digest}");
 }
 
 #[test]
 fn test_build_digest_addendum_extracts_command() {
-    let messages = vec![assistant_with_call("execute_command", r#"{"command": "cargo test"}"#)];
+    let messages = vec![assistant_with_call(
+        "execute_command",
+        r#"{"command": "cargo test"}"#,
+    )];
     let digest = build_digest_addendum(&messages).unwrap();
-    assert!(digest.contains("Commands run this session: `cargo test`"), "{digest}");
+    assert!(
+        digest.contains("Commands run this session: `cargo test`"),
+        "{digest}"
+    );
     assert!(!digest.contains("Files touched"), "{digest}");
 }
 
@@ -88,6 +99,12 @@ fn test_build_digest_addendum_caps_to_most_recent_items() {
         .map(|i| assistant_with_call("write_file", &format!(r#"{{"path": "file{i}.rs"}}"#)))
         .collect();
     let digest = build_digest_addendum(&messages).unwrap();
-    assert!(!digest.contains("file0.rs"), "oldest entries should be dropped: {digest}");
-    assert!(digest.contains("file39.rs"), "most recent entry should survive: {digest}");
+    assert!(
+        !digest.contains("file0.rs"),
+        "oldest entries should be dropped: {digest}"
+    );
+    assert!(
+        digest.contains("file39.rs"),
+        "most recent entry should survive: {digest}"
+    );
 }

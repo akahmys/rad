@@ -23,7 +23,9 @@ pub(crate) fn open_process(
     let expanded_command = if command.starts_with('~') {
         let mut parts = command.split_whitespace();
         if let Some(first) = parts.next() {
-            let expanded_first = crate::config::expand_tilde(first).to_string_lossy().to_string();
+            let expanded_first = crate::config::expand_tilde(first)
+                .to_string_lossy()
+                .to_string();
             let rest: Vec<&str> = parts.collect();
             if rest.is_empty() {
                 expanded_first
@@ -42,9 +44,18 @@ pub(crate) fn open_process(
         command: expanded_command.clone(),
     };
 
-    if let Err(ref e) = permissions::check_permissions(&cmd, &state.permissions, state.sandbox.workspace_dir()) {
-        crate::log_host!("[HOST] RPC OpenProcess Perm Failed in extension '{}': {}", state.name, e);
-        return Err(format!("Permission denied in extension '{}': {e}", state.name));
+    if let Err(ref e) =
+        permissions::check_permissions(&cmd, &state.permissions, state.sandbox.workspace_dir())
+    {
+        crate::log_host!(
+            "[HOST] RPC OpenProcess Perm Failed in extension '{}': {}",
+            state.name,
+            e
+        );
+        return Err(format!(
+            "Permission denied in extension '{}': {e}",
+            state.name
+        ));
     }
 
     let orchestrator = state.orchestrator.as_ref().and_then(|w| w.upgrade());
@@ -53,8 +64,8 @@ pub(crate) fn open_process(
             id: Some("wasm_call".to_string()),
             command: cmd.clone(),
         };
-        let buf = serde_json::to_vec(&req)
-            .map_err(|e| format!("Failed to serialize request: {e}"))?;
+        let buf =
+            serde_json::to_vec(&req).map_err(|e| format!("Failed to serialize request: {e}"))?;
         if let Err(e) = orch.verify_rpc_exclude(&state.name, &req, &buf) {
             return Err(format!("Security verification failed: {e}"));
         }

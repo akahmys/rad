@@ -66,8 +66,6 @@ pub enum RasCoreEvent {
         pgid: String,
         exit_code: Option<i32>,
     },
-    /// File changes detected in the sandbox workspace.
-    FileChanged { path: PathBuf, change_type: String },
     /// Connection/stream read timed out.
     StreamTimeout { target: String, duration_ms: u64 },
     /// Received human user prompt input.
@@ -214,6 +212,6 @@ pub struct RasRpcResponse {
 pub mod llm_endpoint;
 pub use llm_endpoint::{budget_chars_from_context_length, normalize_base_url};
 
-mod rpc_conversion;
 pub mod dag;
+mod rpc_conversion;
 pub use dag::{Dag, DagNode};

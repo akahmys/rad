@@ -65,7 +65,11 @@ impl Guest for SkillToolProviderImpl {
 
         let args = serde_json::from_str::<serde_json::Value>(&arguments)
             .ok()
-            .and_then(|v| v.get("args").and_then(|a| a.as_str()).map(ToString::to_string))
+            .and_then(|v| {
+                v.get("args")
+                    .and_then(|a| a.as_str())
+                    .map(ToString::to_string)
+            })
             .unwrap_or_default();
         let result = substitute_args(skill.body, &args);
 

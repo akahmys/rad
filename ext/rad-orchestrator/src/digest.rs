@@ -29,7 +29,10 @@ pub fn build_digest_addendum(messages: &[Message]) -> Option<String> {
 
     let mut parts = Vec::new();
     if !files_touched.is_empty() {
-        parts.push(format!("Files touched this session: {}", files_touched.join(", ")));
+        parts.push(format!(
+            "Files touched this session: {}",
+            files_touched.join(", ")
+        ));
     }
     if !commands_run.is_empty() {
         let cmds: Vec<String> = commands_run.iter().map(|c| format!("`{c}`")).collect();
@@ -81,7 +84,10 @@ fn extract_facts(messages: &[Message]) -> (Vec<String>, Vec<String>) {
         }
     }
 
-    (cap_to_most_recent(files_touched), cap_to_most_recent(commands_run))
+    (
+        cap_to_most_recent(files_touched),
+        cap_to_most_recent(commands_run),
+    )
 }
 
 fn cap_to_most_recent(mut items: Vec<String>) -> Vec<String> {
