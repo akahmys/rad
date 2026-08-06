@@ -14,6 +14,13 @@ API_KEY_PATTERN=$(echo -e "sk-[a-zA-Z0-9]{20,}")
 ANT_KEY_PATTERN=$(echo -e "sk-ant-[a-zA-Z0-9_-]{20,}")
 ASSIGN_SECRET_PATTERN=$(echo -e "[a-zA-Z0-9_-]*(api[-_]?key|secret|token|password|credential|auth)[a-zA-Z0-9_-]*\\s*[:=]\\s*[\"'][a-zA-Z0-9_\\-\\.\\~]{8,}[\"']")
 
+# Values that name *where* a credential goes rather than being one. The
+# assignment pattern keys on any identifier containing "auth", so a field like
+# `auth_header: "Authorization"` trips it — the value is an HTTP header name,
+# not a secret. Allowlisting exact literals keeps detection intact: a real
+# `auth_token = "sk-..."` still fails, because its value is not on this list.
+ASSIGN_SECRET_ALLOWLIST=$(echo -e "[\"'](Authorization|Bearer|Basic|Proxy-Authorization|WWW-Authenticate|X-Api-Key|x-api-key|api-key|anthropic-version)[\"']")
+
 echo "=== Secret & Absolute Path Scanner ==="
 
 MODE="staged"
@@ -69,9 +76,15 @@ check_content() {
     fi
 
     # 5. Secret assignment variable
-    if echo "$content" | grep -E -i "$ASSIGN_SECRET_PATTERN" > /dev/null; then
+    local assign_hits
+    # The trailing `|| true` is required, not defensive: under `set -e` with
+    # `pipefail`, a file with zero matches makes the first grep exit 1, which
+    # aborts the whole scan silently — every later file goes unscanned.
+    assign_hits=$(echo "$content" | grep -n -E -i "$ASSIGN_SECRET_PATTERN" \
+        | { grep -v -E -i "$ASSIGN_SECRET_ALLOWLIST" || true; } || true)
+    if [ -n "$assign_hits" ]; then
         echo -e "${RED}ERROR: Hardcoded secret assignment detected in $file_path:${NC}"
-        echo "$content" | grep -n -E -i "$ASSIGN_SECRET_PATTERN" || true
+        echo "$assign_hits"
         local_failed=1
     fi
 
