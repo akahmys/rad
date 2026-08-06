@@ -83,7 +83,7 @@ proc-macro attribute; and modules are configured in a separate `modules` array,
 so migration never has to guess whether an entry is old or new.
 
 ### 💡 Current AWU Status
-- [ ] AWU 949: Add `wit/kernel.wit` and register its bindings
+- [✅] AWU 949: Add `wit/kernel/kernel.wit` and register its bindings (Result: Success — §2's claim holds on the real build; all six extensions still load and complete a live task)
 - [ ] AWU 950: `rad-abi` — manifest schema
 - [ ] AWU 951: `rad-sdk` — `module!` macro and syscall wrappers
 - [ ] AWU 952: Module loading, `manifest()` reading, routing table
@@ -99,10 +99,18 @@ so migration never has to guess whether an entry is old or new.
 - **Context**: A seventh world across a fourth package. §2's second experiment
   proves a *new* package cannot break existing extensions; this AWU is where that
   claim gets exercised for real rather than in a throwaway probe.
-- **DoD**: `cargo build` succeeds, and `rad` still loads all six extensions and
-  completes a real task against the live endpoint. **If any extension fails to
-  instantiate, the §2 conclusion is wrong and the whole migration plan needs
-  revisiting** — so this is deliberately the first step.
+- **Result**: Confirmed. All six extensions load unchanged, `mcp-tool-provider`
+  still verifies its 19 tools, and a live task against the local endpoint
+  completes — with a fourth WIT package registered in the same binary. The
+  migration's central assumption survives contact with the real build.
+  Two things surfaced that the design had not anticipated. The file lives in
+  `wit/kernel/`, not beside `rad.wit`, because `rad_context_tools` binds
+  `path: "wit"` as a *directory* and a second unrelated package there collides
+  with that scan — the existing code already documents this hazard for
+  `wit/connector/`. And `stream` turned out to be a reserved word in WIT, since
+  the component model claims it for the async `stream<T>` primitive underlying
+  WASI 0.3; the resource is now `byte-stream`. That is the §3.1.1 argument
+  showing up in the syntax itself.
 
 #### AWU 950: `rad-abi` — manifest schema
 - **Objective**: One shared type, agreed by guest and kernel.

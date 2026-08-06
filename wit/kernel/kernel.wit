@@ -1,0 +1,93 @@
+// The kernel contract. Lives in its own subdirectory for the same reason
+// `wit/connector/` does: `rad_context_tools` binds `path: "wit"` as a directory,
+// and a second unrelated package sitting beside `rad.wit` would collide with
+// that scan.
+//
+// Deliberately a separate package from `radcomp:extension`
+// (`wit/rad.wit`): during the migration both surfaces are live at once, and
+// adding a new package cannot change the type of any function the existing
+// extensions import, so none of them break. See ARCHITECTURE-NEXT.md §9.1.
+//
+// Two layers, and the split is load-bearing (ARCHITECTURE-NEXT.md §2):
+//
+//   syscall  — typed, and may only ever grow by adding whole new functions.
+//              Changing an existing one, or adding a field to a shared record,
+//              or adding a method to a resource, breaks every module at once.
+//   dispatch — opaque. Its parameters are strings, so the type can never change
+//              no matter how many methods or payload fields appear later.
+package rad:kernel@1.0.0;
+
+interface types {
+    // Must not become a variant. Adding a case would change the return type of
+    // every syscall, which is exactly the breakage this design exists to avoid.
+    // `code` stays a number rather than an enum for the same reason.
+    record error {
+        code: u32,
+        message: string,
+    }
+
+    // Named `byte-stream`, not `stream`: `stream` is a reserved word in WIT —
+    // the component model claims it for the async `stream<T>` primitive that
+    // WASI 0.3 is built on. A concrete reminder that the surrounding ecosystem
+    // moves underneath us, which is why the kernel owns this type instead of
+    // importing `wasi:io` (§3.1.1).
+    resource byte-stream {
+        read: func(max: u32) -> result<list<u8>, error>;
+        write: func(data: list<u8>) -> result<_, error>;
+        close: func();
+    }
+
+    resource process {
+        stdout: func() -> byte-stream;
+        stderr: func() -> byte-stream;
+        stdin: func() -> byte-stream;
+        wait: func() -> result<s32, error>;
+        kill: func();
+    }
+}
+
+interface syscall {
+    use types.{error, process, byte-stream};
+
+    // Only what WASI cannot already do for a module. Filesystem, clock and
+    // standard I/O are absent on purpose: modules use `std::fs`, `std::time`
+    // and `println!`, and Rust's std absorbs WASI version changes on their
+    // behalf. HTTP and process spawning have no std equivalent, so the kernel
+    // owns them and absorbs the churn itself (ARCHITECTURE-NEXT.md §3.1.2).
+
+    proc-spawn: func(argv: list<string>) -> result<process, error>;
+
+    net-open: func(
+        url: string,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    ) -> result<byte-stream, error>;
+
+    log: func(trace-id: string, level: string, message: string);
+}
+
+interface dispatch {
+    // Request/response. The caller suspends until the target replies. The kernel
+    // tracks the call stack and rejects re-entry with an error rather than
+    // deadlocking, so a third-party module cannot freeze rad.
+    call: func(target: string, method: string, payload: string) -> result<string, string>;
+
+    // Fire-and-forget. Queued and delivered once the target is idle. Events and
+    // any long-running request must use this: a `call` that waits for token
+    // generation would block the caller for the whole turn.
+    post: func(target: string, method: string, payload: string);
+}
+
+world module {
+    import syscall;
+    import dispatch;
+
+    // Returns the module's manifest as JSON — name, version, abi, provides.
+    // Must be pure: the kernel calls it before granting anything, to learn what
+    // the module routes.
+    export manifest: func() -> string;
+
+    // Every inbound message, request and event alike. New method names and new
+    // payload fields never touch this signature, which is the whole point.
+    export handle: func(method: string, payload: string) -> result<string, string>;
+}

@@ -90,7 +90,7 @@ syscall を典型的なWITのまま保てるのは、実験で「新規関数の
 拡張せず、新しいトップレベル関数を足す。これは不便だが、破壊しないための唯一の道である。
 
 §3.1 で syscall を3つに絞ったため、この規則が監視すべき面積は小さい。
-resource も `process` と `stream` の2つだけである。
+resource も `process` と `byte-stream` の2つだけである。
 
 ---
 
@@ -108,16 +108,19 @@ interface types {
     //   §2 で断罪した破壊が再現する。code は enum ではなく数値のまま扱う。
     record error { code: u32, message: string }
 
-    resource stream  { read: func(max: u32) -> result<list<u8>, error>;
+    // `stream` は WIT の予約語(コンポーネントモデルが async の `stream<T>` に
+    // 使う)。実装時に判明した。周囲のエコシステムが足元で動いている具体例であり、
+    // カーネルがこの型を自前で持つ理由(§3.1.1)の裏づけでもある。
+    resource byte-stream { read: func(max: u32) -> result<list<u8>, error>;
                        write: func(data: list<u8>) -> result<_, error>;
                        close: func(); }
-    resource process { stdout: func() -> stream; stderr: func() -> stream;
-                       stdin: func() -> stream;
+    resource process { stdout: func() -> byte-stream; stderr: func() -> byte-stream;
+                       stdin: func() -> byte-stream;
                        wait: func() -> result<s32, error>; kill: func(); }
 }
 
 interface syscall {
-    use types.{error, process, stream};
+    use types.{error, process, byte-stream};
 
     // WASI が既に提供するもの — ファイルシステム、クロック、標準入出力 — は
     // 再実装しない(§3.4.1)。モジュールは `std::fs` / `std::time` /
@@ -125,7 +128,7 @@ interface syscall {
 
     proc-spawn: func(argv: list<string>) -> result<process, error>;
     net-open:   func(url: string, headers: list<tuple<string, string>>,
-                     body: list<u8>) -> result<stream, error>;
+                     body: list<u8>) -> result<byte-stream, error>;
     log:        func(trace-id: string, level: string, message: string);
 }
 
@@ -150,7 +153,7 @@ world module {
 必須、`log` はトレースID伝搬(§8のデバッグ性課題)のために残す。
 
 これにより §2.2 の「追加のみ」規則が監視すべき面積は桁違いに小さくなる。
-`resource file` も消え、残る resource は `process` と `stream` のみである。
+`resource file` も消え、残る resource は `process` と `byte-stream` のみである。
 
 #### 3.1.1 `net-open` は `wasi:http` に置き換えない(決定済み)
 
@@ -884,7 +887,7 @@ wit/context-tools.wit           → context-tools-extension
 | # | 内容 | 完了時点の状態 |
 |---|---|---|
 | 0 | **dialect構造体**(`ext/llm-connector` 内で完結、共有WITに触れない) | ✅ 完了 (AWU 948) |
-| 1 | `wit/kernel.wit` を**新パッケージとして追加**、`rad-sdk` を作る | 6拡張は無変更で動作 |
+| 1 | `wit/kernel/kernel.wit` を**新パッケージとして追加**、`rad-abi` と `rad-sdk` を作る | 6拡張は無変更で動作(AWU 949 で実証済み) |
 | 2 | Core に dispatch / router / スケジューラを実装(§3.6)。旧RPC面と共存 | 同上。新面はまだ誰も使わない |
 | 3 | `context-tools` → module へ移す(既存ロジックが最も素直に載る) | 5拡張 + 1モジュール |
 | 4 | `skill-tool-provider` → module(§4.5 の3変更を同時に反映) | 4拡張 + 2モジュール |

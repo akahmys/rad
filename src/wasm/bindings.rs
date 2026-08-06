@@ -67,6 +67,19 @@ pub mod rad_context_tools {
     });
 }
 
+pub mod rad_kernel {
+    // The migration's new surface, live alongside the existing one. A fourth,
+    // unrelated package: adding it cannot change the type of anything the six
+    // current extensions import, so none of them break (ARCHITECTURE-NEXT.md
+    // §2, §9.1). Nothing implements this world yet — registering the bindings
+    // first is what proves that claim on the real build rather than a probe.
+    wasmtime::component::bindgen!({
+        path: "wit/kernel/kernel.wit",
+        world: "module",
+        additional_derives: [serde::Serialize, serde::Deserialize],
+    });
+}
+
 pub use rad_extension::RadExtension;
 pub use rad_extension::RadExtensionImports;
 pub use rad_extension::radcomp::extension::types as wit;
