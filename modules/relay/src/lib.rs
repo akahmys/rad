@@ -51,6 +51,25 @@ fn hop_post(req: HopReq) -> Result<HopRes, Error> {
     })
 }
 
+#[derive(serde::Deserialize)]
+struct SpinReq {}
+
+#[derive(serde::Serialize)]
+struct SpinRes {
+    never: bool,
+}
+
+/// Never returns. Exists so the kernel's preemption can be demonstrated rather
+/// than asserted — a cooperative abort flag cannot stop this, which is the
+/// whole argument for epoch interruption (§3.6.5).
+fn spin(_req: SpinReq) -> Result<SpinRes, Error> {
+    let mut n: u64 = 0;
+    loop {
+        n = n.wrapping_add(1);
+        std::hint::black_box(n);
+    }
+}
+
 rad_sdk::module! {
     wit: "../../wit/kernel/kernel.wit",
     name: "relay",
@@ -58,5 +77,6 @@ rad_sdk::module! {
     methods: {
         "relay.hop"      => hop,
         "relay.hop_post" => hop_post,
+        "relay.spin"     => spin,
     }
 }

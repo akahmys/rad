@@ -20,7 +20,7 @@ fn kernel() -> Option<Arc<KernelShared>> {
     let (echo, relay) = (wasm("echo_module")?, wasm("relay_module")?);
     let shared = KernelShared::new();
     for (name, path) in [("echo", echo), ("relay", relay)] {
-        let rt = ModuleRuntime::load(name, &path, Arc::downgrade(&shared))
+        let rt = ModuleRuntime::load(name, &path, &shared.engine, Arc::downgrade(&shared))
             .unwrap_or_else(|e| panic!("{name} should load: {e}"));
         shared
             .registry
@@ -130,4 +130,53 @@ fn the_call_stack_unwinds_so_a_second_call_still_works() {
         )
         .expect("the stack should have unwound");
     assert!(reply.contains("after"), "{reply}");
+}
+
+#[test]
+fn a_module_that_never_returns_is_interrupted() {
+    // §3.6.5. `src/esc_abort.rs`'s cooperative flag cannot stop this loop — it
+    // never checks anything. Epoch interruption can, which is the argument for
+    // preferring it over a flag once third-party modules exist.
+    let Some(k) = kernel() else { return };
+
+    // A deadline short enough to keep the test quick. Same mechanism as the
+    // production budget, just fewer ticks.
+    {
+        let modules = k.modules.lock();
+        let relay = modules.get("relay").unwrap().clone();
+        drop(modules);
+        relay.lock().deadline_ticks = 4; // ~200ms, same mechanism as production
+    }
+
+    let started = std::time::Instant::now();
+    let err = k.call("test", "relay", "relay.spin", "{}").unwrap_err();
+    let elapsed = started.elapsed();
+
+    assert!(
+        err.contains("interrupted") && err.contains("relay.spin"),
+        "the error should say what happened and to which method: {err}"
+    );
+    assert!(
+        elapsed < std::time::Duration::from_secs(10),
+        "took {elapsed:?}; the deadline did not fire"
+    );
+}
+
+#[test]
+fn the_kernel_still_works_after_interrupting_a_module() {
+    // An interrupted module must not take the process with it, or preemption
+    // would only trade one failure for another.
+    let Some(k) = kernel() else { return };
+    {
+        let modules = k.modules.lock();
+        let relay = modules.get("relay").unwrap().clone();
+        drop(modules);
+        relay.lock().deadline_ticks = 4; // ~200ms, same mechanism as production
+    }
+    let _ = k.call("test", "relay", "relay.spin", "{}");
+
+    let reply = k
+        .call("test", "echo", "echo.say", r#"{"text":"still alive"}"#)
+        .expect("other modules must be unaffected");
+    assert!(reply.contains("still alive"), "{reply}");
 }

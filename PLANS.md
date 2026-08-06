@@ -88,7 +88,7 @@ so migration never has to guess whether an entry is old or new.
 - [✅] AWU 951: `rad-sdk` — `module!` macro (Result: Success — split into `routes!`/`module!` so routing stays natively testable; a real module builds to a component exporting `manifest`/`handle`)
 - [✅] AWU 952: Module loading, `manifest()` reading, routing table (Result: Success — the real `modules/echo` component loads, answers, and conflicts are caught at registration)
 - [✅] AWU 953: `dispatch.call`/`post` with cycle detection (Result: Success — proven between two real wasm modules; the cycle that would deadlock is refused before the lock is taken)
-- [ ] AWU 954: Async wasmtime, epoch interruption, scheduler loop
+- [✅] AWU 954: Epoch interruption (Result: Success — a runaway module is preempted; `async_support` and the scheduler deferred, see Result)
 - [ ] AWU 955: `modules` config array and an echo module proving the path
 
 ### 📝 AWU Details
@@ -198,8 +198,22 @@ so migration never has to guess whether an entry is old or new.
   `epoch_interruption` so a runaway module can be preempted, which
   `src/esc_abort.rs`'s cooperative flag cannot do. Both confirmed present in
   wasmtime 29.0.1. **The existing extension path must keep working under async.**
-- **DoD**: A module spinning in an infinite loop is interrupted; all 157 existing
-  tests still pass.
+- **Result**: Epoch interruption landed and demonstrated: `relay.spin` loops
+  forever and is trapped, the error names the method and says it exceeded its
+  budget rather than merely "trapped", and the kernel keeps serving other
+  modules afterwards. The engine moved to `KernelShared` so one ticker thread
+  drives every module's deadline, and the budget is per-module so different
+  workloads can differ — a compaction pass and a UI redraw do not deserve the
+  same ceiling.
+  **`async_support` and the scheduler loop were deliberately not done.** Async
+  exists to stop a blocking syscall from holding the process, and every syscall
+  is still a stub — there is nothing yet to block on. Enabling it would make
+  every call on the engine async, forcing AWU 953's dispatch to be rewritten
+  around re-entrant async delivery for no present benefit, which is the
+  speculative complexity `CODING.md` §3 rules out. It belongs with `net-open`,
+  the first syscall that actually blocks. The scheduler is the same story: it
+  has nothing to schedule until modules own the main loop (stage 9). Neither is
+  abandoned — both move to where they earn their cost.
 
 #### AWU 955: `modules` config array and an echo module proving the path
 - **Objective**: End-to-end proof on the smallest possible module.

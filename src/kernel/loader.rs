@@ -17,6 +17,11 @@ pub struct ModuleRuntime {
     pub store: Store<KernelState>,
     pub bindings: rad_kernel::Module,
     pub manifest: Manifest,
+    /// How long one `handle()` may run, in epoch ticks. Per-module rather than
+    /// global because a compaction pass and a UI redraw do not deserve the same
+    /// budget — and because a test needs to reach the limit without waiting for
+    /// the production one.
+    pub deadline_ticks: u64,
 }
 
 impl ModuleRuntime {
@@ -27,17 +32,16 @@ impl ModuleRuntime {
     /// Returns a message if the component fails to load or instantiate, if
     /// `manifest()` traps, or if the manifest is malformed or declares a
     /// different ABI.
-    pub fn load(name: &str, wasm_path: &Path, shared: Weak<KernelShared>) -> Result<Self, String> {
-        let mut config = wasmtime::Config::new();
-        config.wasm_component_model(true);
-        if let Err(e) = config.cache_config_load_default() {
-            crate::log_host!("[kernel] compile cache unavailable: {e}");
-        }
-        let engine = Engine::new(&config).map_err(|e| format!("Failed to create Engine: {e}"))?;
-        let component = Component::from_file(&engine, wasm_path)
+    pub fn load(
+        name: &str,
+        wasm_path: &Path,
+        engine: &Engine,
+        shared: Weak<KernelShared>,
+    ) -> Result<Self, String> {
+        let component = Component::from_file(engine, wasm_path)
             .map_err(|e| format!("Failed to load module '{name}': {e}"))?;
 
-        let mut linker = Linker::new(&engine);
+        let mut linker = Linker::new(engine);
         wasmtime_wasi::add_to_linker_sync(&mut linker)
             .map_err(|e| format!("Linker error WASI: {e}"))?;
         // Supplies every `rad:kernel` import. A module that imports none of them
@@ -63,7 +67,10 @@ impl ModuleRuntime {
             wasi_builder.build(),
             ResourceTable::new(),
         );
-        let mut store = Store::new(&engine, state);
+        let mut store = Store::new(engine, state);
+        // Every guest call runs under a deadline. Without this the epoch
+        // configuration is inert: a store with no deadline is never checked.
+        store.set_epoch_deadline(super::shared::HANDLE_DEADLINE_TICKS);
         let bindings = rad_kernel::Module::instantiate(&mut store, &component, &linker)
             .map_err(|e| format!("Failed to instantiate module '{name}': {e}"))?;
 
@@ -89,6 +96,7 @@ impl ModuleRuntime {
             store,
             bindings,
             manifest,
+            deadline_ticks: super::shared::HANDLE_DEADLINE_TICKS,
         })
     }
 
@@ -99,13 +107,26 @@ impl ModuleRuntime {
     /// Returns a message if the module traps, or the module's own error if it
     /// rejects the call.
     pub fn handle(&mut self, method: &str, payload: &str) -> Result<String, String> {
+        // Reset per call, not per instantiation: the budget is "this message",
+        // so a module that has served many is not penalised for the earlier ones.
+        self.store.set_epoch_deadline(self.deadline_ticks);
         self.bindings
             .call_handle(&mut self.store, method, payload)
             .map_err(|e| {
-                format!(
-                    "module '{}' trapped handling '{method}': {e}",
-                    self.manifest.name
-                )
+                // An epoch trap arrives here like any other. Naming it matters:
+                // "trapped" alone would send someone hunting for a bug in the
+                // module's logic rather than a loop that never returned.
+                if e.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt) {
+                    format!(
+                        "module '{}' exceeded its time budget handling '{method}' and was interrupted",
+                        self.manifest.name
+                    )
+                } else {
+                    format!(
+                        "module '{}' trapped handling '{method}': {e}",
+                        self.manifest.name
+                    )
+                }
             })?
     }
 }

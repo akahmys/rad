@@ -15,6 +15,16 @@ use super::registry::Registry;
 use parking_lot::Mutex;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// How long a single `handle()` may run before the kernel traps it.
+///
+/// Not a performance budget — it is the ceiling on how long a module can hold
+/// the process. A third-party module must not be able to freeze rad
+/// (`ARCHITECTURE-NEXT.md` §3.6.5), and `src/esc_abort.rs`'s cooperative flag
+/// cannot stop code that never checks it.
+pub const EPOCH_TICK_MS: u64 = 50;
+pub const HANDLE_DEADLINE_TICKS: u64 = 600; // 30s
 
 /// A message queued by `dispatch.post`, delivered once the target is idle.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +37,9 @@ pub struct Posted {
 
 /// Everything a host call needs to route a message.
 pub struct KernelShared {
+    /// One `Engine` for every module, so a single ticker thread drives all
+    /// their epoch deadlines. Per-module engines would each need their own.
+    pub engine: wasmtime::Engine,
     pub registry: Mutex<Registry>,
     /// Per-module locks, never a lock over the whole map — see the module docs.
     pub modules: Mutex<HashMap<String, Arc<Mutex<ModuleRuntime>>>>,
@@ -34,17 +47,59 @@ pub struct KernelShared {
     /// because a chain spans several of them.
     pub call_stack: Mutex<Vec<String>>,
     pub post_queue: Mutex<VecDeque<Posted>>,
+    ticker_stop: Arc<AtomicBool>,
 }
 
 impl KernelShared {
+    /// # Panics
+    ///
+    /// Panics if wasmtime cannot build an engine, which means the process
+    /// cannot host modules at all — there is nothing to degrade to.
     #[must_use]
     pub fn new() -> Arc<Self> {
+        let mut config = wasmtime::Config::new();
+        config.wasm_component_model(true);
+        // Lets the kernel preempt a module that never returns. Cheap enough to
+        // leave on unconditionally — the check is a load and compare per loop
+        // back-edge, versus `consume_fuel`'s per-instruction accounting.
+        config.epoch_interruption(true);
+        if let Err(e) = config.cache_config_load_default() {
+            crate::log_host!("[kernel] compile cache unavailable: {e}");
+        }
+        let engine = wasmtime::Engine::new(&config).expect("kernel engine");
+
+        let ticker_stop = Arc::new(AtomicBool::new(false));
+        Self::spawn_ticker(&engine, &ticker_stop);
+
         Arc::new(Self {
+            engine,
             registry: Mutex::new(Registry::new()),
             modules: Mutex::new(HashMap::new()),
             call_stack: Mutex::new(Vec::new()),
             post_queue: Mutex::new(VecDeque::new()),
+            ticker_stop,
         })
+    }
+
+    /// Advances the epoch on a fixed interval. Without something incrementing
+    /// it, `set_epoch_deadline` never fires and the interruption is inert.
+    fn spawn_ticker(engine: &wasmtime::Engine, stop: &Arc<AtomicBool>) {
+        let engine = engine.weak();
+        let stop = Arc::clone(stop);
+        std::thread::Builder::new()
+            .name("rad-kernel-epoch".to_string())
+            .spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    std::thread::sleep(std::time::Duration::from_millis(EPOCH_TICK_MS));
+                    // A weak handle so this thread cannot keep the engine, and
+                    // therefore the process, alive on its own.
+                    let Some(engine) = engine.upgrade() else {
+                        break;
+                    };
+                    engine.increment_epoch();
+                }
+            })
+            .expect("epoch ticker thread");
     }
 
     /// Resolves a dispatch target. `target` is either a module name or a method
@@ -120,6 +175,12 @@ impl KernelShared {
             method: method.to_string(),
             payload: payload.to_string(),
         });
+    }
+
+    /// Stops the epoch ticker. Called on shutdown; the thread also exits on its
+    /// own once the engine is dropped.
+    pub fn stop(&self) {
+        self.ticker_stop.store(true, Ordering::Relaxed);
     }
 
     /// Delivers everything currently queued, and anything queued while doing so.
