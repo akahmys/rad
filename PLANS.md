@@ -1,5 +1,5 @@
 # Project Work Plan (PLANS.md)
-**Last Updated**: 2026-08-06
+**Last Updated**: 2026-08-07
 
 ## 🗺️ Long-Term Plan (Roadmap)
 - [✅] Phase 10: Codebase Refactoring & Rule Alignment (v0.15.0)
@@ -60,6 +60,67 @@
 - [✅] Phase 65: Comprehensive Workspace Test Suite Audit (v0.70.0)
 - [✅] Phase 66: Rebuild WASM Components & Local Installation of rad Binary (v0.71.0)
 - [✅] Phase 67: Spec-First Architecture Reconciliation — ARCHITECTURE.md & README.md Realigned, L3 Recovery Implemented, FS Watcher Deleted (v0.72.0)
+- [✅] Phase 68: Repository Hygiene & Convention Audit — Authorship Rewrite, CI Workspace Fix, Rule Documents Corrected (v0.73.0)
+- [🔄] Phase 69: Microkernel Migration — Preparation & Stage 0
+- [ ] Phase 70: Microkernel Migration — Kernel & SDK (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
+- [ ] Phase 71: Microkernel Migration — Module Porting (§9 stages 3–5)
+- [ ] Phase 72: Microkernel Migration — Remaining Modules & Wasmtime-Only Kernel (§9 stages 6–8)
+
+---
+
+## 🛠️ Short-Term Plan: Phase 69 (Microkernel Migration — Preparation & Stage 0)
+
+**Direction**: `ARCHITECTURE-NEXT.md` defines the target: the Core becomes a Wasm
+runtime and dispatcher, and every capability becomes a module above it. The
+contract splits in two — typed syscalls that may only grow by new functions, and
+an opaque `dispatch(target, method, payload)` whose type never changes. This is a
+rebuild, not a refactor: stages 1–8 run in a new directory alongside the current
+implementation, which stays working until stage 5.
+
+**Do not treat `ARCHITECTURE-NEXT.md` as current.** Nothing in it is implemented.
+
+### 💡 Current AWU Status
+- [ ] AWU 946: Verify CI is green after the workspace fix
+- [ ] AWU 947: Settle `net-open` vs `wasi:http` (blocks `wit/kernel.wit`)
+- [ ] AWU 948: Stage 0 — dialect table in `ext/llm-connector`
+
+### 📝 AWU Details
+
+#### AWU 946: Verify CI is green after the workspace fix
+- **Objective**: Establish a trustworthy baseline before a long parallel rebuild.
+- **Context**: CI has never actually run `clippy`/`test` — the `check-secrets` job
+  was failing on a transient `actions/checkout` resolution error, which skips
+  `build-and-test`. Phase 68 fixed what CI runs; that it passes is unconfirmed.
+- **DoD**: A green run on `main` covering all three OSes plus the wasm job.
+
+#### AWU 947: Settle `net-open` vs `wasi:http`
+- **Objective**: Decide whether the kernel needs a custom HTTP syscall at all.
+- **Context**: `ARCHITECTURE-NEXT.md` §3.1 lists three syscalls and flags this one
+  as unresolved. `wasi:http`'s outgoing-handler may cover it, which would leave
+  two syscalls and drop `resource stream`. **This determines the content of
+  `wit/kernel.wit`, so it must be settled before stage 1 begins.**
+- **DoD**: A measured answer on whether `wasi:http` can carry SSE token streaming
+  at acceptable latency, recorded in §3.1.
+
+#### AWU 948: Stage 0 — dialect table in `ext/llm-connector`
+- **Objective**: `const Dialect` table plus `LlmEndpointProfile.dialect`, bringing
+  Gemini and Azure into range.
+- **Scope**: `ext/llm-connector/src/`, `wit/connector/llm-connector.wit`,
+  `src/config.rs`, `src/command/llm/`.
+- **Context**: Self-contained in the connector's own WIT package, so it does not
+  touch the shared `wit/rad.wit`. Independent of every other decision here and
+  ports to the new design unchanged — the one item that cannot become rework.
+- **DoD**: Existing local profiles behave identically (regression-tested); a
+  Gemini or Azure profile resolves to the correct URL and auth header.
+
+---
+
+## 🛠️ Short-Term Plan: Phase 68 (Repository Hygiene & Convention Audit)
+
+### 💡 Current AWU Status
+- [✅] AWU 943: Rewrite commit authorship across all 195 commits (Result: Success — `git filter-repo`, repo deleted and recreated so old SHAs are unreachable)
+- [✅] AWU 944: Fix CI to run the whole workspace (Result: Success — `--all-targets` selected only the root package, skipping 52 of 149 tests; cleared 11 latent `needless_update` errors and split two files over the 300-line limit)
+- [✅] AWU 945: Audit and correct the convention documents (Result: Success — TESTING.md's 85% coverage target had no measurement tooling behind it; CODING.md mandated the same `--all-targets` trap and banned an `#[allow]` that generated code requires; AGENTS.md's governance map omitted over half the documents)
 
 ---
 
