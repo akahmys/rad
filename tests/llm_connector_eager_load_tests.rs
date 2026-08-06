@@ -79,6 +79,7 @@ fn test_first_task_after_eager_load_succeeds_with_real_base_url_config() {
             api_key: None,
             model: Some("test-model".to_string()),
             context_length: None,
+            dialect: None,
         },
     );
 

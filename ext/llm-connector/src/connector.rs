@@ -20,9 +20,11 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
         model: String,
         base_url: Option<String>,
         api_key: Option<String>,
+        dialect_name: Option<String>,
         messages: Vec<conn_types::Message>,
         tools: Vec<conn_types::Tool>,
     ) -> Result<exports::radcomp::connector::producer::EventStream, String> {
+        let dialect = crate::dialect::resolve(dialect_name.as_deref());
         let messages_serialize: Vec<MessageSerialize> = messages
             .into_iter()
             .map(|m| MessageSerialize {
@@ -69,6 +71,9 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
             )
         };
 
+        // Azure puts the deployment name in the URL path, so the model string
+        // is needed after it has moved into the request body.
+        let req_model = model.clone();
         let req = ChatCompletionsRequest {
             model,
             messages: messages_serialize,
@@ -80,14 +85,7 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
         };
 
         let body = serde_json::to_string(&req).map_err(|e| format!("JSON serialize error: {e}"))?;
-        let mut headers = vec![("Content-Type".to_string(), "application/json".to_string())];
-
-        if let Some(key) = api_key.as_ref().filter(|k| !k.trim().is_empty()) {
-            headers.push((
-                "Authorization".to_string(),
-                format!("Bearer {}", key.trim()),
-            ));
-        }
+        let headers = dialect.headers(api_key.as_deref());
 
         // RAD_TEST_PORT is test infrastructure (redirects every call to a
         // local mock server) and stays env-var-based deliberately — it's
@@ -96,12 +94,9 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
         let url = if let Ok(test_port) = std::env::var("RAD_TEST_PORT") {
             format!("http://127.0.0.1:{test_port}/v1/chat/completions")
         } else if let Some(base_url) = base_url.filter(|b| !b.trim().is_empty()) {
-            format!(
-                "{}/v1/chat/completions",
-                rad_models::normalize_base_url(&base_url)
-            )
+            dialect.url(&rad_models::normalize_base_url(&base_url), &req_model)
         } else if api_key.is_some() {
-            "https://api.openai.com/v1/chat/completions".to_string()
+            dialect.url("https://api.openai.com", &req_model)
         } else {
             return Err(
                 "No LLM endpoint configured. Set one up with /llm add <name> <url>.".to_string(),
@@ -113,6 +108,7 @@ impl exports::radcomp::connector::producer::Guest for ConnectorImpl {
             .map_err(|e| format!("open_http_stream to {url} failed: {e}"))?;
 
         let stream_impl = EventStreamImpl {
+            dialect,
             stream_handle,
             buffer: RefCell::new(String::new()),
             event_queue: RefCell::new(VecDeque::new()),

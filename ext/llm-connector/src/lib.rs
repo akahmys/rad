@@ -18,5 +18,6 @@ mod bindings {
 pub use bindings::*;
 
 mod connector;
+mod dialect;
 mod event_stream;
 mod serialize_types;

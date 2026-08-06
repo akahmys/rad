@@ -82,7 +82,7 @@ implementation, which stays working until stage 5.
 ### 💡 Current AWU Status
 - [ ] AWU 946: Verify CI is green after the workspace fix
 - [✅] AWU 947: Settle `net-open` vs `wasi:http` (Result: Success — keep `net-open`; WASI 0.3 deleted `wasi:io`, so importing `wasi:http` would break every module at once)
-- [ ] AWU 948: Stage 0 — dialect table in `ext/llm-connector`
+- [✅] AWU 948: Stage 0 — dialect table in `ext/llm-connector` (Result: Success — Gemini and Azure now expressible; existing profiles verified bit-identical, end-to-end against the live llama.cpp endpoint)
 
 ### 📝 AWU Details
 
@@ -120,8 +120,17 @@ implementation, which stays working until stage 5.
 - **Context**: Self-contained in the connector's own WIT package, so it does not
   touch the shared `wit/rad.wit`. Independent of every other decision here and
   ports to the new design unchanged — the one item that cannot become rework.
-- **DoD**: Existing local profiles behave identically (regression-tested); a
-  Gemini or Azure profile resolves to the correct URL and auth header.
+- **Result**: `const Dialect` table with struct-update inheritance — Gemini is
+  one field, Azure two. `{model}` substitution in the path covers Azure putting
+  the deployment name in the URL. SSE parsing now reads the dialect's JSON
+  Pointers instead of three hardcoded strings. `dialect: Option<String>` on the
+  profile, `--dialect` on `/llm add` (preserved across re-runs like
+  `context_length`), threaded host-side through `resolve_active_llm_profile`.
+  Unknown names warn and fall back to `openai` rather than failing.
+  Regression-pinned: a dedicated test asserts the `None` dialect produces
+  byte-identical URLs, headers and pointers to the previous hardcoded code, and
+  a live run against `127.0.0.1:8080` confirmed the endpoint is unchanged.
+  157 tests pass (was 149); clippy clean on native and wasm32-wasip2.
 
 ---
 

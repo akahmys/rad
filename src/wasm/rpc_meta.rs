@@ -152,6 +152,7 @@ pub(crate) struct ActiveLlmProfile {
     pub(crate) context_length: Option<u32>,
     pub(crate) base_url: Option<String>,
     pub(crate) api_key: Option<String>,
+    pub(crate) dialect: Option<String>,
 }
 
 pub(crate) fn resolve_active_llm_profile(
@@ -168,6 +169,7 @@ pub(crate) fn resolve_active_llm_profile(
         context_length: profile.and_then(|p| p.context_length),
         base_url: profile.map(|p| p.base_url.clone()),
         api_key: profile.and_then(crate::config::LlmEndpointProfile::resolved_api_key),
+        dialect: profile.and_then(|p| p.dialect.clone()),
     }
 }
 

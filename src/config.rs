@@ -151,6 +151,11 @@ pub struct LlmEndpointProfile {
     /// conservative built-in default rather than assuming a large window.
     #[serde(default)]
     pub context_length: Option<u32>,
+    /// Provider wire format: URL path, auth header, and SSE field locations.
+    /// `None` means the OpenAI-compatible default, so existing profiles keep
+    /// working untouched. See `ext/llm-connector/src/dialect.rs` for the table.
+    #[serde(default)]
+    pub dialect: Option<String>,
 }
 
 impl LlmEndpointProfile {

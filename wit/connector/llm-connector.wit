@@ -72,10 +72,15 @@ interface producer {
     // later `std::env::set_var` on the host is invisible to an
     // already-running (e.g. eagerly-loaded-at-startup) instance. `none`
     // means no active profile / no key configured.
+    // `dialect` names the provider wire format (path, auth header, SSE field
+    // locations). `none` means the OpenAI-compatible default, so existing
+    // profiles need no change. Resolved host-side from the active `/llm`
+    // profile alongside base-url/api-key.
     generate-stream: func(
         model: string,
         base-url: option<string>,
         api-key: option<string>,
+        dialect: option<string>,
         messages: list<message>,
         tools: list<tool>,
     ) -> result<event-stream, string>;

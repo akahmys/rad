@@ -41,7 +41,7 @@ pub fn llm_subcommand_specs() -> &'static [LlmSubcommandSpec] {
         },
         LlmSubcommandSpec {
             name: "add",
-            usage: "/llm add <name> <url> [--model <model>] [--api-key <key>]",
+            usage: "/llm add <name> <url> [--model <m>] [--api-key <k>] [--dialect <d>]",
             handler: cmd_add,
         },
         LlmSubcommandSpec {
@@ -74,13 +74,14 @@ fn cmd_test(args: &str, orchestrator: &Orchestrator) -> String {
     )
 }
 
-/// Flag-based, not positional: `/llm add <name> <url> [--model <m>] [--api-key <k>]`.
+/// Flag-based, not positional: `/llm add <name> <url> [--model <m>] [--api-key <k>]
+/// [--dialect <d>]`. `--dialect` selects the provider wire format — `openai`
+/// (default), `gemini`, or `azure`.
 /// Replaces the old strict `<name> <url> <model> <api_key>` positional form
 /// (which made it impossible to set `api_key` without also supplying
 /// `model`) — a deliberate breaking change, acceptable pre-1.0.
 fn cmd_add(args: &str, orchestrator: &Orchestrator) -> String {
-    const USAGE: &str =
-        "\x1b[1;31mUsage: /llm add <name> <url> [--model <model>] [--api-key <key>]\x1b[0m";
+    const USAGE: &str = "\x1b[1;31mUsage: /llm add <name> <url> [--model <m>] [--api-key <k>] [--dialect <d>]\x1b[0m";
 
     let tokens: Vec<&str> = args.split_whitespace().collect();
     if tokens.len() < 2 {
@@ -90,6 +91,7 @@ fn cmd_add(args: &str, orchestrator: &Orchestrator) -> String {
     let url = tokens[1];
     let mut model = None;
     let mut api_key = None;
+    let mut dialect = None;
     let mut i = 2;
     while i < tokens.len() {
         match tokens[i] {
@@ -99,6 +101,10 @@ fn cmd_add(args: &str, orchestrator: &Orchestrator) -> String {
             }
             "--api-key" if i + 1 < tokens.len() => {
                 api_key = Some(tokens[i + 1].to_string());
+                i += 2;
+            }
+            "--dialect" if i + 1 < tokens.len() => {
+                dialect = Some(tokens[i + 1].to_string());
                 i += 2;
             }
             other => {
@@ -112,6 +118,7 @@ fn cmd_add(args: &str, orchestrator: &Orchestrator) -> String {
         url,
         model.as_deref(),
         api_key.as_deref(),
+        dialect.as_deref(),
     )
 }
 

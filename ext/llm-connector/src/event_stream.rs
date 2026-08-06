@@ -6,6 +6,9 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 
 pub(crate) struct EventStreamImpl {
+    /// Where the interesting fields sit in this provider's SSE payload.
+    /// `&'static` because dialects are `const` — no allocation, no lifetime.
+    pub(crate) dialect: &'static crate::dialect::Dialect,
     pub(crate) stream_handle: conn_types::StreamHandle,
     pub(crate) buffer: RefCell<String>,
     pub(crate) event_queue: RefCell<VecDeque<conn_types::LlmEvent>>,
@@ -34,14 +37,16 @@ impl EventStreamImpl {
 
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) {
                     // 1. Content and Reasoning Chunks
-                    if let Some(reasoning) = val
-                        .pointer("/choices/0/delta/reasoning_content")
+                    if let Some(reasoning) = self
+                        .dialect
+                        .reasoning_ptr
+                        .and_then(|ptr| val.pointer(ptr))
                         .and_then(serde_json::Value::as_str)
                     {
                         queue
                             .push_back(conn_types::LlmEvent::ReasoningChunk(reasoning.to_string()));
                     } else if let Some(content) = val
-                        .pointer("/choices/0/delta/content")
+                        .pointer(self.dialect.content_ptr)
                         .and_then(serde_json::Value::as_str)
                     {
                         queue.push_back(conn_types::LlmEvent::ContentChunk(content.to_string()));
@@ -49,7 +54,7 @@ impl EventStreamImpl {
 
                     // 2. Tool Calls
                     if let Some(tool_calls) = val
-                        .pointer("/choices/0/delta/tool_calls")
+                        .pointer(self.dialect.tool_calls_ptr)
                         .and_then(serde_json::Value::as_array)
                     {
                         for tc in tool_calls {

@@ -15,6 +15,7 @@ fn orchestrator_with_profile(model: Option<&str>, context_length: Option<u32>) -
             api_key: None,
             model: model.map(ToString::to_string),
             context_length,
+            dialect: None,
         },
     );
     Orchestrator::new(

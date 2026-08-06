@@ -56,6 +56,21 @@ The config file supports JSON with comments (JSONC). The following example regis
         // Detected automatically via /props or /api/show when the endpoint is
         // reachable; set manually with /llm context <n> if auto-detection fails
         "context_length": 32768
+      },
+      // "dialect" selects the provider wire format — URL path, auth header, and
+      // where the interesting fields sit in the SSE payload. Omit it (or leave
+      // it null) for the OpenAI-compatible default, which is what every profile
+      // written before this field existed gets; those keep working untouched.
+      //   "openai" (default) — {base_url}/v1/chat/completions, Authorization: Bearer <key>
+      //   "gemini"           — /v1beta/openai/chat/completions
+      //   "azure"            — /openai/deployments/{model}/chat/completions, api-key: <key>
+      // An unrecognized name logs a warning and falls back to "openai" rather
+      // than failing, so a typo cannot take the agent offline.
+      "gemini-pro": {
+        "base_url": "https://generativelanguage.googleapis.com",
+        "model": "gemini-3-pro",
+        "api_key": "env:GEMINI_API_KEY",
+        "dialect": "gemini"
       }
     }
   },

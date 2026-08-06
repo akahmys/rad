@@ -83,6 +83,7 @@ pub(super) fn add_llm_profile(
     url: &str,
     model: Option<&str>,
     api_key: Option<&str>,
+    dialect: Option<&str>,
 ) -> String {
     let status = check_endpoint(url, model);
     let mut cfg = orchestrator.config.lock();
@@ -93,11 +94,17 @@ pub(super) fn add_llm_profile(
     let context_length = status
         .context_length
         .or_else(|| cfg.llm.endpoints.get(name).and_then(|p| p.context_length));
+    // Same preservation rule as `context_length`: re-running `/llm add` without
+    // `--dialect` must not silently reset a profile back to the OpenAI default.
+    let dialect = dialect
+        .map(ToString::to_string)
+        .or_else(|| cfg.llm.endpoints.get(name).and_then(|p| p.dialect.clone()));
     let profile = LlmEndpointProfile {
         base_url: url.to_string(),
         api_key: api_key.map(ToString::to_string),
         model: model.map(ToString::to_string),
         context_length,
+        dialect,
     };
     cfg.llm.endpoints.insert(name.to_string(), profile);
     if cfg.llm.active.is_none() {

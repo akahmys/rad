@@ -127,6 +127,7 @@ pub(crate) fn generate(
             model,
             active_profile.base_url.as_deref(),
             active_profile.api_key.as_deref(),
+            active_profile.dialect.as_deref(),
             &wit_messages,
             &wit_tools,
         ) {
