@@ -81,7 +81,7 @@ implementation, which stays working until stage 5.
 
 ### 💡 Current AWU Status
 - [ ] AWU 946: Verify CI is green after the workspace fix
-- [ ] AWU 947: Settle `net-open` vs `wasi:http` (blocks `wit/kernel.wit`)
+- [✅] AWU 947: Settle `net-open` vs `wasi:http` (Result: Success — keep `net-open`; WASI 0.3 deleted `wasi:io`, so importing `wasi:http` would break every module at once)
 - [ ] AWU 948: Stage 0 — dialect table in `ext/llm-connector`
 
 ### 📝 AWU Details
@@ -99,8 +99,18 @@ implementation, which stays working until stage 5.
   as unresolved. `wasi:http`'s outgoing-handler may cover it, which would leave
   two syscalls and drop `resource stream`. **This determines the content of
   `wit/kernel.wit`, so it must be settled before stage 1 begins.**
-- **DoD**: A measured answer on whether `wasi:http` can carry SSE token streaming
-  at acceptable latency, recorded in §3.1.
+- **Result**: Resolved on stronger grounds than the latency measurement it asked
+  for. `wasi:http` *can* express SSE (`incoming-body.stream() -> input-stream`),
+  but WASI 0.3.0 (2026-06-11) removed the `wasi:io` package outright — pollables
+  and streams moved into the Canonical ABI, and `wasi:http` was refactored onto
+  `stream<T>`/`future<T>`, requiring Wasmtime 43+ (rad is on 29). A module
+  importing `wasi:http@0.2` therefore breaks on the 0.3 move — exactly the
+  failure `ARCHITECTURE-NEXT.md` §2 exists to prevent, but originating outside
+  the project where it cannot be controlled. Keeping `net-open` lets the kernel
+  absorb that break instead. Recorded as §3.1.1, with §3.1.2 generalising the
+  rule: use WASI where Rust's std insulates the module (fs, clock, stdio); define
+  a rad syscall where it does not (http, process spawn). Syscalls are fixed at
+  three, and `wit/kernel.wit` is unblocked.
 
 #### AWU 948: Stage 0 — dialect table in `ext/llm-connector`
 - **Objective**: `const Dialect` table plus `LlmEndpointProfile.dialect`, bringing
