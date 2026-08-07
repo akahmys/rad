@@ -53,6 +53,7 @@ members = [
     "models",
     "crates/rad-abi",
     "crates/rad-sdk",
+    "modules/context",
     "modules/echo",
     "modules/relay",
     "templates/rust",

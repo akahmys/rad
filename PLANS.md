@@ -63,8 +63,69 @@
 - [✅] Phase 68: Repository Hygiene & Convention Audit — Authorship Rewrite, CI Workspace Fix, Rule Documents Corrected (v0.73.0)
 - [✅] Phase 69: Microkernel Migration — Preparation & Stage 0 (v0.74.0)
 - [✅] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (v0.75.0) (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
-- [ ] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8)
+- [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8)
 - [ ] Phase 72: Microkernel Migration — DAG/UI Extraction and Author Tooling (§9 stages 9–10)
+
+---
+
+## 🛠️ Short-Term Plan: Phase 71 (Extensions to Modules, One at a Time)
+
+**Stage 3 of `ARCHITECTURE-NEXT.md` §9: `context-tools` first**, because its
+logic is the least entangled — `windowing.rs` states outright that it has no
+`host_rpc` dependency. Investigating the port turned up that `get-repo-map`, the
+extension's only other export, **has no caller at all**: it is reachable through
+the generic `CallExtension` router but nothing passes that method name, and the
+orchestrator never asks for a repo map. So `optimize` is the entire job.
+
+§9.4's invariant holds throughout: rad works at the end of every AWU, and
+`wit/rad.wit` is untouched.
+
+### 💡 Current AWU Status
+- [✅] AWU 956: `modules/context` — port the optimize logic (Result: Success — 13 ported tests pass, `windowing.rs` logic byte-identical to the extension's)
+- [ ] AWU 957: Route `CallExtension` to a kernel module when one provides the method
+- [ ] AWU 958: Delete `ext/context-tools` and its WIT
+
+### 📝 AWU Details
+
+#### AWU 956: `modules/context` — port the optimize logic
+- **Objective**: The windowing logic, running as a module.
+- **Scope**: `modules/context/` (new).
+- **Context**: Logic is copied rather than moved. The old extension stays live
+  and serving until AWU 957 switches the caller over, because §9.4 requires rad
+  to work at the end of *this* AWU, not only at the end of the stage. The
+  duplication is deliberate and lasts two AWUs.
+- **Result**: All 13 of the extension's tests ported and passing, and a diff of
+  `windowing.rs` against the original shows the logic is byte-identical — the
+  only change is one `use` line, where `Message` stops being a WIT record and
+  becomes a plain serde struct. That single line is the difference between the
+  two architectures: adding a field to it now breaks nothing and rebuilds
+  nothing else.
+  One addition beyond a straight port: a zero `max_history`/`max_content_chars`
+  is now rejected. The extension had no way to report it, so a caller passing
+  zero got an empty history back and discovered it much later as a model that
+  had forgotten the conversation. This also resolved, legitimately, the SDK
+  friction recorded in AWU 953 — a handler must return `Result` even when it
+  cannot fail, and clippy's `unnecessary_wraps` then fires. **Second occurrence;
+  the next module that has no honest failure case should get an SDK fix rather
+  than an invented one.**
+
+#### AWU 957: Route `CallExtension` to a kernel module when one provides it
+- **Objective**: Move the live traffic without changing the caller.
+- **Scope**: `src/wasm/rpc_meta*.rs`, kernel wiring in `src/main.rs`.
+- **Context**: The orchestrator asks for `context-tools.optimize` over
+  `CallExtension`. The host resolves that against the kernel registry first and
+  falls back to the extension path, so the orchestrator — still a Wasm extension
+  itself — needs no change. This is the shape every later stage reuses.
+- **DoD**: A real task compacts through the module, verified against the live
+  endpoint, with the extension no longer consulted.
+
+#### AWU 958: Delete `ext/context-tools` and its WIT
+- **Objective**: Remove the old copy once nothing routes to it.
+- **Scope**: `ext/context-tools/`, `wit/context-tools.wit`, `src/wasm/bindings.rs`.
+- **Context**: `get-repo-map` goes with it — dead, and the kernel has no syscall
+  for it by design.
+- **DoD**: The extension is gone, `cargo test --workspace` passes, and a real
+  task still compacts.
 
 ---
 

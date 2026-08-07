@@ -1,0 +1,14 @@
+[package]
+name = "context-module"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# The `context-tools` extension's optimize logic, as a kernel module.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+serde = { workspace = true }
+wit-bindgen = { workspace = true }
