@@ -16,11 +16,28 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Full history. `actions/checkout` clones at depth 1 by default, and
+          # `betterleaks git` on a one-commit clone reports "no leaks found" —
+          # indistinguishable from a real pass while having scanned nothing.
+          # Verified locally: a --depth 1 clone of this repo passes the scan
+          # despite 222 commits of history existing.
+          fetch-depth: 0
 
+      # Pinned release tarball rather than `curl | sh`: the version is visible
+      # here, an upstream change cannot silently alter what runs, and there is
+      # no install script to trust. (An earlier revision piped an install.sh
+      # that does not exist, so the scanner was never installed and the whole
+      # job failed on `command not found`.)
       - name: Install betterleaks
+        env:
+          BETTERLEAKS_VERSION: 1.7.3
         run: |
-          curl -sSfL https://raw.githubusercontent.com/betterleaks/betterleaks/main/install.sh \
-            | sh -s -- -b /usr/local/bin || go install github.com/betterleaks/betterleaks@latest
+          curl -sSfL -o /tmp/betterleaks.tar.gz \
+            "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/betterleaks.tar.gz -C /tmp betterleaks
+          sudo install -m 0755 /tmp/betterleaks /usr/local/bin/betterleaks
+          betterleaks version
 
       # Rules — secrets and the personal-information patterns — live in
       # .betterleaks.toml. Scans full history, not just HEAD: a secret removed
@@ -51,11 +68,6 @@ jobs:
       # — 52 of 149, about a third of the suite. See README §2.3.
       # Dependency license policy lives in deny.toml. Allow-only: a crate must
       # be positively permitted, not merely absent from a blacklist.
-      - name: License audit
-        run: |
-          cargo install --locked cargo-deny || true
-          cargo deny check licenses
-
       - name: Cargo check
         run: cargo check --workspace --all-targets
 
@@ -64,6 +76,25 @@ jobs:
 
       - name: Cargo test
         run: cargo test --workspace
+
+  # Its own job, not a step inside build-and-test: that runs a three-OS matrix
+  # and cargo-deny-action is a Linux container, so it would fail on macOS and
+  # Windows. Dependency licences do not vary by runner anyway.
+  licenses:
+    name: License Audit
+    needs: check-secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # The upstream action rather than `cargo install cargo-deny`, which built
+      # from source on every run — and was written `|| true`, so a failed
+      # install left the audit silently skipped.
+      - name: License audit
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses
 
   wasm-extensions:
     name: Build & Lint Wasm Extensions
