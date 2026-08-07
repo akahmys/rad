@@ -62,7 +62,7 @@
 - [✅] Phase 67: Spec-First Architecture Reconciliation — ARCHITECTURE.md & README.md Realigned, L3 Recovery Implemented, FS Watcher Deleted (v0.72.0)
 - [✅] Phase 68: Repository Hygiene & Convention Audit — Authorship Rewrite, CI Workspace Fix, Rule Documents Corrected (v0.73.0)
 - [✅] Phase 69: Microkernel Migration — Preparation & Stage 0 (v0.74.0)
-- [🔄] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
+- [✅] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (v0.75.0) (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
 - [ ] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8)
 - [ ] Phase 72: Microkernel Migration — DAG/UI Extraction and Author Tooling (§9 stages 9–10)
 
@@ -89,7 +89,7 @@ so migration never has to guess whether an entry is old or new.
 - [✅] AWU 952: Module loading, `manifest()` reading, routing table (Result: Success — the real `modules/echo` component loads, answers, and conflicts are caught at registration)
 - [✅] AWU 953: `dispatch.call`/`post` with cycle detection (Result: Success — proven between two real wasm modules; the cycle that would deadlock is refused before the lock is taken)
 - [✅] AWU 954: Epoch interruption (Result: Success — a runaway module is preempted; `async_support` and the scheduler deferred, see Result)
-- [ ] AWU 955: `modules` config array and an echo module proving the path
+- [✅] AWU 955: `modules` config array and an echo module proving the path (Result: Success — both surfaces live in one process against the real binary)
 
 ### 📝 AWU Details
 
@@ -219,9 +219,16 @@ so migration never has to guess whether an entry is old or new.
 - **Objective**: End-to-end proof on the smallest possible module.
 - **Scope**: `src/config.rs`, `modules/echo/` (new).
 - **Context**: `#[serde(default)]` so existing configs are untouched (§3.6.7).
-- **DoD**: With `echo` configured, a `dispatch.call("echo", "echo.say", …)`
-  returns the payload — while the six extensions continue to serve a real task in
-  the same process.
+- **Result**: Verified against the real binary with a real `~/.rad/config.json`
+  entry (restored afterwards): `[OK] Verified 19 tools from extension
+  'mcp-tool-provider'` and `[OK] Loaded 1 kernel module(s): echo` in the same
+  startup, followed by a completed LLM task. Both surfaces coexist, which is the
+  premise the whole in-place migration rests on.
+  `kernel.config` works: the kernel registers as an ordinary dispatch target, so
+  a module fetches its config with the same call it would use for a peer and
+  never special-cases the host. A broken or disabled module is skipped with a
+  warning rather than aborting startup — one bad third-party module must not
+  stop rad from running.
 
 ---
 

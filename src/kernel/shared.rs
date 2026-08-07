@@ -47,8 +47,16 @@ pub struct KernelShared {
     /// because a chain spans several of them.
     pub call_stack: Mutex<Vec<String>>,
     pub post_queue: Mutex<VecDeque<Posted>>,
+    /// Per-module config from `rad.json`, fetched by a module through
+    /// `kernel.config`. Opaque to the kernel — it stores and returns it.
+    module_config: Mutex<HashMap<String, serde_json::Value>>,
     ticker_stop: Arc<AtomicBool>,
 }
+
+/// The kernel answers dispatch like any other target, so a module reaching
+/// `kernel.config` uses the same call it would use for a peer and never has to
+/// special-case the host (§3.6.7).
+pub const KERNEL_TARGET: &str = "kernel";
 
 impl KernelShared {
     /// # Panics
@@ -77,6 +85,7 @@ impl KernelShared {
             modules: Mutex::new(HashMap::new()),
             call_stack: Mutex::new(Vec::new()),
             post_queue: Mutex::new(VecDeque::new()),
+            module_config: Mutex::new(HashMap::new()),
             ticker_stop,
         })
     }
@@ -100,6 +109,26 @@ impl KernelShared {
                 }
             })
             .expect("epoch ticker thread");
+    }
+
+    pub fn set_module_config(&self, module: &str, config: serde_json::Value) {
+        self.module_config.lock().insert(module.to_string(), config);
+    }
+
+    /// Handles a call addressed to the kernel itself.
+    fn handle_kernel(&self, from: &str, method: &str) -> Result<String, String> {
+        match method {
+            "kernel.config" => {
+                let config = self.module_config.lock();
+                let value = config.get(from).cloned().unwrap_or(serde_json::Value::Null);
+                serde_json::to_string(&value).map_err(|e| e.to_string())
+            }
+            "kernel.modules" => {
+                let registry = self.registry.lock();
+                serde_json::to_string(&registry.module_names()).map_err(|e| e.to_string())
+            }
+            other => Err(format!("the kernel does not provide '{other}'")),
+        }
     }
 
     /// Resolves a dispatch target. `target` is either a module name or a method
@@ -128,6 +157,9 @@ impl KernelShared {
         method: &str,
         payload: &str,
     ) -> Result<String, String> {
+        if target == KERNEL_TARGET || method.starts_with("kernel.") {
+            return self.handle_kernel(from, method);
+        }
         let Some(name) = self.resolve(target, method) else {
             return Err(format!(
                 "no module provides '{method}' (dispatch from '{from}' to '{target}')"

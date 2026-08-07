@@ -180,3 +180,65 @@ fn the_kernel_still_works_after_interrupting_a_module() {
         .expect("other modules must be unaffected");
     assert!(reply.contains("still alive"), "{reply}");
 }
+
+#[test]
+fn boot_loads_modules_from_config_and_serves_kernel_config() {
+    // The DoD path end to end: a config entry becomes a routable module, and
+    // its config comes back through `kernel.config` — the kernel answering
+    // dispatch like any other target, so a module never special-cases the host.
+    let Some(path) = wasm("echo_module") else {
+        return;
+    };
+    let (k, loaded) = rad::kernel::boot(&[rad::config::ModuleConfig {
+        name: "echo".to_string(),
+        source: path.to_string_lossy().to_string(),
+        enabled: true,
+        config: serde_json::json!({"greeting": "hi"}),
+    }]);
+    assert_eq!(loaded, vec!["echo"]);
+
+    let reply = k
+        .call("test", "echo", "echo.say", r#"{"text":"configured"}"#)
+        .unwrap();
+    assert!(reply.contains("configured"), "{reply}");
+
+    let config = k.call("echo", "kernel", "kernel.config", "{}").unwrap();
+    assert!(config.contains("greeting"), "{config}");
+}
+
+#[test]
+fn a_disabled_module_is_not_loaded() {
+    let Some(path) = wasm("echo_module") else {
+        return;
+    };
+    let (_k, loaded) = rad::kernel::boot(&[rad::config::ModuleConfig {
+        name: "echo".to_string(),
+        source: path.to_string_lossy().to_string(),
+        enabled: false,
+        config: serde_json::Value::Null,
+    }]);
+    assert!(loaded.is_empty());
+}
+
+#[test]
+fn a_broken_module_is_skipped_rather_than_aborting_startup() {
+    // One bad third-party module must not stop rad from running.
+    let Some(good) = wasm("echo_module") else {
+        return;
+    };
+    let (_k, loaded) = rad::kernel::boot(&[
+        rad::config::ModuleConfig {
+            name: "missing".to_string(),
+            source: "/nonexistent/module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+        rad::config::ModuleConfig {
+            name: "echo".to_string(),
+            source: good.to_string_lossy().to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+    ]);
+    assert_eq!(loaded, vec!["echo"], "the good module should still load");
+}

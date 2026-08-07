@@ -204,6 +204,22 @@ pub struct LlmConfig {
     pub endpoints: HashMap<String, LlmEndpointProfile>,
 }
 
+/// One kernel module.
+///
+/// No `role` — the module's `manifest().provides` declares what it answers
+/// (`ARCHITECTURE-NEXT.md` §3.2). No `permissions` — the kernel has no
+/// capability system (§3.4).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModuleConfig {
+    pub name: String,
+    pub source: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Opaque to the kernel; the module fetches it via `kernel.config`.
+    #[serde(default)]
+    pub config: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct Config {
     #[serde(default)]
@@ -214,4 +230,11 @@ pub struct Config {
     pub llm: LlmConfig,
     #[serde(default)]
     pub extensions: Vec<ExtensionConfig>,
+    /// Kernel modules, kept in a list of their own rather than mixed into
+    /// `extensions`. Both surfaces are live for the whole migration
+    /// (`ARCHITECTURE-NEXT.md` §9.1), and one list would mean classifying every
+    /// entry on every read. `#[serde(default)]` so existing configs are
+    /// untouched.
+    #[serde(default)]
+    pub modules: Vec<ModuleConfig>,
 }

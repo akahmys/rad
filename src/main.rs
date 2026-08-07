@@ -77,6 +77,19 @@ fn main() {
         eprintln!("\x1b[33mWarning: failed to initialize extensions at startup: {e}\x1b[0m");
     }
 
+    // The kernel comes up beside the extension host, not instead of it. Both
+    // surfaces are live for the whole migration (ARCHITECTURE-NEXT.md §9.1);
+    // with no `modules` configured this loads nothing and costs nothing.
+    let (kernel, loaded_modules) = rad::kernel::boot(&cfg.modules);
+    if !loaded_modules.is_empty() {
+        println!(
+            "\x1b[32m[OK] Loaded {} kernel module(s): {}\x1b[0m",
+            loaded_modules.len(),
+            loaded_modules.join(", ")
+        );
+    }
+    let _kernel = kernel;
+
     println!("\x1b[1;36mStarting rad agent shell. Type '/quit' to end the session.\x1b[0m");
 
     let (rl, history_path) = match init_editor(&cfg.core.workspace) {
