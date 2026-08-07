@@ -105,7 +105,6 @@ pub struct WasmRuntime {
     pub security_guard: Option<bindings::rad_security_guard::RadSecurityGuard>,
     pub tool_provider: Option<bindings::rad_tool_provider::RadToolProvider>,
     pub llm_connector: Option<bindings::rad_llm_connector::LlmConnector>,
-    pub context_tools: Option<bindings::rad_context_tools::ContextToolsExtension>,
     pub instance: wasmtime::component::Instance,
     pub role: String,
 }
@@ -219,39 +218,20 @@ impl WasmRuntime {
         method: &str,
         arguments: &str,
     ) -> Result<String, String> {
-        let ext_name = self.store.data().name.clone();
-        match self.role.as_str() {
-            "context-tools" => {
-                if let Some(ref ct) = self.context_tools {
-                    match method {
-                        "optimize" => {
-                            use crate::wasm::bindings::rad_context_tools::exports::radcomp::extension::context_tools::OptimizationRequest;
-                            let req: OptimizationRequest = serde_json::from_str(arguments)
-                                .map_err(|e| format!("Failed to parse OptimizationRequest: {e}"))?;
-                            let resp = ct
-                                .radcomp_extension_context_tools()
-                                .call_optimize(&mut self.store, &req)
-                                .map_err(|e| format_wasm_error(&ext_name, "optimize", &e))??;
-                            serde_json::to_string(&resp)
-                                .map_err(|e| format!("Serialization error: {e}"))
-                        }
-                        "get-repo-map" => {
-                            let resp = ct
-                                .radcomp_extension_context_tools()
-                                .call_get_repo_map(&mut self.store)
-                                .map_err(|e| format_wasm_error(&ext_name, "get_repo_map", &e))??;
-                            Ok(resp)
-                        }
-                        other => Err(format!("Unknown context-tools method: {other}")),
-                    }
-                } else {
-                    Err("context-tools bindings missing".to_string())
-                }
-            }
-            other => Err(format!(
-                "call_extension_method not supported for role: {other}"
-            )),
-        }
+        // Nothing implements this any more. `context-tools` was the only role
+        // that ever did, and it is a kernel module now (AWU 957) — the host
+        // routes `CallExtension` to modules first and only reaches here if no
+        // module provides the method.
+        //
+        // Kept as an explicit error rather than deleted along with the caller:
+        // it is the seam every remaining extension will pass through as it
+        // moves across, and an error naming the method is what makes a missing
+        // module obvious instead of silent.
+        let _ = arguments;
+        Err(format!(
+            "no module provides '{}.{method}', and no extension implements it",
+            self.role
+        ))
     }
 }
 

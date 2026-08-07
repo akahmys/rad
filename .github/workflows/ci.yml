@@ -86,11 +86,11 @@ jobs:
         run: |
           cargo clippy --target wasm32-wasip2 \
             -p rad-orchestrator -p llm-connector -p security-guard \
-            -p mcp-tool-provider -p skill-tool-provider -p context-tools \
+            -p mcp-tool-provider -p skill-tool-provider -p context-module \
             -- -D warnings
 
       - name: Build (wasm32-wasip2)
         run: |
           cargo build --target wasm32-wasip2 \
             -p rad-orchestrator -p llm-connector -p security-guard \
-            -p mcp-tool-provider -p skill-tool-provider -p context-tools
+            -p mcp-tool-provider -p skill-tool-provider -p context-module

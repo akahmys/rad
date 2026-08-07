@@ -63,7 +63,7 @@
 - [✅] Phase 68: Repository Hygiene & Convention Audit — Authorship Rewrite, CI Workspace Fix, Rule Documents Corrected (v0.73.0)
 - [✅] Phase 69: Microkernel Migration — Preparation & Stage 0 (v0.74.0)
 - [✅] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (v0.75.0) (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
-- [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8)
+- [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8; stage 3 done)
 - [ ] Phase 72: Microkernel Migration — DAG/UI Extraction and Author Tooling (§9 stages 9–10)
 
 ---
@@ -83,7 +83,7 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 ### 💡 Current AWU Status
 - [✅] AWU 956: `modules/context` — port the optimize logic (Result: Success — 13 ported tests pass, `windowing.rs` logic byte-identical to the extension's)
 - [✅] AWU 957: Route `CallExtension` to a kernel module when one provides the method (Result: Success — proven by disabling the extension and watching compaction keep working)
-- [ ] AWU 958: Delete `ext/context-tools` and its WIT
+- [✅] AWU 958: Delete `ext/context-tools` and its WIT (Result: Success — stage 3 complete; compaction runs entirely through the module)
 
 ### 📝 AWU Details
 
@@ -138,8 +138,25 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 - **Scope**: `ext/context-tools/`, `wit/context-tools.wit`, `src/wasm/bindings.rs`.
 - **Context**: `get-repo-map` goes with it — dead, and the kernel has no syscall
   for it by design.
-- **DoD**: The extension is gone, `cargo test --workspace` passes, and a real
-  task still compacts.
+- **Result**: Extension, WIT, bindings, linker arm and dispatch all removed, and
+  a real task still compacts — now only through the module.
+  Test count reads 195, down from 206, which is arithmetic rather than lost
+  coverage: the extension's 13 unit tests went with it (already reproduced in
+  the module), the 2 old integration tests were replaced by 4 new ones covering
+  the same ground across the dispatch boundary instead of the WIT one. That
+  original test existed because a serialization mismatch once made `optimize`
+  silently window nothing while still returning a plausible summary; the
+  replacement asserts the message count actually changed, so the same class of
+  failure is still caught.
+  `context-tools` turned out to be the only role that ever implemented
+  `call_extension_method`. Rather than delete the function with its last user,
+  it now returns an explicit error naming the method — it is the seam every
+  remaining extension passes through as it moves, and a named error is what
+  makes a missing module obvious rather than silent.
+  **Live config migrated** (`~/.rad/config.json`, backed up to
+  `.bak-awu958`): the `context-tools` entry moved from `extensions` to
+  `modules`. Without that the deletion would have removed compaction outright.
+- [🔄] Phase 71 continues with stage 4: `skill-tool-provider`.
 
 ---
 

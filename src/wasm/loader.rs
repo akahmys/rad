@@ -68,11 +68,6 @@ impl WasmRuntime {
                 bindings::rad_llm_connector::LlmConnector::add_to_linker(&mut linker, |s| s)
                     .map_err(|e| format!("Linker error LlmConnector: {e}"))?
             }
-            "context-tools" => bindings::rad_context_tools::ContextToolsExtension::add_to_linker(
-                &mut linker,
-                |s| s,
-            )
-            .map_err(|e| format!("Linker error ContextToolsExtension: {e}"))?,
             _ => bindings::RadExtension::add_to_linker(&mut linker, |s| s)
                 .map_err(|e| format!("Linker error RadExtension: {e}"))?,
         }
@@ -127,7 +122,6 @@ impl WasmRuntime {
         let mut security_guard = None;
         let mut tool_provider = None;
         let mut llm_connector = None;
-        let mut context_tools = None;
 
         match role.as_str() {
             "orchestrator" => {
@@ -154,12 +148,6 @@ impl WasmRuntime {
                         .map_err(|e| format!("Failed to create llm-connector bindings: {e}"))?,
                 )
             }
-            "context-tools" => {
-                context_tools = Some(
-                    bindings::rad_context_tools::ContextToolsExtension::new(&mut store, &instance)
-                        .map_err(|e| format!("Failed to create context-tools bindings: {e}"))?,
-                )
-            }
             _ => {
                 extension = Some(
                     bindings::RadExtension::new(&mut store, &instance)
@@ -175,7 +163,6 @@ impl WasmRuntime {
             security_guard,
             tool_provider,
             llm_connector,
-            context_tools,
             instance,
             role,
         })

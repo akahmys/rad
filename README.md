@@ -8,17 +8,17 @@ The Core handles mechanism only: supervising OS processes, snapshotting the file
 
 ## 1. Features
 
-*   **Separate Core and extension binaries**: The Core installs as a single `rad` binary; the six extensions are `.wasm` files loaded from paths given in the config. An extension can be rebuilt and swapped in with `/reload` without restarting or rebuilding the Core.
+*   **Separate Core and extension binaries**: The Core installs as a single `rad` binary; the five extensions are `.wasm` files loaded from paths given in the config. An extension can be rebuilt and swapped in with `/reload` without restarting or rebuilding the Core.
 *   **Process group cleanup (PGID)**: Each process the agent spawns is placed in its own process group. When the Core exits — normally, on `Ctrl+C`, or by panicking — it sends `SIGKILL` to every registered group, so descendants are not left running.
 *   **Snapshot-based rollback, separate from Git**: File changes are snapshotted to `.rad/snapshots/` before each step, so the workspace can be restored to a checkpoint without involving Git history.
 *   **Capability-centric Wasm interface (UCCA)**: Extensions work through typed resource handles (`stream-handle`, `file-handle`, `execution-handle`) instead of flat JSON RPC, which keeps stream reads pull-based and resource access capability-gated inside the guest.
-*   **All policy in sandboxed extensions**: Prompting, tool resolution, safety filtering, and context management run as WebAssembly, split into six single-responsibility extensions that communicate over WIT-defined interfaces:
+*   **All policy in sandboxed extensions**: Prompting, tool resolution, safety filtering, and context management run as WebAssembly, split into five single-responsibility extensions that communicate over WIT-defined interfaces:
     *   **LLM Orchestrator**: Builds the prompt and drives the reasoning/tool loop.
     *   **Security Guard**: Approves or denies each resource request before the host hands back a handle.
     *   **Tool/MCP Provider**: Connects to external MCP servers and merges their schemas into one tool pool.
     *   **Skill Provider**: Turns Markdown skill files under `.agents/skills/` (or `~/.rad/skills/`) into tools the model can discover on its own — see [CONFIG.md](CONFIG.md) §2.5.
     *   **LLM Connector**: Converts messages and tool definitions into model-specific payloads, and parses the response stream.
-    *   **Context Compactor**: Decides what history survives once the Orchestrator has assembled it — windowing, stale tool-result clearing, relevance-based retention.
+    *   **Context Compactor** (a kernel module, configured under `modules` — see CONFIG.md): Decides what history survives once the Orchestrator has assembled it — windowing, stale tool-result clearing, relevance-based retention.
 *   **Stateless extensions over a shared DAG**: Extensions keep no session state of their own; each turn they rebuild history from the Core's DAG. An extension that crashes mid-task is respawned and rehydrated from the DAG, so the conversation is not lost.
 
 ---
@@ -87,7 +87,7 @@ Filesystem and process operations that an extension requests **through the host 
 > [!IMPORTANT]
 > The mask is a guard rail for cooperating extensions, not a containment boundary. Extensions receive WASI preopens for the working directory and `$HOME`, so one that calls `std::fs` directly bypasses the mask entirely; and tools run inside MCP server processes that hold your full user privileges, which `rad` never mediates. [ARCHITECTURE.md](ARCHITECTURE.md) §1.1 documents both limits and how they were verified. Register only MCP servers you trust.
 
-None of the six extensions `rad` ships provides tools directly. File and shell access comes only from MCP servers registered under `mcp-tool-provider`'s `config.mcp_servers`; skills contribute further tools but not general-purpose file or shell access. Until at least one MCP server is configured, the agent has nothing to act with — see §3.3.
+None of the five extensions `rad` ships provides tools directly. File and shell access comes only from MCP servers registered under `mcp-tool-provider`'s `config.mcp_servers`; skills contribute further tools but not general-purpose file or shell access. Until at least one MCP server is configured, the agent has nothing to act with — see §3.3.
 
 > [!NOTE]
 > The full config schema (with a working example), the 5-tier precedence cascade, and the on-disk directory layout are documented in [CONFIG.md](CONFIG.md) — the authoritative reference, kept here as a single source of truth rather than duplicated.
@@ -147,7 +147,7 @@ To rebuild a single Wasm extension (e.g. the LLM orchestrator) during developmen
 ```bash
 cargo build --target wasm32-wasip2 --release -p rad-orchestrator
 ```
-This only produces `target/wasm32-wasip2/release/rad_orchestrator.wasm` — it does **not** install it. `rad` loads each extension from the `source` path in its config, so either point `source` at the build output, or run `./scripts/build_all.sh`, which copies all six components into `~/.rad/wasm/`. After replacing a `.wasm` that a running session already loaded, use `/reload` to drop the cached runtimes so the next task picks up the new binary.
+This only produces `target/wasm32-wasip2/release/rad_orchestrator.wasm` — it does **not** install it. `rad` loads each extension from the `source` path in its config, so either point `source` at the build output, or run `./scripts/build_all.sh`, which copies all five extensions plus the context module into `~/.rad/wasm/`. After replacing a `.wasm` that a running session already loaded, use `/reload` to drop the cached runtimes so the next task picks up the new binary.
 
 When changing `wit/rad.wit`, mirror it into `templates/rust/wit/` and `templates/go/wit/` — those are standalone copies used by scaffolded extensions, and `build_all.sh` fails the build if they drift.
 

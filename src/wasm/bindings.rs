@@ -51,22 +51,6 @@ pub mod rad_llm_connector {
     });
 }
 
-pub mod rad_context_tools {
-    // `path` is the directory, not a single file: context-tools.wit shares
-    // `package radcomp:extension` with rad.wit (see that file's docs), so
-    // resolving it needs both files. `llm-connector.wit` lives in its own
-    // `wit/connector/` subdirectory specifically so it doesn't collide with
-    // this directory scan (it's a different, unrelated package).
-    wasmtime::component::bindgen!({
-        path: "wit",
-        world: "context-tools-extension",
-        additional_derives: [serde::Serialize, serde::Deserialize],
-        with: {
-            "radcomp:extension/types": crate::wasm::bindings::rad_extension::radcomp::extension::types,
-        }
-    });
-}
-
 pub mod rad_kernel {
     // The migration's new surface, live alongside the existing one. A fourth,
     // unrelated package: adding it cannot change the type of anything the six

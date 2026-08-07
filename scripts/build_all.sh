@@ -12,7 +12,7 @@ cargo build --target wasm32-wasip2 --release \
     -p security-guard \
     -p mcp-tool-provider \
     -p skill-tool-provider \
-    -p context-tools
+    -p context-module \
 
 mkdir -p ~/.rad/wasm
 mkdir -p target/wasm32-wasip2/debug
@@ -23,7 +23,9 @@ WASM_FILES=(
     "security_guard.wasm"
     "mcp_tool_provider.wasm"
     "skill_tool_provider.wasm"
-    "context_tools.wasm"
+    # A kernel module, not an extension. Configured under `modules` rather than
+    # `extensions` — see CONFIG.md.
+    "context_module.wasm"
 )
 
 for file in "${WASM_FILES[@]}"; do

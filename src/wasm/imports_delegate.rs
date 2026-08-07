@@ -66,7 +66,3 @@ delegate_extension_imports!(
     rpc_only
 );
 delegate_extension_imports!(bindings::rad_tool_provider::RadToolProviderImports);
-delegate_extension_imports!(
-    bindings::rad_context_tools::ContextToolsExtensionImports,
-    rpc_only
-);
