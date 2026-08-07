@@ -88,7 +88,10 @@ fn main() {
             loaded_modules.join(", ")
         );
     }
-    let _kernel = kernel;
+    // Hand the kernel to the orchestrator so `CallExtension` can reach it
+    // (src/wasm/rpc_meta.rs). Until modules are configured this is a `None`
+    // check on a path that then behaves exactly as before.
+    *orchestrator.kernel.lock() = Some(kernel);
 
     println!("\x1b[1;36mStarting rad agent shell. Type '/quit' to end the session.\x1b[0m");
 

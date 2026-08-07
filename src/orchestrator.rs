@@ -28,6 +28,11 @@ pub struct Orchestrator {
     running_task: Mutex<Option<std::thread::JoinHandle<Result<(), String>>>>,
     abort_flag: Arc<AtomicBool>,
     pub token_usage: Arc<Mutex<TokenUsage>>,
+    /// The kernel, once booted. `None` until `main` brings it up, and while no
+    /// modules are configured. Held here because the RPC handlers reach the
+    /// world through `RpcContext.orchestrator`, and during the migration a
+    /// `CallExtension` has to be answerable by either surface.
+    pub kernel: Mutex<Option<Arc<crate::kernel::KernelShared>>>,
 }
 
 impl Orchestrator {
@@ -77,6 +82,7 @@ impl Orchestrator {
             running_task: Mutex::new(None),
             abort_flag: Arc::new(AtomicBool::new(false)),
             token_usage: Arc::new(Mutex::new(TokenUsage::default())),
+            kernel: Mutex::new(None),
         }
     }
 

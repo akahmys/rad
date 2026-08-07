@@ -101,9 +101,12 @@ fn optimize(req: OptimizeReq) -> Result<OptimizeRes, Error> {
 
 rad_sdk::module! {
     wit: "../../wit/kernel/kernel.wit",
-    name: "context",
+    // Named for the role the orchestrator still asks for. The orchestrator is
+    // itself a Wasm extension until stage 8; once it is a module it can call
+    // `context.optimize` directly and this drops the `-tools`.
+    name: "context-tools",
     version: "0.1.0",
     methods: {
-        "context.optimize" => optimize,
+        "context-tools.optimize" => optimize,
     }
 }

@@ -82,7 +82,7 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 
 ### 💡 Current AWU Status
 - [✅] AWU 956: `modules/context` — port the optimize logic (Result: Success — 13 ported tests pass, `windowing.rs` logic byte-identical to the extension's)
-- [ ] AWU 957: Route `CallExtension` to a kernel module when one provides the method
+- [✅] AWU 957: Route `CallExtension` to a kernel module when one provides the method (Result: Success — proven by disabling the extension and watching compaction keep working)
 - [ ] AWU 958: Delete `ext/context-tools` and its WIT
 
 ### 📝 AWU Details
@@ -116,8 +116,22 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
   `CallExtension`. The host resolves that against the kernel registry first and
   falls back to the extension path, so the orchestrator — still a Wasm extension
   itself — needs no change. This is the shape every later stage reuses.
-- **DoD**: A real task compacts through the module, verified against the live
-  endpoint, with the extension no longer consulted.
+- **Result**: Proven the only way that actually proves it. Both paths produce
+  byte-identical output, so a matching summary line shows nothing; the extension
+  was disabled in config instead, and compaction kept working — which it could
+  only do through the module. Removing the module from config falls straight
+  back to the extension, also verified.
+  The first attempt silently did nothing, and the reason is worth keeping: the
+  legacy call names a role and a bare method (`context-tools`, `optimize`) while
+  module methods are namespaced (`context.optimize`), so nothing resolved and it
+  fell through to the extension. **A fallback that works makes a failure to
+  route look like success** — only disabling the fallback exposed it. The bridge
+  now maps `(role, method)` to `role.method` and nothing cleverer, and the
+  module is named for the role the orchestrator still asks for. It drops the
+  `-tools` at stage 8, when the orchestrator becomes a module and can call
+  `context.optimize` directly.
+  The orchestrator needed no change at all: the JSON wire format it already
+  sends matches the module's serde structs field for field.
 
 #### AWU 958: Delete `ext/context-tools` and its WIT
 - **Objective**: Remove the old copy once nothing routes to it.

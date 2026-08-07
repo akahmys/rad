@@ -96,6 +96,28 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             arguments,
         } => {
             if let Some(orch) = ctx.orchestrator {
+                // Kernel modules answer first. This is the bridge that carries
+                // every stage of the migration: the caller — itself still a Wasm
+                // extension — keeps issuing the same `CallExtension`, and which
+                // surface serves it becomes a deployment question rather than a
+                // code change. A module is consulted only if one actually
+                // provides the method, so removing it from `modules` falls
+                // straight back to the extension.
+                //
+                // The legacy call names a role and a bare method
+                // ("context-tools", "optimize"); module methods are namespaced
+                // ("context-tools.optimize"). The mapping is that
+                // concatenation and nothing cleverer, so a module wanting the
+                // legacy traffic simply provides `<role>.<method>`.
+                let kernel = orch.kernel.lock().clone();
+                if let Some(kernel) = kernel {
+                    let namespaced = format!("{extension_id}.{method}");
+                    if kernel.resolve(extension_id, &namespaced).is_some() {
+                        let reply = kernel.call("host", extension_id, &namespaced, arguments)?;
+                        return Ok(serde_json::Value::String(reply));
+                    }
+                }
+
                 // `extension_id` selects by declared *role*
                 // (`ExtensionConfig.role`), not literal extension name —
                 // resolved via `find_extension_arc_by_role`, which reads
