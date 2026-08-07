@@ -56,7 +56,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Unix only. `nix` is an unconditional dependency and the Core uses
+        # termios raw-mode input, `CommandExt::pre_exec` and POSIX process
+        # groups — `cargo check` has never compiled on Windows. Listing it here
+        # advertised support that does not exist and guaranteed a red job.
+        os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

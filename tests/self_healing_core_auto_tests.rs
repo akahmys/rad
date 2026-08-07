@@ -149,6 +149,10 @@ fn test_core_auto_self_healing_integration() {
     let run_res = orchestrator.run_task("start".to_string());
     assert!(run_res.is_ok(), "Task spawning failed");
 
+    // A loaded CI runner instantiating Wasm components is far slower than a warm
+    // local machine. The assertion matters as much as the budget: without it the
+    // loop falls through on timeout and a *later* assertion fails instead,
+    // reporting a half-finished run as a logic error.
     let start_time = Instant::now();
     let mut completed = false;
     // 8s (not the original 5s): this test now also registers
@@ -156,13 +160,18 @@ fn test_core_auto_self_healing_integration() {
     // was removed — see PLANS.md), so the self-healing retry recompiles
     // one more Wasm component than before, occasionally pushing a cold
     // run past a tighter deadline under load.
-    while start_time.elapsed() < Duration::from_secs(8) {
+    while start_time.elapsed() < Duration::from_secs(30) {
         if !orchestrator.is_running() {
             completed = true;
             break;
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    assert!(
+        !orchestrator.is_running(),
+        "task did not finish within the wait budget; assertions below would \
+         report a half-completed run as a logic failure"
+    );
 
     assert!(completed, "Core auto recovery task did not finish in time");
 

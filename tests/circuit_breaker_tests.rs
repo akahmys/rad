@@ -154,6 +154,11 @@ fn run_task(turns: Vec<String>) -> (Arc<Mutex<Dag>>, Arc<Mutex<Vec<String>>>) {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    assert!(
+        !orchestrator.is_running(),
+        "task did not finish within the wait budget; assertions below would \
+         report a half-completed run as a logic failure"
+    );
     assert!(!orchestrator.is_running(), "task did not finish in time");
 
     (dag, responses)

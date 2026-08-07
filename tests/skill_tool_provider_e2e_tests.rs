@@ -128,13 +128,22 @@ fn run_skill_task(
     let run_res = orchestrator.run_task("start".to_string());
     assert!(run_res.is_ok(), "Task spawning failed");
 
+    // A loaded CI runner instantiating Wasm components is far slower than a warm
+    // local machine. The assertion matters as much as the budget: without it the
+    // loop falls through on timeout and a *later* assertion fails instead,
+    // reporting a half-finished run as a logic error.
     let start_time = Instant::now();
-    while start_time.elapsed() < Duration::from_secs(8) {
+    while start_time.elapsed() < Duration::from_secs(30) {
         if !orchestrator.is_running() {
             break;
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    assert!(
+        !orchestrator.is_running(),
+        "task did not finish within the wait budget; assertions below would \
+         report a half-completed run as a logic failure"
+    );
 
     dag
 }

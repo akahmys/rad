@@ -157,13 +157,29 @@ fn test_autopilot_rollback_on_verification_failure() {
     assert!(res.is_ok());
 
     // Wait for task execution thread to complete
+    // 30s, not 5: a loaded CI runner instantiating six Wasm components is far
+    // slower than a warm local machine, and the previous budget expired
+    // mid-task. The explicit assertion matters as much as the number — without
+    // it the loop fell through on timeout and the *next* assertion failed
+    // instead, reporting "broken.txt exists" for what was actually "the task
+    // never finished".
     let start_time = std::time::Instant::now();
-    while start_time.elapsed() < std::time::Duration::from_secs(5) {
+    while start_time.elapsed() < std::time::Duration::from_secs(30) {
         if !orchestrator.is_running() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    assert!(
+        !orchestrator.is_running(),
+        "task did not finish within the wait budget; assertions below would \
+         report a half-completed run as a logic failure"
+    );
+    assert!(
+        !orchestrator.is_running(),
+        "task did not finish within 30s; the assertions below would report a \
+         half-completed state as a logic failure"
+    );
 
     // Verify workspace is rolled back to "stable state" and dirty files are deleted
     let initial_content = fs::read_to_string(workspace.join("initial.txt")).unwrap();
@@ -199,13 +215,24 @@ fn test_autopilot_commit_on_verification_success() {
     assert!(res.is_ok());
 
     // Wait for task execution thread to complete
+    // 30s, not 5: a loaded CI runner instantiating six Wasm components is far
+    // slower than a warm local machine, and the previous budget expired
+    // mid-task. The explicit assertion matters as much as the number — without
+    // it the loop fell through on timeout and the *next* assertion failed
+    // instead, reporting "broken.txt exists" for what was actually "the task
+    // never finished".
     let start_time = std::time::Instant::now();
-    while start_time.elapsed() < std::time::Duration::from_secs(5) {
+    while start_time.elapsed() < std::time::Duration::from_secs(30) {
         if !orchestrator.is_running() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    assert!(
+        !orchestrator.is_running(),
+        "task did not finish within 30s; the assertions below would report a \
+         half-completed state as a logic failure"
+    );
 
     // Verify workspace changes are preserved (since verification succeeded)
     let initial_content = fs::read_to_string(workspace.join("initial.txt")).unwrap();

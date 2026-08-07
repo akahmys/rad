@@ -27,6 +27,9 @@ The Core handles mechanism only: supervising OS processes, snapshotting the file
 
 ### 2.1 Prerequisites
 
+*   **A Unix-like OS** — Linux or macOS. `rad` uses POSIX process groups for
+    the descendant cleanup described in §1, termios raw mode for `Esc` abort,
+    and `pre_exec` when spawning. It does not build on Windows.
 *   Rust 1.85 or higher (the workspace is on edition 2024)
 *   `cargo`
 
