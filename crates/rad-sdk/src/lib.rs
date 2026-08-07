@@ -49,7 +49,7 @@ macro_rules! routes {
     (
         name: $name:expr,
         version: $version:expr,
-        methods: { $($method:expr => $handler:path),+ $(,)? } $(,)?
+        methods: { $($method:expr => $handler:expr),+ $(,)? } $(,)?
     ) => {
         #[doc(hidden)]
         pub struct __RadModule;
@@ -106,7 +106,7 @@ macro_rules! module {
         wit: $wit:expr,
         name: $name:expr,
         version: $version:expr,
-        methods: { $($method:expr => $handler:path),+ $(,)? } $(,)?
+        methods: { $($method:expr => $handler:expr),+ $(,)? } $(,)?
     ) => {
         $crate::routes! {
             name: $name,
@@ -144,6 +144,29 @@ macro_rules! module {
         /// reaching into generated-binding paths.
         pub use __rad_bindings::rad::kernel::{dispatch, syscall, types};
     };
+}
+
+/// Adapts a handler that cannot fail.
+///
+/// Every handler returns `Result` because the dispatch boundary needs one, but
+/// plenty of them have no failure case — listing what is on disk, formatting a
+/// value. Writing `Ok(..)` anyway makes clippy's `unnecessary_wraps` fire in
+/// the module author's own crate, and the alternatives are both bad: allow the
+/// lint (CODING.md §1 permits that only for generated code) or invent an error
+/// that cannot happen.
+///
+/// ```ignore
+/// methods: {
+///     "skills.tools.list" => rad_sdk::infallible(list),
+/// }
+///
+/// fn list(req: ListReq) -> ListRes { .. }
+/// ```
+pub fn infallible<Req, Res, F>(handler: F) -> impl FnOnce(Req) -> Result<Res, Error>
+where
+    F: FnOnce(Req) -> Res,
+{
+    move |req| Ok(handler(req))
 }
 
 /// Deserializes a request, runs a handler, serializes the response.

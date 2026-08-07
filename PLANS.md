@@ -81,7 +81,65 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 §9.4's invariant holds throughout: rad works at the end of every AWU, and
 `wit/rad.wit` is untouched.
 
-### 💡 Current AWU Status
+### 💡 Current AWU Status (stage 4)
+- [✅] AWU 959: `modules/skills` — port discovery and execution (Result: Success — 10 ported tests plus 3 against a real skill tree; the SDK gained an `infallible` adapter on its third occurrence)
+- [ ] AWU 960: Consult modules from `GetTools` and `execute_tool`
+- [ ] AWU 961: Delete `ext/skill-tool-provider`
+- [ ] AWU 962: Collapse per-skill tools into one `skill` tool plus an index (§4.5.3)
+
+#### AWU 959: `modules/skills` — port discovery and execution
+- **Objective**: SKILL.md discovery and inline execution, as a module.
+- **Context**: Two changes are inherent to the port rather than chosen. The
+  extension returned skill bodies by shelling out to
+  `open_process("echo -n '...'")`, because its WIT return type was an
+  `execution-handle` — which also meant a module that only reads files needed
+  bash execution permission. `handle()` returns a string, so both the hack and
+  the permission requirement vanish. And `mode: subagent` goes: it only ever
+  returned "not implemented", and subagents were dropped in §1.2.
+  Tool-per-skill parity is kept here on purpose; changing what the model sees is
+  AWU 962's job, so a behaviour difference cannot be mistaken for a porting bug.
+- **Result**: All 10 of the extension's tests ported, plus 3 integration tests
+  against real files on disk — necessary because discovery moved from
+  `ListDir`/`FileRead` host RPCs to `std::fs`, so what the module can reach is
+  now the host's preopens rather than a permission mask.
+  Both inherent changes landed: the `echo -n` shell-out is gone (and with it the
+  bash permission a Markdown reader never should have needed), and `mode:
+  subagent` no longer blocks execution — a legacy line is ignored rather than
+  rejected, so existing `SKILL.md` files keep working.
+  **The SDK gained `rad_sdk::infallible`.** `list` has no honest failure case,
+  and this was the third module to hit clippy's `unnecessary_wraps` — the point
+  AWU 956 named as the trigger for fixing the SDK instead of the module.
+  Handlers are now `expr` rather than `path`, so an adapter can wrap one. The
+  invented "target must not be empty" check added to `relay` in AWU 953 as a
+  workaround is retracted.
+  Two test hazards were caught and fixed before they shipped: the fixture wiped
+  all of `.agents/skills` on drop, which would delete a developer's real skills,
+  and the tests raced each other over one shared directory. It now removes only
+  what it created and serialises through `TEST_MUTEX`.
+
+#### AWU 960: Consult modules from `GetTools` and `execute_tool`
+- **Objective**: The bridge for tool providers, which differs from stage 3's.
+- **Context**: `CallExtension` names one role; tools are inherently plural and
+  aggregated across providers (`src/wasm/rpc_meta.rs` for listing,
+  `src/wasm/imports_tool.rs` for execution). The registry maps a method to
+  exactly one module, so tool-providing modules cannot all claim `tools.list`.
+  Each provides `<module>.tools.list` / `<module>.tools.call` instead, and the
+  host iterates modules rather than resolving a single method — the same
+  `role.method` concatenation rule stage 3 established.
+- **DoD**: Skills appear in `/tools` and execute, with the extension disabled.
+
+#### AWU 961: Delete `ext/skill-tool-provider`
+- **DoD**: Extension gone, suite green, skills still work.
+
+#### AWU 962: One `skill` tool plus an index
+- **Objective**: §4.5.3. Deliberately separate from the port.
+- **Context**: One tool schema averages 468 characters (§4.4), so a tool per
+  skill costs context linearly. A single `skill(name, args)` whose description
+  lists what is available is roughly a quarter of that at ten skills, and the
+  body still loads only on invocation.
+- **DoD**: Ten skills cost one schema; invocation still resolves by name.
+
+### 💡 Previous AWU Status (stage 3)
 - [✅] AWU 956: `modules/context` — port the optimize logic (Result: Success — 13 ported tests pass, `windowing.rs` logic byte-identical to the extension's)
 - [✅] AWU 957: Route `CallExtension` to a kernel module when one provides the method (Result: Success — proven by disabling the extension and watching compaction keep working)
 - [✅] AWU 958: Delete `ext/context-tools` and its WIT (Result: Success — stage 3 complete; compaction runs entirely through the module)
@@ -157,7 +215,7 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
   **Live config migrated** (`~/.rad/config.json`, backed up to
   `.bak-awu958`): the `context-tools` entry moved from `extensions` to
   `modules`. Without that the deletion would have removed compaction outright.
-- [🔄] Phase 71 continues with stage 4: `skill-tool-provider`.
+
 
 ---
 

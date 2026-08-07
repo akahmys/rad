@@ -33,22 +33,17 @@ fn hop(req: HopReq) -> Result<HopRes, Error> {
 }
 
 /// Forwards asynchronously. Returns immediately — `post` cannot report
-/// delivery, by design.
-fn hop_post(req: HopReq) -> Result<HopRes, Error> {
+/// delivery, by design, so this cannot fail either.
+fn hop_post(req: HopReq) -> HopRes {
     let HopReq {
         target,
         method,
         payload,
     } = req;
-    // Worth rejecting rather than posting into the void: `post` cannot report
-    // failure, so an empty target would silently drop the message.
-    if target.is_empty() {
-        return Err(Error::invalid("target must not be empty"));
-    }
     crate::dispatch::post(&target, &method, &payload);
-    Ok(HopRes {
+    HopRes {
         reply: "posted".to_string(),
-    })
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -76,7 +71,7 @@ rad_sdk::module! {
     version: "0.1.0",
     methods: {
         "relay.hop"      => hop,
-        "relay.hop_post" => hop_post,
+        "relay.hop_post" => rad_sdk::infallible(hop_post),
         "relay.spin"     => spin,
     }
 }
