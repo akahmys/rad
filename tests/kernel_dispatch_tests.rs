@@ -5,19 +5,22 @@ use rad::kernel::{KernelShared, ModuleRuntime};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-fn wasm(name: &str) -> Option<PathBuf> {
+/// Panics rather than returning `None` when a component is missing. Skipping
+/// made the test pass without exercising anything — the same shape of failure
+/// that let CI report success while running 82 of 195 tests.
+fn wasm(name: &str) -> PathBuf {
     for profile in ["debug", "release"] {
         let p = PathBuf::from(format!("target/wasm32-wasip2/{profile}/{name}.wasm"));
         if p.exists() {
-            return Some(p);
+            return p;
         }
     }
-    None
+    panic!("{name}.wasm not built for wasm32-wasip2; run cargo build --target wasm32-wasip2")
 }
 
 /// Loads `echo` and `relay` into one kernel.
-fn kernel() -> Option<Arc<KernelShared>> {
-    let (echo, relay) = (wasm("echo_module")?, wasm("relay_module")?);
+fn kernel() -> Arc<KernelShared> {
+    let (echo, relay) = (wasm("echo_module"), wasm("relay_module"));
     let shared = KernelShared::new();
     for (name, path) in [("echo", echo), ("relay", relay)] {
         let rt = ModuleRuntime::load(name, &path, &shared.engine, Arc::downgrade(&shared))
@@ -32,7 +35,7 @@ fn kernel() -> Option<Arc<KernelShared>> {
             .lock()
             .insert(name.to_string(), Arc::new(Mutex::new(rt)));
     }
-    Some(shared)
+    shared
 }
 
 fn hop(target: &str, method: &str, payload: &str) -> String {
@@ -44,7 +47,7 @@ fn hop(target: &str, method: &str, payload: &str) -> String {
 
 #[test]
 fn a_module_can_call_another_module() {
-    let Some(k) = kernel() else { return };
+    let k = kernel();
     let reply = k
         .call(
             "test",
@@ -61,7 +64,7 @@ fn a_module_can_call_another_module() {
 fn a_cycle_is_an_error_naming_the_chain() {
     // §3.6.3. Without the check this deadlocks: relay's store lock is held by
     // the in-flight call, so re-entering it would wait on itself forever.
-    let Some(k) = kernel() else { return };
+    let k = kernel();
     let err = k
         .call(
             "test",
@@ -78,7 +81,7 @@ fn a_cycle_is_an_error_naming_the_chain() {
 fn the_same_shape_via_post_completes() {
     // The DoD contrast: `post` queues rather than re-entering, so what
     // deadlocks as a `call` is ordinary as a `post`.
-    let Some(k) = kernel() else { return };
+    let k = kernel();
     let reply = k
         .call(
             "test",
@@ -97,7 +100,7 @@ fn the_same_shape_via_post_completes() {
 #[test]
 fn routing_by_method_finds_the_provider_without_naming_it() {
     // A caller asks for a capability, not a module.
-    let Some(k) = kernel() else { return };
+    let k = kernel();
     let reply = k
         .call("test", "echo.say", "echo.say", r#"{"text":"by method"}"#)
         .unwrap();
@@ -106,7 +109,7 @@ fn routing_by_method_finds_the_provider_without_naming_it() {
 
 #[test]
 fn an_unroutable_method_reports_rather_than_panicking() {
-    let Some(k) = kernel() else { return };
+    let k = kernel();
     let err = k.call("test", "nobody", "nobody.method", "{}").unwrap_err();
     assert!(err.contains("no module provides"), "{err}");
 }
@@ -114,7 +117,7 @@ fn an_unroutable_method_reports_rather_than_panicking() {
 #[test]
 fn the_call_stack_unwinds_so_a_second_call_still_works() {
     // A rejected cycle must not leave the chain on the stack.
-    let Some(k) = kernel() else { return };
+    let k = kernel();
     let _ = k.call(
         "test",
         "relay",
@@ -137,7 +140,7 @@ fn a_module_that_never_returns_is_interrupted() {
     // §3.6.5. `src/esc_abort.rs`'s cooperative flag cannot stop this loop — it
     // never checks anything. Epoch interruption can, which is the argument for
     // preferring it over a flag once third-party modules exist.
-    let Some(k) = kernel() else { return };
+    let k = kernel();
 
     // A deadline short enough to keep the test quick. Same mechanism as the
     // production budget, just fewer ticks.
@@ -166,7 +169,7 @@ fn a_module_that_never_returns_is_interrupted() {
 fn the_kernel_still_works_after_interrupting_a_module() {
     // An interrupted module must not take the process with it, or preemption
     // would only trade one failure for another.
-    let Some(k) = kernel() else { return };
+    let k = kernel();
     {
         let modules = k.modules.lock();
         let relay = modules.get("relay").unwrap().clone();
@@ -186,9 +189,7 @@ fn boot_loads_modules_from_config_and_serves_kernel_config() {
     // The DoD path end to end: a config entry becomes a routable module, and
     // its config comes back through `kernel.config` — the kernel answering
     // dispatch like any other target, so a module never special-cases the host.
-    let Some(path) = wasm("echo_module") else {
-        return;
-    };
+    let path = wasm("echo_module");
     let (k, loaded) = rad::kernel::boot(&[rad::config::ModuleConfig {
         name: "echo".to_string(),
         source: path.to_string_lossy().to_string(),
@@ -208,9 +209,7 @@ fn boot_loads_modules_from_config_and_serves_kernel_config() {
 
 #[test]
 fn a_disabled_module_is_not_loaded() {
-    let Some(path) = wasm("echo_module") else {
-        return;
-    };
+    let path = wasm("echo_module");
     let (_k, loaded) = rad::kernel::boot(&[rad::config::ModuleConfig {
         name: "echo".to_string(),
         source: path.to_string_lossy().to_string(),
@@ -223,9 +222,7 @@ fn a_disabled_module_is_not_loaded() {
 #[test]
 fn a_broken_module_is_skipped_rather_than_aborting_startup() {
     // One bad third-party module must not stop rad from running.
-    let Some(good) = wasm("echo_module") else {
-        return;
-    };
+    let good = wasm("echo_module");
     let (_k, loaded) = rad::kernel::boot(&[
         rad::config::ModuleConfig {
             name: "missing".to_string(),

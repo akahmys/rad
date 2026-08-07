@@ -15,22 +15,22 @@ fn live_kernel() -> Arc<KernelShared> {
     KernelShared::new()
 }
 
-fn echo_wasm() -> Option<PathBuf> {
+/// Panics rather than returning `None`: a test that skips on a missing
+/// component passes without exercising anything, which is how CI reported
+/// success while running 82 of 195 tests.
+fn echo_wasm() -> PathBuf {
     for profile in ["debug", "release"] {
         let p = PathBuf::from(format!("target/wasm32-wasip2/{profile}/echo_module.wasm"));
         if p.exists() {
-            return Some(p);
+            return p;
         }
     }
-    None
+    panic!("echo_module.wasm not built for wasm32-wasip2")
 }
 
 #[test]
 fn loads_a_real_module_and_reads_its_manifest() {
-    let Some(path) = echo_wasm() else {
-        eprintln!("skipping: echo_module.wasm not built for wasm32-wasip2");
-        return;
-    };
+    let path = echo_wasm();
     let kernel = live_kernel();
     let rt = ModuleRuntime::load("echo", &path, &kernel.engine, Arc::downgrade(&kernel))
         .expect("echo should load");
@@ -40,7 +40,7 @@ fn loads_a_real_module_and_reads_its_manifest() {
 
 #[test]
 fn a_loaded_module_answers_and_rejects_through_handle() {
-    let Some(path) = echo_wasm() else { return };
+    let path = echo_wasm();
     let kernel = live_kernel();
     let mut rt =
         ModuleRuntime::load("echo", &path, &kernel.engine, Arc::downgrade(&kernel)).unwrap();
@@ -61,7 +61,7 @@ fn a_loaded_module_answers_and_rejects_through_handle() {
 #[test]
 fn a_module_whose_configured_name_disagrees_with_its_manifest_is_rejected() {
     // Routing and diagnostics would otherwise disagree about what to call it.
-    let Some(path) = echo_wasm() else { return };
+    let path = echo_wasm();
     let kernel = live_kernel();
     let Err(err) = ModuleRuntime::load("not-echo", &path, &kernel.engine, Arc::downgrade(&kernel))
     else {
@@ -73,7 +73,7 @@ fn a_module_whose_configured_name_disagrees_with_its_manifest_is_rejected() {
 #[test]
 fn loading_the_same_module_twice_conflicts_in_the_registry() {
     // The DoD case, against a real manifest rather than a constructed one.
-    let Some(path) = echo_wasm() else { return };
+    let path = echo_wasm();
     let kernel = live_kernel();
     let first =
         ModuleRuntime::load("echo", &path, &kernel.engine, Arc::downgrade(&kernel)).unwrap();

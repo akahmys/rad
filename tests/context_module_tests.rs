@@ -11,18 +11,15 @@ use rad::kernel::{KernelShared, ModuleRuntime};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-fn kernel_with_context() -> Option<Arc<KernelShared>> {
-    let mut path = None;
-    for profile in ["debug", "release"] {
-        let p = PathBuf::from(format!(
-            "target/wasm32-wasip2/{profile}/context_module.wasm"
-        ));
-        if p.exists() {
-            path = Some(p);
-            break;
-        }
-    }
-    let path = path?;
+fn kernel_with_context() -> Arc<KernelShared> {
+    // Panics rather than skipping: this suite exists to catch a serialization
+    // mismatch that already shipped once, and a vacuous pass would hide it as
+    // effectively as the bug did.
+    let path = ["debug", "release"]
+        .iter()
+        .map(|p| PathBuf::from(format!("target/wasm32-wasip2/{p}/context_module.wasm")))
+        .find(|p| p.exists())
+        .expect("context_module.wasm not built for wasm32-wasip2");
     let shared = KernelShared::new();
     let rt = ModuleRuntime::load(
         "context-tools",
@@ -40,7 +37,7 @@ fn kernel_with_context() -> Option<Arc<KernelShared>> {
         .modules
         .lock()
         .insert("context-tools".to_string(), Arc::new(Mutex::new(rt)));
-    Some(shared)
+    shared
 }
 
 fn request(count: usize, max_history: Option<u32>) -> String {
@@ -61,9 +58,7 @@ fn optimize_actually_windows_across_the_dispatch_boundary() {
     // The regression the original test was written for: a field that fails to
     // deserialize defaults to `None`, windowing is skipped, and the response
     // still looks reasonable. Asserting the count *changed* is what catches it.
-    let Some(k) = kernel_with_context() else {
-        return;
-    };
+    let k = kernel_with_context();
     let reply = k
         .call(
             "test",
@@ -80,9 +75,7 @@ fn optimize_actually_windows_across_the_dispatch_boundary() {
 
 #[test]
 fn without_a_budget_nothing_is_dropped() {
-    let Some(k) = kernel_with_context() else {
-        return;
-    };
+    let k = kernel_with_context();
     let reply = k
         .call(
             "test",
@@ -97,9 +90,7 @@ fn without_a_budget_nothing_is_dropped() {
 
 #[test]
 fn an_empty_request_is_answered_not_rejected() {
-    let Some(k) = kernel_with_context() else {
-        return;
-    };
+    let k = kernel_with_context();
     let reply = k
         .call(
             "test",
@@ -116,9 +107,7 @@ fn an_empty_request_is_answered_not_rejected() {
 fn a_zero_budget_is_reported_across_the_boundary() {
     // The addition made in AWU 956: an error must survive dispatch as an error,
     // not arrive as an empty history that looks like successful compaction.
-    let Some(k) = kernel_with_context() else {
-        return;
-    };
+    let k = kernel_with_context();
     let err = k
         .call(
             "test",

@@ -61,7 +61,20 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
+          target: wasm32-wasip2
           components: clippy
+
+      # The integration suite loads real `.wasm` components off disk, so
+      # without this step `cargo test` fails on the first such binary and
+      # cargo stops — 82 of 195 tests run and the rest are never attempted.
+      # Building here rather than depending on the wasm job because jobs do not
+      # share a workspace.
+      - name: Build Wasm components for the integration suite
+        run: |
+          cargo build --target wasm32-wasip2 \
+            -p rad-orchestrator -p llm-connector -p security-guard \
+            -p mcp-tool-provider -p skill-tool-provider \
+            -p context-module -p echo-module -p relay-module
 
       # `--workspace` is required, not decorative: without it cargo selects only
       # the root package, silently skipping every test in `ext/*` and `models/`
