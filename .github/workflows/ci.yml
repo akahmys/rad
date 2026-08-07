@@ -32,6 +32,10 @@ jobs:
       - name: Install betterleaks
         env:
           BETTERLEAKS_VERSION: 1.7.3
+        # `shell: bash` on every multi-line `run`: a Windows runner would
+        # default to PowerShell and reject `\` continuations. Stated even on
+        # Linux-only jobs so adding an OS matrix later cannot break them.
+        shell: bash
         run: |
           curl -sSfL -o /tmp/betterleaks.tar.gz \
             "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
@@ -70,6 +74,9 @@ jobs:
       # Building here rather than depending on the wasm job because jobs do not
       # share a workspace.
       - name: Build Wasm components for the integration suite
+        # Explicit shell: Windows runners default to PowerShell, which does not
+        # accept `\` line continuations and failed with "unexpected argument".
+        shell: bash
         run: |
           cargo build --target wasm32-wasip2 \
             -p rad-orchestrator -p llm-connector -p security-guard \
@@ -127,6 +134,10 @@ jobs:
       # Extensions ship as wasm32-wasip2 components. A native-only check misses
       # target-specific breakage, so lint and build them for the real target.
       - name: Clippy (wasm32-wasip2)
+        # `shell: bash` on every multi-line `run`: a Windows runner would
+        # default to PowerShell and reject `\` continuations. Stated even on
+        # Linux-only jobs so adding an OS matrix later cannot break them.
+        shell: bash
         run: |
           cargo clippy --target wasm32-wasip2 \
             -p rad-orchestrator -p llm-connector -p security-guard \
@@ -134,6 +145,10 @@ jobs:
             -- -D warnings
 
       - name: Build (wasm32-wasip2)
+        # `shell: bash` on every multi-line `run`: a Windows runner would
+        # default to PowerShell and reject `\` continuations. Stated even on
+        # Linux-only jobs so adding an OS matrix later cannot break them.
+        shell: bash
         run: |
           cargo build --target wasm32-wasip2 \
             -p rad-orchestrator -p llm-connector -p security-guard \

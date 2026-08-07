@@ -88,6 +88,15 @@ impl RunningProcess {
 
     pub fn kill_group(&mut self) {
         let _ = crate::sys::kill_process_group(self.pgid);
+        // Reap the direct child. `std::process::Child` deliberately does not
+        // wait on drop, so without this the killed process stays a zombie until
+        // rad itself exits — one PID slot per spawn, in a program whose whole
+        // job is spawning things.
+        //
+        // `wait()` is bounded here in practice: SIGKILL cannot be caught or
+        // ignored, so the child is already dead or about to be. If something
+        // else already reaped it, this errors and there is nothing to do.
+        let _ = self.child.wait();
         self.unregister_pgid();
     }
 
