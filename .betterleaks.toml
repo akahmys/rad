@@ -1,0 +1,73 @@
+# Replaces the hand-rolled `scripts/check_secrets.sh`.
+#
+# That script did two jobs, and both are expressed here: secret detection
+# (security) and absolute paths that carry a username (personal information).
+# It was replaced because a hand-maintained regex scanner showed three distinct
+# failure modes in a single day — a false positive on `auth_header:
+# "Authorization"` that blocked legitimate work, a `set -e`/`pipefail`
+# interaction that silently disabled the whole scan while still reporting
+# failure, and a standing blind spot where a quoted JSON key
+# (`"credential": "AKIA…"`) matched nothing at all.
+
+# Start from the maintained default ruleset rather than restating it.
+[extend]
+useDefault = true
+
+[[rules]]
+# The default ruleset does not flag `sk-ant-` keys, and this codebase talks to
+# Anthropic APIs — dropping the retired script's explicit check would have been
+# a straight regression. Verified by scanning a format-valid synthetic key
+# before and after adding this rule.
+id = "anthropic-api-key"
+description = "Anthropic API key"
+regex = '''sk-ant-[a-zA-Z0-9_-]{20,}'''
+keywords = ["sk-ant-"]
+tags = ["security", "rad"]
+
+[[rules]]
+# Likewise absent from the defaults for the bare key id. Less sensitive than the
+# secret access key, but it identifies an account.
+id = "aws-access-key-id"
+description = "AWS access key id"
+regex = '''\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b'''
+keywords = ["AKIA", "ASIA", "ABIA", "ACCA"]
+tags = ["security", "rad"]
+
+[rules.allowlist]
+# AWS's own documentation example, present in countless READMEs.
+regexes = ['''AKIAIOSFODNN7EXAMPLE''']
+
+[[rules]]
+# Personal information, not a secret: `/Users/<name>` and `/home/<name>` leak
+# the account name of whoever built the artifact. The same concern that led to
+# rewriting this repository's commit authorship — a path is just a slower leak.
+id = "rad-absolute-home-path"
+description = "Absolute path exposing a local username"
+# Written with a character class so this file does not match its own rule.
+regex = '''/(?:[Uu]ser[s]|home)/[a-zA-Z0-9][a-zA-Z0-9._-]*'''
+tags = ["privacy", "rad"]
+
+[rules.allowlist]
+# Documentation that must show a real-looking path to be useful, and the two
+# places that legitimately talk about the pattern itself.
+paths = [
+    '''\.betterleaks\.toml$''',
+    '''^CONFIG\.md$''',
+]
+# `/home/runner` is GitHub Actions' own checkout path, not a person.
+regexes = [
+    '''/home/runner''',
+    '''/Users/runner''',
+]
+
+[allowlist]
+description = "Paths that are build output, local state, or vendored"
+paths = [
+    # Unanchored: `templates/*` are standalone crates with their own `target/`.
+    '''(^|/)target/''',
+    '''^\.git/''',
+    '''^\.rad/''',
+    '''^\.cocoindex_code/''',
+    '''\.wasm$''',
+    '''^Cargo\.lock$''',
+]

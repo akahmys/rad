@@ -1,4 +1,6 @@
 /target
+# Nested build output — `templates/*` are standalone crates with their own.
+**/target/
 .rad/
 
 # macOS
@@ -6,3 +8,6 @@
 
 # Local tooling artifacts (databases, indexes)
 .cocoindex_code/
+
+# Per-machine Claude Code settings — contains absolute paths by nature.
+.claude/settings.local.json

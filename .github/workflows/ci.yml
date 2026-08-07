@@ -17,10 +17,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install betterleaks
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/betterleaks/betterleaks/main/install.sh \
+            | sh -s -- -b /usr/local/bin || go install github.com/betterleaks/betterleaks@latest
+
       - name: Run secret scanner
         run: |
-          chmod +x scripts/check_secrets.sh
-          scripts/check_secrets.sh --all
+          chmod +x scripts/scan_secrets.sh
+          scripts/scan_secrets.sh --all
 
   build-and-test:
     name: Build & Test

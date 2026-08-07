@@ -64,7 +64,7 @@ Maintaining a consistent and reproducible test state is critical, especially for
 
 `.github/workflows/ci.yml` gates every push and pull request to `main`:
 
-1. `scripts/check_secrets.sh --all`
+1. `scripts/scan_secrets.sh --all` (betterleaks; rules in `.betterleaks.toml`)
 2. `cargo check --workspace --all-targets` (ubuntu / macOS / windows)
 3. `cargo clippy --workspace --all-targets -- -D warnings`
 4. `cargo test --workspace`
