@@ -38,6 +38,24 @@ tags = ["security", "rad"]
 regexes = ['''AKIAIOSFODNN7EXAMPLE''']
 
 [[rules]]
+# The repository owner's legal name and the hostname it was paired with. Both
+# were scrubbed from history; this rule exists so they cannot come back — via a
+# generated config, a pasted log, a tool that writes `whoami`, or a commit made
+# from a machine whose git identity drifted.
+#
+# The patterns are written with character classes so that **this file never
+# contains the literal strings it matches**. Committing a public config that
+# spells out the name would defeat the point, and the retired shell script used
+# the same trick (`"/Us" "ers/"`) for the same reason.
+id = "rad-owner-identity"
+description = "Repository owner's personal name or machine hostname"
+regex = '''(?i)(J[u]n[\s._-]*K[a]to|j[u]nno[\s._-]*mac[\s._-]*book)'''
+tags = ["privacy", "rad"]
+
+[rules.allowlist]
+paths = ['''\.betterleaks\.toml$''']
+
+[[rules]]
 # Personal information, not a secret: `/Users/<name>` and `/home/<name>` leak
 # the account name of whoever built the artifact. The same concern that led to
 # rewriting this repository's commit authorship — a path is just a slower leak.
