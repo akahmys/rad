@@ -2,6 +2,7 @@
 name = "rad-abi"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 # The one contract the kernel and every module must agree on. Kept deliberately
 # tiny: opaque dispatch means the kernel never parses a payload, so `serde` is

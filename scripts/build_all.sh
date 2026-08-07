@@ -51,7 +51,7 @@ echo "  - Formatting check (cargo fmt)..."
 cargo fmt --check
 
 echo "  - License compliance audit..."
-python3 scripts/check_licenses.py
+cargo deny check licenses
 
 echo "  - Secret & path scanner..."
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then

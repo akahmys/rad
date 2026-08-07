@@ -2,6 +2,7 @@
 name = "mcp-tool-provider"
 version = "0.8.0"
 edition = "2024"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib"]

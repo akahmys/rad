@@ -2,6 +2,7 @@
 name = "echo-module"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 # The smallest possible module. Its job is to prove the path end to end —
 # SDK to wasm component to kernel — not to be useful.

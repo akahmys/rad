@@ -49,6 +49,13 @@ jobs:
       # `--workspace` is required, not decorative: without it cargo selects only
       # the root package, silently skipping every test in `ext/*` and `models/`
       # — 52 of 149, about a third of the suite. See README §2.3.
+      # Dependency license policy lives in deny.toml. Allow-only: a crate must
+      # be positively permitted, not merely absent from a blacklist.
+      - name: License audit
+        run: |
+          cargo install --locked cargo-deny || true
+          cargo deny check licenses
+
       - name: Cargo check
         run: cargo check --workspace --all-targets
 
