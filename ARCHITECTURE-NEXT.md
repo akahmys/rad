@@ -820,6 +820,35 @@ radがMCPを採る論拠は**構造化された結果**にある。`isError` に
 
 正直に記録する。
 
+- **Windows 対応(移行後の目標)** — 現在 rad は Unix でしかビルドできない。
+  CIワークフローは初版から `windows-latest` を並べていたが、`cargo check` が
+  そこで成功した記録はなく、`check-secrets` ジョブが常に先に落ちていたため
+  誰も気づかないままだった。存在しない対応を宣伝していたことになるので、
+  マトリクスから外し README に前提として明記した。
+
+  阻害要因は1つが本質的で、残りは付随的である。
+
+  | 箇所 | 内容 | 性質 |
+  |---|---|---|
+  | `src/sys.rs` / `src/process.rs` | `killpg` + `pre_exec` による POSIX プロセスグループ | **本質的**。README §1 の目玉機能の実体 |
+  | `src/esc_abort.rs` | termios 生モード | 付随的。**`crossterm` が既に依存にあり**同じことができる |
+  | `src/wasm/imports_resources_file.rs` | `FileExt::read_at/write_at` | 付随的。Windows は `seek_read/seek_write` |
+  | `src/command/completion.rs` | `MetadataExt`(実行ビット) | 付随的 |
+
+  Windows にも Job Objects という等価な仕組みがあるため、**思想上できないのでは
+  なく未実装**である。
+
+  **移行後の方が実装箇所は少ない。** カーネル設計ではプロセス監督が
+  `proc-spawn` syscall 1本に集約される(§3.1)ので、Job Objects の抽象を
+  カーネル内部に1つ書けば済み、**モジュールは1行も変わらない**
+  — §3.1.2 の「std に無いものはカーネルが版差・環境差を吸収する」規則が、
+  OS差にもそのまま効く。付随的な3箇所も、`esc_abort` は `ui-repl` モジュール化
+  (段階9)で crossterm に寄せられ、ファイルI/Oは `std::fs` へ移った時点で
+  消える(§3.4.1)。
+
+  したがってこれは移行前に着手すべきものではなく、**移行が終わった時点で
+  最も安く実現できる目標**として置く。
+
 - **サブスクリプション認証 (OAuth)** — Claude Pro/Max、ChatGPT Plus/Pro、GitHub Copilot。
   dialect表では届かない(トークンの取得・保存・更新とブラウザフローが必要)。
   カーネルが解決済みトークンを渡す形にすれば `llm-transport-*` は無改造で済む。

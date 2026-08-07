@@ -64,6 +64,7 @@
 - [✅] Phase 69: Microkernel Migration — Preparation & Stage 0 (v0.74.0)
 - [✅] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (v0.75.0) (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
 - [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8; stage 3 done)
+- [ ] Phase 73: Windows Support — post-migration, once `proc-spawn` is the single point of process supervision (`ARCHITECTURE-NEXT.md` §8)
 - [ ] Phase 72: Microkernel Migration — DAG/UI Extraction and Author Tooling (§9 stages 9–10)
 
 ---
@@ -343,7 +344,7 @@ whole thing throughout.
 **Do not treat `ARCHITECTURE-NEXT.md` as current.** Nothing in it is implemented.
 
 ### 💡 Current AWU Status
-- [⏸] AWU 946: Verify CI is green after the workspace fix (Blocked: GitHub Actions major outage — the full CI command set passes locally, 157 tests)
+- [✅] AWU 946: Verify CI is green after the workspace fix (Result: Success — all five jobs green on `ea7740c`, 195 tests actually executed on both runners)
 - [✅] AWU 947: Settle `net-open` vs `wasi:http` (Result: Success — keep `net-open`; WASI 0.3 deleted `wasi:io`, so importing `wasi:http` would break every module at once)
 - [✅] AWU 948: Stage 0 — dialect table in `ext/llm-connector` (Result: Success — Gemini and Azure now expressible; existing profiles verified bit-identical, end-to-end against the live llama.cpp endpoint)
 
@@ -354,7 +355,36 @@ whole thing throughout.
 - **Context**: CI has never actually run `clippy`/`test` — the `check-secrets` job
   was failing on a transient `actions/checkout` resolution error, which skips
   `build-and-test`. Phase 68 fixed what CI runs; that it passes is unconfirmed.
-- **DoD**: A green run on `main` covering all three OSes plus the wasm job.
+- **Result**: Green, and getting there surfaced six real problems that the
+  outage had been masking. The Actions outage was the surface; underneath, CI
+  had never once run clippy or the test suite.
+  betterleaks was never installed — the workflow piped an `install.sh` that does
+  not exist, so `check-secrets` died on `command not found` and took the other
+  jobs with it as skipped dependencies. `actions/checkout` clones at depth 1,
+  and `betterleaks git` on a one-commit clone prints "no leaks found" —
+  indistinguishable from a real pass while 222 commits sat unexamined. The
+  licence audit sat in a three-OS matrix while `cargo-deny-action` is a Linux
+  container, and used `|| true`, so a failed install skipped it silently. No job
+  built the `.wasm` components the integration suite loads, so 82 of 195 tests
+  ran and the rest were never attempted.
+  Two were bugs rather than CI configuration. **`kill_group` sent SIGKILL and
+  never reaped**, so every spawned process stayed a zombie until rad exited —
+  one PID slot per spawn, in a program whose job is spawning things. It passed
+  locally because macOS drops zombies from `getpgid` promptly and Linux does
+  not; the test was right and the implementation was wrong. And **Windows had
+  never compiled at all** — listed in the matrix since the workflow's first
+  commit, promising support that does not exist (now Phase 73).
+  Three of my own measurements were also wrong: an awk summing test results
+  could not count failures (it reported "0 failed" for a run with three), the
+  tests I added this session returned early on missing components and so passed
+  vacuously, and a bulk edit placed timeout assertions inside the loops they
+  were meant to follow.
+  Nine tests waited on a budget and then continued regardless, so a slow runner
+  surfaced as whichever later assertion first noticed an incomplete state. They
+  now assert that the task finished, which turns a misleading logic failure into
+  "it timed out".
+  The single lesson, repeated in every one of these: **a check that cannot run
+  is far worse than one that fails, because it looks like a pass.**
 
 #### AWU 947: Settle `net-open` vs `wasi:http`
 - **Objective**: Decide whether the kernel needs a custom HTTP syscall at all.
