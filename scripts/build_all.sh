@@ -55,7 +55,7 @@ python3 scripts/check_licenses.py
 
 echo "  - Secret & path scanner..."
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    ./scripts/scan_secrets.sh --all
+    betterleaks git --no-banner --redact .
 else
     echo "  (Skipping git secret scanner: not in a git repository context)"
 fi

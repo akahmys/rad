@@ -22,10 +22,11 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/betterleaks/betterleaks/main/install.sh \
             | sh -s -- -b /usr/local/bin || go install github.com/betterleaks/betterleaks@latest
 
+      # Rules — secrets and the personal-information patterns — live in
+      # .betterleaks.toml. Scans full history, not just HEAD: a secret removed
+      # from the tip is still published.
       - name: Run secret scanner
-        run: |
-          chmod +x scripts/scan_secrets.sh
-          scripts/scan_secrets.sh --all
+        run: betterleaks git --no-banner --redact .
 
   build-and-test:
     name: Build & Test
