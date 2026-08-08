@@ -77,10 +77,15 @@ fn main() {
         eprintln!("\x1b[33mWarning: failed to initialize extensions at startup: {e}\x1b[0m");
     }
 
-    // The kernel comes up beside the extension host, not instead of it. Both
-    // surfaces are live for the whole migration (ARCHITECTURE-NEXT.md §9.1);
-    // with no `modules` configured this loads nothing and costs nothing.
-    let (kernel, loaded_modules) = rad::kernel::boot(&cfg.modules);
+    // The kernel comes up inside `Orchestrator::new` (it is part of the same
+    // config), so there is nothing to boot or hand over here — only something
+    // to report.
+    let loaded_modules = orchestrator
+        .kernel
+        .lock()
+        .as_ref()
+        .map(|k| k.modules())
+        .unwrap_or_default();
     if !loaded_modules.is_empty() {
         println!(
             "\x1b[32m[OK] Loaded {} kernel module(s): {}\x1b[0m",
@@ -88,10 +93,6 @@ fn main() {
             loaded_modules.join(", ")
         );
     }
-    // Hand the kernel to the orchestrator so `CallExtension` can reach it
-    // (src/wasm/rpc_meta.rs). Until modules are configured this is a `None`
-    // check on a path that then behaves exactly as before.
-    *orchestrator.kernel.lock() = Some(kernel);
 
     println!("\x1b[1;36mStarting rad agent shell. Type '/quit' to end the session.\x1b[0m");
 

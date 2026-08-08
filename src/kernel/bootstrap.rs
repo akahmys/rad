@@ -20,8 +20,15 @@ use std::sync::Arc;
 /// A configuration with no modules yields a kernel with nothing in it, which is
 /// the normal state until stage 3 moves the first extension across.
 #[must_use]
-pub fn boot(modules: &[ModuleConfig]) -> (Arc<KernelShared>, Vec<String>) {
-    let shared = KernelShared::new();
+pub fn boot(
+    modules: &[ModuleConfig],
+    workspace: &str,
+    hitl_enabled: bool,
+) -> (Arc<KernelShared>, Vec<String>) {
+    let shared = KernelShared::with_workspace(workspace);
+    shared
+        .hitl_enabled
+        .store(hitl_enabled, std::sync::atomic::Ordering::Relaxed);
     let mut loaded = Vec::new();
 
     for entry in modules.iter().filter(|m| m.enabled) {

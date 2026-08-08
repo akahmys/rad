@@ -106,15 +106,17 @@ fn run_hitl_task(
             permissions: Some(perms.clone()),
             config: HashMap::new(),
         },
-        rad::config::ExtensionConfig {
-            name: "mcp-tool-provider".to_string(),
-            enabled: true,
-            role: "tool-provider".to_string(),
-            source: "target/wasm32-wasip2/debug/mcp_tool_provider.wasm".to_string(),
-            permissions: Some(perms),
-            config: HashMap::new(),
-        },
     ];
+    // Tools come from the `mcp` kernel module, which under `RAD_TEST_PORT`
+    // offers the synthetic read/write/execute set this suite drives. It was
+    // `mcp-tool-provider` until AWU 965. `Orchestrator::new` boots whatever
+    // `modules` declares, so there is nothing to wire up here.
+    config.modules = vec![rad::config::ModuleConfig {
+        name: "mcp".to_string(),
+        source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
+        enabled: true,
+        config: serde_json::Value::Null,
+    }];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {

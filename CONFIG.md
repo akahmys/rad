@@ -19,7 +19,7 @@ When the `rad` Core starts, the system resolves operational parameters and crede
 > `rad.local.json` is a local-only file designed to hold personal secrets like API keys. To prevent sharing credentials in repositories, it must always be excluded from Git version control (add it to `.gitignore`).
 
 ### 1.2 Configuration Schema Example (Full Parameters with Comments)
-The config file supports JSON with comments (JSONC). The following example registers the 6 extensions `rad` ships, plus two locally-installed MCP servers — without at least one MCP server registered under `mcp-tool-provider`, `rad` has no built-in file/shell tools at all and can't act on anything (see [README.md](README.md) §3.2 for more on this):
+The config file supports JSON with comments (JSONC). The following example registers the 3 extensions and 3 kernel modules `rad` ships, plus two locally-installed MCP servers — without at least one MCP server registered under the `mcp` module, `rad` has no built-in file/shell tools at all and can't act on anything (see [README.md](README.md) §3.2 for more on this):
 
 ```json
 {
@@ -112,29 +112,6 @@ The config file supports JSON with comments (JSONC). The following example regis
       }
     },
     {
-      "name": "mcp-tool-provider",
-      "source": "~/.rad/wasm/mcp_tool_provider.wasm",
-      "enabled": true,
-      "role": "tool-provider",
-      "permissions": {
-        "fs_read_allow": ["*"],
-        "fs_write_allow": ["*"],
-        "execution": {
-          "allow_bash": true,
-          "allow_commands": [],
-          "block_commands": []
-        },
-        "network": { "allow_network": true, "allow_domains": [] }
-      },
-      // The only source of tools rad has — any stdio MCP server works here.
-      "config": {
-        "mcp_servers": {
-          "core-utilities": { "command": "~/.cargo/bin/core-utilities-mcp", "args": [] },
-          "web-access": { "command": "~/.cargo/bin/web-access-mcp", "args": [] }
-        }
-      }
-    },
-    {
       "name": "llm-connector",
       "source": "~/.rad/wasm/llm_connector.wasm",
       "enabled": true,
@@ -158,13 +135,30 @@ The config file supports JSON with comments (JSONC). The following example regis
       "enabled": true,
       // Opaque to the kernel; the module reads it via `kernel.config`.
       "config": {}
+    },
+    {
+      "name": "mcp",
+      "source": "~/.rad/wasm/mcp_module.wasm",
+      "enabled": true,
+      // The only source of general-purpose tools rad has — any stdio MCP
+      // server works here. `command` and `args` stay separate all the way to
+      // the process: the extension used to join them into one string that the
+      // host then split back apart on whitespace, mangling any argument
+      // containing a space.
+      "config": {
+        "mcp_servers": {
+          "core-utilities": { "command": "~/.cargo/bin/core-utilities-mcp", "args": [] },
+          "web-access": { "command": "~/.cargo/bin/web-access-mcp", "args": [] }
+        }
+      }
     }
   ]
 }
 ```
 
-Both were extensions until recently. `context-tools` moved in AWU 957 and
-`skill-tool-provider` became the `skills` module in AWU 959/960 — the latter
+Both were extensions until recently. `context-tools` moved in AWU 957,
+`skill-tool-provider` became the `skills` module in AWU 959/960, and
+`mcp-tool-provider` became `mcp` in AWU 964/965 — the latter
 also shed its `allow_bash` requirement, which existed only because the old WIT
 made it return results through `open_process("echo ...")`. A module returns a
 string, so a Markdown reader no longer asks for shell execution.

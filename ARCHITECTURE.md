@@ -25,7 +25,7 @@ graph TD
         Orchestrator["1. LLM Orchestrator <br> (rad_orchestrator.wasm)"]
         Connector["2. LLM Connector <br> (llm_connector.wasm)"]
         SecurityGuard["3. Security Guard <br> (security_guard.wasm)"]
-        ToolProvider["4. Tool/MCP Provider <br> (mcp_tool_provider.wasm)"]
+        ToolProvider["4. Tool/MCP Provider <br> (mcp_module.wasm — kernel module)"]
         SkillModule["5. Skills <br> (skills_module.wasm — kernel module)"]
         ContextModule["6. Context Compactor <br> (context_module.wasm — kernel module)"]
 
@@ -52,7 +52,7 @@ The Core focuses on executing low-level physical operations (primitives) on the 
 > [!IMPORTANT]
 > **What the capability mask actually enforces.** The mask governs calls that pass through the host RPC surface. It is not a containment boundary, for two independent reasons — both verified against the running system, not inferred:
 >
-> 1. **Extensions can bypass it with `std::fs`.** `src/wasm/loader.rs` gives every extension WASI preopens for `.` and `$HOME` with `DirPerms::all()` / `FilePerms::all()`. An extension that calls `std::fs` directly reads and writes the entire home directory without touching the gateway, the mask, or the security guard. This was demonstrated by adding three lines to `mcp-tool-provider` and observing the write succeed. Every extension `rad` ships routes through the RPC surface by convention, and the mask constrains those calls — but nothing forces that choice.
+> 1. **Extensions can bypass it with `std::fs`.** `src/wasm/loader.rs` gives every extension WASI preopens for `.` and `$HOME` with `DirPerms::all()` / `FilePerms::all()`. An extension that calls `std::fs` directly reads and writes the entire home directory without touching the gateway, the mask, or the security guard. This was demonstrated by adding three lines to an extension and observing the write succeed. Every extension `rad` ships routes through the RPC surface by convention, and the mask constrains those calls — but nothing forces that choice.
 > 2. **Tools do not run inside the sandbox at all.** Tools come from MCP servers, which are separate OS processes holding the user's full privileges. `core-utilities-mcp` calls `std::fs::write` in its own process; `rad` never observes those writes, so no mask can apply to them.
 >
 > What *is* genuinely enforced is the WebAssembly sandbox itself — an extension cannot reach outside its preopens, corrupt host memory, or call a host function the world does not export — together with process-group cleanup (§2.1). Treat `fs_read_allow`/`fs_write_allow` as a guard rail for cooperating extensions and a statement of intent, not as a security boundary against hostile code.
@@ -77,8 +77,9 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
 2. **Security Guard (Validation / verify-rpc)**
    - **Responsibility**: Implements deep inspect rules to approve or deny resource instantiation requests before the host returns the handle. The blocklist (path/command substring patterns) is config-driven, not hardcoded: on first `verify_rpc` call it fetches its own `ExtensionConfig.config` (`~/.rad/config.json`) via the generic `GetExtensionConfig` RPC and caches it for the life of the component instance. No configured patterns means the policy blocks nothing — it's opt-in, not a fallback demo.
    - **Isolation**: Runs as a separate component, so its decision is not reachable from the Orchestrator's own logic — a prompt-injected Orchestrator cannot rewrite the rules it is judged by. It is **not** a containment boundary, however: it only sees calls that arrive on the host RPC surface, and both `std::fs` inside an extension and MCP server processes bypass that surface entirely (see the enforcement note in §1.1). Its practical value is catching an injected Orchestrator that is still cooperating with the RPC contract, not stopping code that has decided not to.
-3. **Tool/MCP Provider (Capability Bridging)**
-   - **Responsibility**: Discovers, parses, and resolves dynamic schemas for external tools (e.g., via MCP servers) and marshals tool calls/replies.
+3. **Tool/MCP Provider (`mcp`, kernel module)**
+   - **Responsibility**: Spawns each stdio MCP server named in its own config, speaks JSON-RPC over the server's pipes, and offers the union of their tools. Discovers, parses, and resolves dynamic schemas and marshals tool calls/replies.
+   - **Isolation**: Not an extension — it answers `mcp.tools.list` / `mcp.tools.call`, which the host aggregates alongside every other provider (`src/kernel/tools.rs`). Servers are launched through the `proc-spawn` syscall, which takes an argv list; the extension joined `command` and `args` into a string the host then split back apart.
 4. **Skills (`skills`, kernel module)**
    - **Responsibility**: Discovers `.agents/skills/<name>/SKILL.md` (project-local) and `~/.rad/skills/<name>/SKILL.md` (user-global) through `std::fs`, parses each one's frontmatter, and offers them through a single `skill(name, args?)` tool whose description indexes what is available. Invoking it returns the named skill's `SKILL.md` body, with `$ARGUMENTS` substituted if present. One tool rather than one per skill: a schema costs ~468 characters, so per-skill tools grew every prompt linearly for entries differing only in a name and a line of prose.
    - **Isolation**: Not an extension — it exports the `rad:kernel` `module` world and answers `skills.tools.list` / `skills.tools.call`, which the host aggregates alongside every extension's tools (`src/kernel/tools.rs`). Its reach is whatever the kernel loader preopens, currently the working directory and `$HOME`, rather than a permission block in the config.
@@ -293,7 +294,7 @@ variant ras-rpc-command {
 To prevent orphaned processes spawned by background shells or external MCP servers from running loose, the Core performs the following management:
 
 1. **Isolated Process Group Creation**:
-   Inside the child process (spawned via `spawn_bash_process`, which is also how `mcp-tool-provider` launches external MCP servers — there is no separate MCP-specific spawn path) after `fork`, the Core calls `setpgid(0, 0)` to allocate a new, independent PGID.
+   Inside the child process (spawned via `spawn_bash_process`, or via `spawn_argv` for the kernel's `proc-spawn`, which is how the `mcp` module launches external MCP servers — there is no separate MCP-specific spawn path; both share the same process-group setup) after `fork`, the Core calls `setpgid(0, 0)` to allocate a new, independent PGID.
 2. **Automatic Cleanup with Drop Trait**:
    The internal manager tracks active PGIDs. When the Core exits normally, receives `Ctrl+C`, or panics, the `Drop` implementation sends `kill(-pgid, SIGKILL)` to all registered PGIDs, including both spawned bash commands and external MCP servers.
 
@@ -405,7 +406,7 @@ The bound is the essential part: an unbounded "shrink and retry" would loop inde
 
 A model that keeps re-issuing a failing tool call can otherwise loop without limit, since nothing in the loop is inherently self-terminating. The Orchestrator therefore tracks a *consecutive same-tool failure* streak in its session state:
 
-* A tool result is classified as a failure by an `Error:` prefix. Every producer guarantees this prefix: `mcp-tool-provider` normalizes MCP's `isError` flag into it (servers signal tool-level failure through `isError`, not a protocol-level error, so the flag would otherwise be lost when the result is flattened to a string), and the L1/L2 classifier formats its messages the same way.
+* A tool result is classified as a failure by an `Error:` prefix. Every producer guarantees this prefix: the `mcp` module normalizes MCP's `isError` flag into it (servers signal tool-level failure through `isError`, not a protocol-level error, so the flag would otherwise be lost when the result is flattened to a string), and the L1/L2 classifier formats its messages the same way.
 * A success, or a failure of a *different* tool, resets the streak (a different tool's failure starts a new streak at 1 rather than continuing the old one).
 * On crossing the threshold, remaining queued calls from that turn are skipped, an explicit message is printed, and the task completes instead of feeding another turn to the model.
 
@@ -473,7 +474,7 @@ A corollary worth stating explicitly, because it has been violated before: any n
 #### 5.4.1 Tool Abstraction & Discovery
 
 * **Multi-provider merge**: the Core's `execute-tool`/`get-tools` WIT import (`src/wasm/imports_tool.rs`) doesn't hardcode any single Extension — it iterates every registered Wasm runtime, and any one exporting the `rad-tool-provider` world's `get-tools`/`execute-tool` functions has its tools merged into one flat pool the Orchestrator sees. Multiple tool-provider Extensions can coexist under this role with no coordination needed between them; a tool name collision is resolved by whichever provider's `get-tools` response the host consults first.
-* **External Model Context Protocol (MCP)** (`mcp-tool-provider`): launches each server declared in its own `config.mcp_servers`, fetches their tool schemas, merges them into one pool, and forwards tool invocations to the matching server. Without at least one MCP server configured there, the agent has no general-purpose file/shell tools — see [CONFIG.md](CONFIG.md) for the schema.
+* **External Model Context Protocol (MCP)** (`mcp`, a kernel module): launches each server declared in its own `config.mcp_servers`, fetches their tool schemas, merges them into one pool, and forwards tool invocations to the matching server. Without at least one MCP server configured there, the agent has no general-purpose file/shell tools — see [CONFIG.md](CONFIG.md) for the schema.
 * **Skills** (`skills`, a kernel module): discovers `.agents/skills/`/`~/.rad/skills/` Markdown skill definitions through `std::fs` and offers them through one `skill` tool whose description indexes them, letting the model choose to invoke one autonomously — see [CONFIG.md](CONFIG.md) §2.5. Tools from modules and tools from extensions arrive in the same flat pool: the host asks each module for `<module>.tools.list` and merges the results with the extension providers' (`src/kernel/tools.rs`).
 
 #### 5.4.2 Rollback Boundaries & External Side-Effects

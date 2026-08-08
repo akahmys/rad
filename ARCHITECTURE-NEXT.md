@@ -960,7 +960,7 @@ wit/context-tools.wit           → context-tools-extension
 | 2 | Core に dispatch / router / スケジューラを実装(§3.6)。旧RPC面と共存 | 同上。新面はまだ誰も使わない |
 | 3 | `context-tools` → module へ移す(既存ロジックが最も素直に載る) | 5拡張 + 1モジュール |
 | 4 | `skill-tool-provider` → module(§4.5 の3変更を同時に反映) | ✅ 完了 (AWU 959/960)。4拡張 + 2モジュール |
-| 5 | `mcp-tool-provider` → `mcp-bridge` module | 3拡張 + 3モジュール |
+| 5 | `mcp-tool-provider` → `mcp` module | ✅ 完了 (AWU 963/964/965)。3拡張 + 3モジュール |
 | 6 | `llm-connector` → `llm-transport-openai` module | 2拡張 + 4モジュール |
 | 7 | `security-guard` → `policy` module | 1拡張 + 5モジュール |
 | 8 | `rad-orchestrator` → `agent-loop` module | **旧world・旧RPC面・`models/` の変換マクロを削除** |

@@ -1,0 +1,23 @@
+[package]
+name = "spawn-module"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# Exercises the `proc-spawn` syscall from inside a module: a one-shot command
+# read to completion, and the long-lived write-then-read shape `mcp-bridge`
+# needs.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }
+
+# A test fixture, not something a user installs. `scripts/build_all.sh` still
+# builds it (the integration suite needs the component) but does not copy it to
+# `~/.rad/wasm`.
+[package.metadata.rad]
+ship = false

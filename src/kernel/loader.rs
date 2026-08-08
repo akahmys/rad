@@ -61,8 +61,14 @@ impl ModuleRuntime {
         // only used `.agents/skills`.
         let mut wasi_builder = WasiCtxBuilder::new();
         wasi_builder.inherit_stdout().inherit_stderr().inherit_env();
+        // The workspace, mapped to the guest's `.`, so a module's relative
+        // paths resolve where the extension host's sandbox put them rather than
+        // wherever rad was started from.
+        let workspace = shared
+            .upgrade()
+            .map_or_else(|| std::path::PathBuf::from("."), |s| s.workspace.clone());
         let _ = wasi_builder.preopened_dir(
-            ".",
+            &workspace,
             ".",
             wasmtime_wasi::DirPerms::all(),
             wasmtime_wasi::FilePerms::all(),

@@ -1,0 +1,17 @@
+[package]
+name = "mcp-module"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# MCP servers as a kernel module: spawns each configured server, speaks
+# JSON-RPC over its stdio, and offers its tools to the model.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+rust-mcp-schema = "0.10"
+serde = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

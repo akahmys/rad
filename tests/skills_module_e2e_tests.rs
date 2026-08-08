@@ -16,30 +16,21 @@ use rad::dag::Dag;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// The module reads `.agents/skills` through WASI, whose only preopen is the
-/// process working directory — so unlike the extension, which resolved paths
-/// against the configured workspace, the skill has to live under the crate
-/// root. Removed on drop, and only what it created: wiping `.agents/skills`
-/// would take a developer's real skills with it.
-struct CrateRootSkill(PathBuf);
-
-impl CrateRootSkill {
-    fn new(name: &str, content: &str) -> Self {
-        let dir = PathBuf::from(".agents/skills").join(name);
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("SKILL.md"), content).unwrap();
-        Self(dir)
-    }
-}
-
-impl Drop for CrateRootSkill {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
+/// Writes a skill into the run's own workspace.
+///
+/// This used to have to go in the crate root: the kernel preopened the process
+/// working directory, so a module could not see the test's temporary workspace
+/// at all. AWU 965 rooted both the preopen and `proc-spawn` at the configured
+/// workspace — matching what the extension host always did — so the skill now
+/// lives where the rest of the run's files do, and nothing is written into the
+/// repository.
+fn write_skill(workspace: &std::path::Path, name: &str, content: &str) {
+    let dir = workspace.join(".agents/skills").join(name);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("SKILL.md"), content).unwrap();
 }
 
 fn run_mock_http_server(
@@ -74,15 +65,15 @@ fn a_skill_runs_end_to_end_with_no_tool_provider_extension() {
     let _lock = TEST_MUTEX
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let _skill = CrateRootSkill::new(
-        "rad_e2e_greeter",
-        "---\ndescription: Greets someone by name.\n---\n\nSay hello to $ARGUMENTS warmly.",
-    );
-
     let temp_dir = tempfile::tempdir().unwrap();
     let workspace = temp_dir.path().join("workspace");
     let snapshots = temp_dir.path().join("snapshots");
     fs::create_dir_all(&workspace).unwrap();
+    write_skill(
+        &workspace,
+        "rad_e2e_greeter",
+        "---\ndescription: Greets someone by name.\n---\n\nSay hello to $ARGUMENTS warmly.",
+    );
     fs::create_dir_all(&snapshots).unwrap();
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -159,21 +150,26 @@ fn a_skill_runs_end_to_end_with_no_tool_provider_extension() {
         fs::create_dir_all(snapshots.join(&n0)).unwrap();
     }
 
-    let (kernel, loaded) = rad::kernel::boot(&config.modules);
-    assert_eq!(
-        loaded,
-        vec!["skills".to_string()],
-        "the skills module must load; with it missing this test would pass \
-         vacuously against an empty tool list"
-    );
-
     let orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(
         config,
         "test_skills_module_session".to_string(),
         dag.clone(),
         None,
     ));
-    *orchestrator.kernel.lock() = Some(kernel);
+    // `Orchestrator::new` boots whatever `modules` declares. Asserted rather
+    // than assumed: with the module missing this test would pass vacuously
+    // against an empty tool list.
+    let loaded = orchestrator
+        .kernel
+        .lock()
+        .as_ref()
+        .map(|k| k.modules())
+        .unwrap_or_default();
+    assert_eq!(
+        loaded,
+        vec!["skills".to_string()],
+        "the skills module must load"
+    );
 
     orchestrator
         .run_task("start".to_string())

@@ -61,6 +61,14 @@ pub mod rad_kernel {
         path: "wit/kernel/kernel.wit",
         world: "module",
         additional_derives: [serde::Serialize, serde::Deserialize],
+        // The host types behind the resources. Without these, bindgen generates
+        // empty placeholder types and every implementation has to invent a
+        // mapping of its own; naming them here makes the resource table hold
+        // the real thing.
+        with: {
+            "rad:kernel/types/process": crate::kernel::proc::KernelProcess,
+            "rad:kernel/types/byte-stream": crate::kernel::proc::KernelStream,
+        },
     });
 }
 

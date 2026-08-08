@@ -67,78 +67,12 @@ impl wasmtime_wasi::WasiView for KernelState {
 
 impl types::Host for KernelState {}
 
-impl types::HostByteStream for KernelState {
-    fn read(
-        &mut self,
-        _self_: wasmtime::component::Resource<types::ByteStream>,
-        _max: u32,
-    ) -> Result<Vec<u8>, types::Error> {
-        Err(self.unimplemented("byte-stream.read"))
-    }
-
-    fn write(
-        &mut self,
-        _self_: wasmtime::component::Resource<types::ByteStream>,
-        _data: Vec<u8>,
-    ) -> Result<(), types::Error> {
-        Err(self.unimplemented("byte-stream.write"))
-    }
-
-    fn close(&mut self, _self_: wasmtime::component::Resource<types::ByteStream>) {}
-
-    fn drop(
-        &mut self,
-        _rep: wasmtime::component::Resource<types::ByteStream>,
-    ) -> wasmtime::Result<()> {
-        Ok(())
-    }
-}
-
-impl types::HostProcess for KernelState {
-    fn stdout(
-        &mut self,
-        _self_: wasmtime::component::Resource<types::Process>,
-    ) -> wasmtime::component::Resource<types::ByteStream> {
-        unreachable!("proc-spawn cannot succeed yet, so no Process resource exists")
-    }
-
-    fn stderr(
-        &mut self,
-        _self_: wasmtime::component::Resource<types::Process>,
-    ) -> wasmtime::component::Resource<types::ByteStream> {
-        unreachable!("proc-spawn cannot succeed yet, so no Process resource exists")
-    }
-
-    fn stdin(
-        &mut self,
-        _self_: wasmtime::component::Resource<types::Process>,
-    ) -> wasmtime::component::Resource<types::ByteStream> {
-        unreachable!("proc-spawn cannot succeed yet, so no Process resource exists")
-    }
-
-    fn wait(
-        &mut self,
-        _self_: wasmtime::component::Resource<types::Process>,
-    ) -> Result<i32, types::Error> {
-        Err(self.unimplemented("process.wait"))
-    }
-
-    fn kill(&mut self, _self_: wasmtime::component::Resource<types::Process>) {}
-
-    fn drop(
-        &mut self,
-        _rep: wasmtime::component::Resource<types::Process>,
-    ) -> wasmtime::Result<()> {
-        Ok(())
-    }
-}
-
 impl syscall::Host for KernelState {
     fn proc_spawn(
         &mut self,
-        _argv: Vec<String>,
+        argv: Vec<String>,
     ) -> Result<wasmtime::component::Resource<types::Process>, types::Error> {
-        Err(self.unimplemented("proc-spawn"))
+        super::proc::spawn(self, argv)
     }
 
     fn net_open(

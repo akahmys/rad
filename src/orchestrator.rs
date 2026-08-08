@@ -70,6 +70,24 @@ impl Orchestrator {
         let process_manager = Arc::new(ProcessManager::new());
         let active_processes = Arc::new(Mutex::new(HashMap::new()));
 
+        // Modules come up here rather than in `main`, because `modules` is part
+        // of the config and an Orchestrator built from a config that declares
+        // them but silently has none is a trap — every integration test hit it,
+        // and each one had to remember to boot the kernel by hand. With nothing
+        // configured this loads nothing and costs nothing.
+        let (kernel, loaded) = crate::kernel::boot(
+            &config.modules,
+            &config.core.workspace,
+            config.core.hitl_enabled,
+        );
+        if !loaded.is_empty() {
+            crate::log_host!(
+                "[kernel] loaded {} module(s): {}",
+                loaded.len(),
+                loaded.join(", ")
+            );
+        }
+
         Self {
             config: Mutex::new(config),
             config_path,
@@ -82,7 +100,7 @@ impl Orchestrator {
             running_task: Mutex::new(None),
             abort_flag: Arc::new(AtomicBool::new(false)),
             token_usage: Arc::new(Mutex::new(TokenUsage::default())),
-            kernel: Mutex::new(None),
+            kernel: Mutex::new(Some(kernel)),
         }
     }
 

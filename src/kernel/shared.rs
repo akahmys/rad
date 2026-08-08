@@ -50,6 +50,25 @@ pub struct KernelShared {
     /// Per-module config from `rad.json`, fetched by a module through
     /// `kernel.config`. Opaque to the kernel — it stores and returns it.
     module_config: Mutex<HashMap<String, serde_json::Value>>,
+    /// Shared by every module rather than one per store, so that process-group
+    /// cleanup on shutdown covers all of them. `ProcessManager::drop` kills
+    /// every group it spawned; per-module managers would each have to outlive
+    /// their store for that to hold.
+    pub processes: Arc<crate::process::ProcessManager>,
+    /// Where a module's children start, and what it sees as its filesystem.
+    ///
+    /// The extension host spawns with `cwd = workspace` and the kernel has to
+    /// match it: a module resolving a relative path — an MCP server writing a
+    /// file, a skill looking for `.agents/skills` — must land in the same place
+    /// as the extension it replaced, not wherever rad happened to be started.
+    pub workspace: std::path::PathBuf,
+    /// Whether a module's `proc-spawn` needs human approval.
+    ///
+    /// The extension host asks before spawning (`src/wasm/imports_process.rs`).
+    /// Routing a tool provider through a module removed that gate entirely
+    /// until this was added — a user who had turned HITL on would have lost it
+    /// silently. `tests/hitl_tests.rs` is what caught it.
+    pub hitl_enabled: std::sync::atomic::AtomicBool,
     ticker_stop: Arc<AtomicBool>,
 }
 
@@ -65,6 +84,17 @@ impl KernelShared {
     /// cannot host modules at all — there is nothing to degrade to.
     #[must_use]
     pub fn new() -> Arc<Self> {
+        Self::with_workspace(".")
+    }
+
+    /// The kernel, rooted at a workspace.
+    ///
+    /// # Panics
+    ///
+    /// Panics if wasmtime cannot build an engine, which means the process
+    /// cannot host modules at all — there is nothing to degrade to.
+    #[must_use]
+    pub fn with_workspace(workspace: impl Into<std::path::PathBuf>) -> Arc<Self> {
         let mut config = wasmtime::Config::new();
         config.wasm_component_model(true);
         // Lets the kernel preempt a module that never returns. Cheap enough to
@@ -86,6 +116,9 @@ impl KernelShared {
             call_stack: Mutex::new(Vec::new()),
             post_queue: Mutex::new(VecDeque::new()),
             module_config: Mutex::new(HashMap::new()),
+            processes: Arc::new(crate::process::ProcessManager::new()),
+            workspace: workspace.into(),
+            hitl_enabled: std::sync::atomic::AtomicBool::new(false),
             ticker_stop,
         })
     }

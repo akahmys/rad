@@ -55,8 +55,7 @@ impl ProcessManager {
         name: String,
         arguments: String,
     ) -> Result<RunningProcess, crate::error::UnifiedError> {
-        use std::os::unix::process::CommandExt;
-        use std::process::{Command, Stdio};
+        use std::process::Command;
 
         let expanded = crate::config::expand_tilde(command);
         let parts = expanded
@@ -86,7 +85,7 @@ impl ProcessManager {
             || command.contains('"');
         let is_direct_executable = (bin_path.is_file() || is_in_path) && !has_shell_features;
 
-        let mut cmd = if is_direct_executable {
+        let cmd = if is_direct_executable {
             let mut c = Command::new(&first_bin);
             if parts.len() > 1 {
                 c.args(&parts[1..]);
@@ -97,6 +96,53 @@ impl ProcessManager {
             c.arg("-c").arg(command);
             c
         };
+
+        self.finish_spawn(cmd, cwd, call_id, name, arguments)
+    }
+
+    /// Spawns from an argument vector, with no shell and no parsing.
+    ///
+    /// `spawn_bash_process` takes one string and has to guess whether it needs
+    /// a shell; the comment above records what that guessing cost. A caller
+    /// that already has its arguments separated — the kernel's `proc-spawn`,
+    /// and MCP server configs, which carry `command` and `args` as distinct
+    /// fields — has nothing to guess about, so nothing here quotes, splits, or
+    /// consults `PATH` by hand.
+    ///
+    /// Process-group supervision is shared with `spawn_bash_process` rather
+    /// than reimplemented: the group is what `kill_group` and this manager's
+    /// `Drop` act on, and a second spawner that forgot it would leak children
+    /// that nothing reaps.
+    ///
+    /// # Errors
+    /// Returns an error if `argv` is empty or the process fails to spawn.
+    pub fn spawn_argv(
+        &self,
+        argv: &[String],
+        cwd: Option<&Path>,
+    ) -> Result<RunningProcess, crate::error::UnifiedError> {
+        use std::process::Command;
+
+        let (program, args) = argv
+            .split_first()
+            .ok_or_else(|| crate::error::UnifiedError::l1("argv is empty", "Process"))?;
+        let mut cmd = Command::new(crate::config::expand_tilde(program));
+        cmd.args(args);
+        self.finish_spawn(cmd, cwd, String::new(), program.clone(), args.join(" "))
+    }
+
+    /// The half of spawning that is identical either way: stdio pipes, process
+    /// group, reader threads, and registration for cleanup.
+    fn finish_spawn(
+        &self,
+        mut cmd: std::process::Command,
+        cwd: Option<&Path>,
+        call_id: String,
+        name: String,
+        arguments: String,
+    ) -> Result<RunningProcess, crate::error::UnifiedError> {
+        use std::os::unix::process::CommandExt;
+        use std::process::Stdio;
 
         if let Some(p) = cwd {
             cmd.current_dir(p);

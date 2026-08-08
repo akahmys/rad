@@ -7,6 +7,13 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Arc;
 
+/// Public within the crate under a second name because the kernel needs the
+/// same prompt (`src/kernel/proc.rs`) and `imports_process.rs` is not a path
+/// the kernel should reach into.
+pub(crate) fn ask_human_approval(prompt: &str) -> Result<bool, String> {
+    ask_human_approval_internal(prompt)
+}
+
 pub(crate) fn ask_human_approval_internal(prompt: &str) -> Result<bool, String> {
     println!("{prompt}");
     if let Ok(val) = std::env::var("RAD_TEST_APPROVE") {

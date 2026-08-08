@@ -90,7 +90,7 @@ Filesystem and process operations that an extension requests **through the host 
 > [!IMPORTANT]
 > The mask is a guard rail for cooperating extensions, not a containment boundary. Extensions receive WASI preopens for the working directory and `$HOME`, so one that calls `std::fs` directly bypasses the mask entirely; and tools run inside MCP server processes that hold your full user privileges, which `rad` never mediates. [ARCHITECTURE.md](ARCHITECTURE.md) §1.1 documents both limits and how they were verified. Register only MCP servers you trust.
 
-None of the five extensions `rad` ships provides tools directly. File and shell access comes only from MCP servers registered under `mcp-tool-provider`'s `config.mcp_servers`; skills contribute further tools but not general-purpose file or shell access. Until at least one MCP server is configured, the agent has nothing to act with — see §3.3.
+Nothing `rad` ships provides tools directly. File and shell access comes only from MCP servers registered under the `mcp` module's `config.mcp_servers`; skills contribute further tools but not general-purpose file or shell access. Until at least one MCP server is configured, the agent has nothing to act with — see §3.3.
 
 > [!NOTE]
 > The full config schema (with a working example), the 5-tier precedence cascade, and the on-disk directory layout are documented in [CONFIG.md](CONFIG.md) — the authoritative reference, kept here as a single source of truth rather than duplicated.
@@ -110,7 +110,7 @@ git clone https://github.com/akahmys/core-utilities-mcp.git && cd core-utilities
 git clone https://github.com/akahmys/web-access-mcp.git   && cd web-access-mcp   && cargo install --path . && cd ..
 ```
 
-Then register them under `mcp-tool-provider`'s `config.mcp_servers` in `~/.rad/config.json`:
+Then register them under the `mcp` module's `config.mcp_servers` in `~/.rad/config.json`:
 
 ```json
 "config": {
@@ -121,7 +121,7 @@ Then register them under `mcp-tool-provider`'s `config.mcp_servers` in `~/.rad/c
 }
 ```
 
-On the next start, `rad` reports what it resolved — with both registered you should see `[OK] Verified 19 tools from extension 'mcp-tool-provider'`.
+On the next start, `rad` reports what it resolved — with both registered you should see the module report its tools at startup.
 
 ---
 
@@ -168,7 +168,7 @@ Before contributing code, verify compliance with project standards:
 * **Both Targets**: Extensions compile to WebAssembly, so lint and build them for `wasm32-wasip2` as well — a native-only check can miss target-specific breakage:
   ```bash
   cargo clippy --target wasm32-wasip2 -p rad-orchestrator -p llm-connector \
-      -p security-guard -p mcp-tool-provider -- -D warnings
+      -p security-guard -p llm-connector -- -D warnings
   ```
 
 Running `./scripts/build_all.sh` performs all of the above (plus the WIT sync gate, formatting, license, and secret scans) in one pass.

@@ -1474,13 +1474,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4facc753ae494aeb6e3c22f839b158aebd4f9270f55cd3c79906c45476c47ab4"
 
 [[package]]
-name = "mcp-tool-provider"
-version = "0.8.0"
+name = "mcp-module"
+version = "0.1.0"
 dependencies = [
- "rad-models",
+ "rad-sdk",
  "rust-mcp-schema",
  "serde",
- "serde_bytes",
  "serde_json",
  "wit-bindgen 0.36.0",
 ]
@@ -2542,6 +2541,16 @@ checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "spawn-module"
+version = "0.1.0"
+dependencies = [
+ "rad-sdk",
+ "serde",
+ "serde_json",
+ "wit-bindgen 0.36.0",
 ]
 
 [[package]]

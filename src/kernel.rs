@@ -8,6 +8,7 @@
 mod bootstrap;
 mod host;
 mod loader;
+pub(crate) mod proc;
 mod registry;
 mod shared;
 pub mod tools;

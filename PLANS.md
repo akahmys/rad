@@ -63,7 +63,7 @@
 - [✅] Phase 68: Repository Hygiene & Convention Audit — Authorship Rewrite, CI Workspace Fix, Rule Documents Corrected (v0.73.0)
 - [✅] Phase 69: Microkernel Migration — Preparation & Stage 0 (v0.74.0)
 - [✅] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (v0.75.0) (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
-- [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8; stage 3 done)
+- [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8; stages 3–5 done)
 - [ ] Phase 73: Windows Support — post-migration, once `proc-spawn` is the single point of process supervision (`ARCHITECTURE-NEXT.md` §8)
 - [ ] Phase 72: Microkernel Migration — DAG/UI Extraction and Author Tooling (§9 stages 9–10)
 
@@ -81,7 +81,110 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 §9.4's invariant holds throughout: rad works at the end of every AWU, and
 `wit/rad.wit` is untouched.
 
-### 💡 Current AWU Status (stage 4)
+### 💡 Current AWU Status (stage 5)
+- [x] AWU 963: Implement `proc-spawn`, `process`, and `byte-stream` in the kernel
+- [x] AWU 964: `modules/mcp` — port the MCP client
+- [x] AWU 965: Route tools to the module and delete `ext/mcp-tool-provider`
+
+#### AWU 963: Implement `proc-spawn`, `process`, and `byte-stream`
+- **Objective**: The first real syscall. Every host implementation in
+  `src/kernel/host.rs` is currently a stub returning 501.
+- **Context**: `mcp-bridge` cannot exist without it — an MCP server is a
+  long-lived child process spoken to over stdio, and nothing in `std` reaches a
+  child from inside Wasm (§3.1.2's rule: WASI where std insulates, a syscall
+  where it does not).
+- **Shape**: `proc-spawn(argv: list<string>)`, not a command string. The
+  extension host takes a string and has to decide whether it needs a shell —
+  `src/process.rs` carries a comment about quoted arguments being mangled by the
+  direct-exec fast path, a bug that corrupted every tool result until it was
+  found. An argv list has no such question to answer.
+- **DoD**: A module spawns a process, writes to its stdin, reads its stdout, and
+  waits for it. The process is reaped, and killed if the module goes away.
+- **Done**. `src/kernel/proc.rs`, driven from `modules/spawn` (a test fixture,
+  `ship = false`) through `tests/kernel_proc_tests.rs`.
+- **`read` waits at most 100ms and then reports empty.** It must be bounded:
+  epoch interruption preempts *guest* code only, so a host call blocked in
+  `recv()` cannot be interrupted at all, and a module reading from a live but
+  silent child would hang the kernel with the deadline machinery looking on.
+  The extension host does block there. `wait` is bounded for the same reason —
+  25s against a 30s deadline — and returns 504 meaning "call again".
+- **The first version of the kill-on-drop test was vacuous.** It used `cat`,
+  which exits by itself when its stdin pipe closes as the module's resources
+  drop, so it passed with the kill removed. Rewritten with `sleep`, which has
+  to be killed to go away; verified to fail without the kill.
+- `spawn_argv` shares `finish_spawn` with `spawn_bash_process` rather than
+  duplicating it: the process group is what `kill_group` and `ProcessManager`'s
+  `Drop` act on, and a second spawner that forgot it would leak children.
+
+#### AWU 964: `modules/mcp` — port the MCP client
+- **Objective**: JSON-RPC over an MCP server's stdio, as a module.
+- **Context**: 770 lines across 6 files, of which the host-facing part is 5
+  `open_process` calls plus one `FileRead` and one `WriteStdout`. Config comes
+  from `kernel.config` rather than `GetExtensionConfig`.
+- **DoD**: Ported tests pass; `mcp.tools.list` / `mcp.tools.call` answer.
+- **Done**. Measured: 770 lines become 732 (672 excluding the new unit tests);
+  ignoring comments and blanks, 645 becomes 530. Less of a saving than the
+  deletions suggest, because the module carries heavier documentation and the
+  `RAD_TEST_PORT` scaffolding grew when it was pulled into its own file.
+- **`mcp_config.rs` is the whole saving.** 175 lines existed to answer "what is
+  my config?" — six candidate paths, a hand-written JSON comment stripper, and
+  three successive guesses at what shape `FileRead` had returned the file in.
+  `kernel.config` answers it in one call.
+- `conv.rs` goes entirely (no host RPC), as does the `echo -n '<result>'`
+  round trip with its quote escaping.
+- **The extension had no test that ever spoke to a server.**
+  `tests/mcp_module_tests.rs` spawns a real one — a small script over real pipes
+  — so the syscall, the resources, the handshake, and both JSON-RPC calls are
+  exercised together. The first version of its failure test was unreachable
+  (it called a tool the mapping did not contain); fixed to fail through
+  `isError` on a tool that exists.
+- **`RAD_TEST_PORT` synthetic tools are carried over**, in `testmode.rs` rather
+  than threaded through the handlers. Seven files in `tests/` drive the agent
+  loop against those three tool names; removing them is its own change, not
+  part of a port.
+
+#### AWU 965: Route tools to the module and delete `ext/mcp-tool-provider`
+- **Context**: Unlike stage 4 this needs no host change — `src/kernel/tools.rs`
+  already aggregates any module offering `<module>.tools.list`.
+- **DoD**: Tools resolve with no tool-provider extension configured; extension
+  and its tests deleted; suite green.
+- **Done**. Stage 5 complete: 3 extensions, 3 modules.
+- **Three host bugs surfaced, all of which would have shipped silently.** Each
+  was found by an existing test, which is the argument for migrating the seven
+  files rather than writing new ones:
+  - **`proc-spawn` ignored the workspace.** The extension host spawns with
+    `cwd = workspace`; the kernel inherited rad's own working directory, so a
+    module's children resolved relative paths in the wrong place. Both the
+    spawn cwd and the WASI preopen are now rooted at `core.workspace`.
+  - **`proc-spawn` had no HITL gate.** `src/wasm/imports_process.rs` asks before
+    spawning; the kernel did not, so moving a tool provider to a module removed
+    human approval from every process it starts. `tests/hitl_tests.rs` caught
+    it. The rejection is worded exactly as the extension words it, because the
+    DAG and the model both carry that phrase.
+  - **`Orchestrator::new` did not boot the kernel.** `main` did, so anything
+    else built from a `Config` — every integration test — declared modules and
+    silently got none. Boot moved into `Orchestrator::new`, which is also what
+    made migrating the seven test files a one-line change each.
+- **Still missing: the security-guard check on `proc-spawn`.** The extension
+  host runs `verify_rpc_exclude` before spawning; the kernel does not, because
+  it holds no orchestrator handle. Exposure today is limited — a module's argv
+  comes from its config, not from the model — but the `execute` path under
+  `RAD_TEST_PORT` shows the shape of the gap. This belongs to the `policy`
+  module (§3.4.3, stage 7); recorded here so it is not rediscovered as a
+  surprise.
+- The regex-based edit of the seven test files removed neighbouring extension
+  entries on the first attempt (non-greedy matching across whole blocks, the
+  same failure as the timeout-assertion edit in stage 3). Reverted and redone by
+  brace matching, asserting one `name:` per removed block.
+
+### ⚠️ Known flake (unresolved)
+One `cargo test --workspace` run during AWU 963 reported `122 passed / 1 failed`;
+cargo's fail-fast truncated the run, so 122 is a partial count. It did not
+reproduce across five subsequent full runs, and the failing test's name was not
+captured. Recorded so a recurrence is recognised rather than investigated from
+scratch.
+
+### 💡 Previous AWU Status (stage 4)
 - [✅] AWU 959: `modules/skills` — port discovery and execution (Result: Success — 10 ported tests plus 3 against a real skill tree; the SDK gained an `infallible` adapter on its third occurrence)
 - [x] AWU 960: Consult modules from `GetTools` and `execute_tool`
 - [x] AWU 961: Delete `ext/skill-tool-provider`
