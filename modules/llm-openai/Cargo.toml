@@ -1,0 +1,19 @@
+[package]
+name = "llm-openai-module"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# `llm-transport-openai` of ARCHITECTURE-NEXT.md §4.1: the dialect table plus
+# `/v1/chat/completions`, as a kernel module. Ported from `ext/llm-connector`.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }
+
+[package.metadata.rad]
+ship = true

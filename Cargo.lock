@@ -1444,6 +1444,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "llm-openai-module"
+version = "0.1.0"
+dependencies = [
+ "rad-sdk",
+ "serde",
+ "serde_json",
+ "wit-bindgen 0.36.0",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"

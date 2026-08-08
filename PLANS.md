@@ -83,7 +83,7 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 
 ### 💡 Current AWU Status (stage 6)
 - [x] AWU 966: `net-open` — the fallible `byte-stream` and the 504 convention
-- [ ] AWU 967: `modules/llm-openai` — port the dialect table and the SSE parser
+- [x] AWU 967: `modules/llm-openai` — port the dialect table and the SSE parser
 - [ ] AWU 968: Route `GenerateLlmStream` to the module
 - [ ] AWU 969: Delete `ext/llm-connector`
 
@@ -164,6 +164,51 @@ be questioned again:
   `&str`, a `bool` and a `u64` is a transposition waiting to happen.
 - `src/kernel/host.rs`'s `unimplemented` helper is gone: with `net-open` landed,
   all three syscalls are implemented and the surface is closed at three (§3.1).
+
+#### AWU 967: `modules/llm-openai` — the dialect table and the SSE parser
+- **Objective**: `llm-transport-openai` (§4.1) as a module. The old extension
+  stays live and serving; AWU 968 switches the caller over.
+- **Done**. `modules/llm-openai/`, driven by `tests/llm_module_tests.rs` (the
+  response) and `tests/llm_module_request_tests.rs` (what goes out).
+- **`dialect.rs` and `dialect/tests.rs` moved byte-identical**, proven with
+  `diff`. That table is §4.2's whole reason for this module to exist, so it is
+  the one part that must be seen not to have changed.
+- **Measured**: 574 lines become 845, or 455 against 575 ignoring comments and
+  blanks. It grew, and the growth is all test: the extension had 111 lines of
+  tests and the module has 264. Production code is 463 against 344 — and the
+  extension's 344 excludes the ~90 lines of host-side conversion
+  (`RemoteMessage`, `RemoteTool` in `rpc_meta_llm_connector.rs`) that AWU 968
+  deletes.
+- **The wire types collapse from three sets to one.** A WIT record, a serde
+  struct, and the host's parse target all described the same OpenAI shape, with
+  `connector.rs` converting between the first two field by field on every
+  request. A module receives JSON, so the wire shape is the only shape — the
+  same collapse `context` saw in AWU 956. `parameters` stops being a string
+  containing JSON, which was a double encode that existed only to cross the
+  boundary.
+- **Two bugs found in the extension while porting, both fixed here.**
+  - **A multi-byte character split across chunks failed the whole response.**
+    `String::from_utf8` per chunk, and nothing aligns TCP segments to UTF-8 —
+    so a model answering in Japanese could fail for no reason but where the
+    packet split. `Session::decode` keeps the incomplete tail. Verified: with
+    the per-chunk decode restored, the test reports the extension's own
+    "Invalid UTF-8 chunk received".
+  - **A final `data:` line with no trailing newline was dropped silently.** The
+    parser only ever consumed up to a `\n`. `pump` feeds a terminator at
+    end-of-body. Verified: without it the event never arrives.
+- **The event JSON is unchanged and now asserted.** `{"ContentChunk": "..."}`,
+  externally tagged, snake_case fields — what
+  `ext/rad-orchestrator/src/orchestrator/reasoning.rs` deserializes. A unit test
+  pins the exact bytes, because the consumer stays an extension until stage 8.
+- **No `unsafe`.** The session lives in a `thread_local`, not a
+  `static Mutex`, so the non-`Send` stream handle needs no `unsafe impl Send`.
+  `modules/mcp` has one; CODING.md §4 prohibits `unsafe` outright, and a
+  thread-local is the version that does not need the exemption. Worth applying
+  to `mcp` separately.
+- The scripted split of the integration test file removed a neighbouring
+  function's body on the first attempt — the same failure as stage 3's
+  timeout-assertion edit and stage 5's seven test files. **Three occurrences
+  now.** Redone by hand.
 
 ### 🔜 Stage 6 — what was already known
 
