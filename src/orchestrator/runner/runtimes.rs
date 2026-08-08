@@ -12,6 +12,15 @@ use std::sync::mpsc::Sender;
 mod tests;
 
 impl Orchestrator {
+    /// Loads every enabled extension that is not already live, and returns the
+    /// full set.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message if an extension's component fails to load or
+    /// instantiate. A tool provider that loads but answers `get_tools` badly is
+    /// reported and skipped rather than failing the set — one broken provider
+    /// must not take the others down with it.
     pub fn get_or_init_runtimes(
         self: &Arc<Self>,
         event_tx: &Sender<RasCoreEvent>,
@@ -110,10 +119,10 @@ impl Orchestrator {
         Ok(guard.clone())
     }
 
-    pub(crate) fn clear_runtimes(&self) -> Result<(), String> {
-        let mut guard = self.wasm_runtime.lock();
-        guard.clear();
-        Ok(())
+    /// Drops every live runtime so the next `get_or_init_runtimes` rebuilds
+    /// them. The recovery half of the crash loop; it cannot fail.
+    pub(crate) fn clear_runtimes(&self) {
+        self.wasm_runtime.lock().clear();
     }
 
     /// Resolves the extension currently registered for `role` (e.g.

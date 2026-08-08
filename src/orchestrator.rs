@@ -1,4 +1,4 @@
-// test edit]
+#![deny(clippy::pedantic)]
 
 use crate::config::Config;
 use crate::dag::Dag;
@@ -124,7 +124,7 @@ impl Orchestrator {
         // 3. Update session_id and DAG
         {
             let mut session_guard = self.session_id.lock();
-            *session_guard = new_id.clone();
+            session_guard.clone_from(&new_id);
         }
 
         {
