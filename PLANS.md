@@ -177,6 +177,25 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
   same failure as the timeout-assertion edit in stage 3). Reverted and redone by
   brace matching, asserting one `name:` per removed block.
 
+### 🔜 Next: stage 6 (`llm-connector` → `llm-transport-openai`)
+
+Not yet broken into AWUs. What is already known, so it is not re-derived:
+
+- **`net-open` is half-built.** It returns a `byte-stream`, and that resource
+  now exists with a working host implementation (`src/kernel/proc.rs`). What is
+  missing is the HTTP side. Reuse the bounding rule established there: a host
+  call must not block indefinitely, because epoch interruption preempts guest
+  code only.
+- **`KernelStream` needs a fallible reader.** Its variants are `Reader`,
+  `Writer`, `Closed`. HTTP has to carry a mid-stream error to the guest, which
+  is why the extension host has both `PipeReader` and `PipeReaderFallible`
+  (`src/wasm/imports_resources.rs`).
+- **Async is the open question.** §3.6 defers `Config::async_support` until
+  `net-open` exists; it exists as a signature, so this is the point to decide.
+  Confirmed present in wasmtime 29.0.1, which is what the workspace pins.
+- **WASI 0.3 is not a prerequisite** (§8): it deleted `wasi:io` and needs
+  Wasmtime 43+. Staying on 29 is a deliberate choice, not an oversight.
+
 ### ⚠️ Known flake (unresolved)
 One `cargo test --workspace` run during AWU 963 reported `122 passed / 1 failed`;
 cargo's fail-fast truncated the run, so 122 is a partial count. It did not
