@@ -2500,14 +2500,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "skill-tool-provider"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "wit-bindgen 0.36.0",
-]
-
-[[package]]
 name = "skills-module"
 version = "0.1.0"
 dependencies = [

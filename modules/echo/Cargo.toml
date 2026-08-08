@@ -13,3 +13,11 @@ crate-type = ["cdylib"]
 rad-sdk = { path = "../../crates/rad-sdk" }
 serde = { workspace = true }
 wit-bindgen = { workspace = true }
+
+# A test fixture, not something a user installs. `scripts/build_all.sh` still
+# builds it (the integration suite needs the component) but does not copy it to
+# `~/.rad/wasm`. Declared here rather than in a list inside the script, because
+# every hand-maintained list of components in this repo has drifted at least
+# once.
+[package.metadata.rad]
+ship = false

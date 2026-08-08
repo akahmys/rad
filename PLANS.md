@@ -84,7 +84,7 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 ### 💡 Current AWU Status (stage 4)
 - [✅] AWU 959: `modules/skills` — port discovery and execution (Result: Success — 10 ported tests plus 3 against a real skill tree; the SDK gained an `infallible` adapter on its third occurrence)
 - [x] AWU 960: Consult modules from `GetTools` and `execute_tool`
-- [ ] AWU 961: Delete `ext/skill-tool-provider`
+- [x] AWU 961: Delete `ext/skill-tool-provider`
 - [ ] AWU 962: Collapse per-skill tools into one `skill` tool plus an index (§4.5.3)
 
 #### AWU 959: `modules/skills` — port discovery and execution
@@ -149,6 +149,14 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 
 #### AWU 961: Delete `ext/skill-tool-provider`
 - **DoD**: Extension gone, suite green, skills still work.
+- **Done**. Crate, both test files, and the workspace member are gone.
+- CONFIG.md and ARCHITECTURE.md described it as a live extension, and CONFIG.md
+  still listed `context-tools` as one too — the config reference was a stage
+  behind. Both now document the `modules` array instead, including that the
+  `allow_bash` grant disappeared with the `echo -n` hack.
+- CI's wasm package list is now derived from `cargo metadata` rather than
+  written by hand. It had drifted three times; a package that is never built
+  looks exactly like one that passes.
 
 #### AWU 962: One `skill` tool plus an index
 - **Objective**: §4.5.3. Deliberately separate from the port.

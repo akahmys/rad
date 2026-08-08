@@ -135,39 +135,39 @@ The config file supports JSON with comments (JSONC). The following example regis
       }
     },
     {
-      "name": "skill-tool-provider",
-      "source": "~/.rad/wasm/skill_tool_provider.wasm",
-      "enabled": true,
-      "role": "tool-provider",
-      // `execute_tool`'s result is returned via `open_process(echo ...)`
-      // under the hood, so bash execution permission is required even
-      // though skills don't run arbitrary shell commands themselves.
-      "permissions": {
-        "fs_read_allow": ["*"],
-        "fs_write_allow": [],
-        "execution": { "allow_bash": true, "allow_commands": [], "block_commands": [] }
-      },
-      // Surfaces .agents/skills/ and ~/.rad/skills/ as tools (see §2.5) —
-      // no config of its own is needed.
-      "config": {}
-    },
-    {
       "name": "llm-connector",
       "source": "~/.rad/wasm/llm_connector.wasm",
       "enabled": true,
       "role": "llm-connector",
       "permissions": { "network": { "allow_network": true, "allow_domains": [] } }
-    },
+    }
+  ],
+  // Kernel modules. Unlike extensions these declare no role and no
+  // permissions: a module reaches whatever the host preopens for it
+  // (the working directory and $HOME), and what it *provides* comes from
+  // the manifest it exports rather than from this file.
+  "modules": [
     {
       "name": "context-tools",
-      "source": "~/.rad/wasm/context_tools.wasm",
+      "source": "~/.rad/wasm/context_module.wasm",
+      "enabled": true
+    },
+    {
+      "name": "skills",
+      "source": "~/.rad/wasm/skills_module.wasm",
       "enabled": true,
-      "role": "context-tools",
-      "permissions": { "fs_read_allow": ["*"], "fs_write_allow": ["*"] }
+      // Opaque to the kernel; the module reads it via `kernel.config`.
+      "config": {}
     }
   ]
 }
 ```
+
+Both were extensions until recently. `context-tools` moved in AWU 957 and
+`skill-tool-provider` became the `skills` module in AWU 959/960 — the latter
+also shed its `allow_bash` requirement, which existed only because the old WIT
+made it return results through `open_process("echo ...")`. A module returns a
+string, so a Markdown reader no longer asks for shell execution.
 
 ### 1.3 Handling Sensitive Information
 To handle API keys and other secrets securely, pass them to `rad` using the following methods:
@@ -244,7 +244,7 @@ Markdown files under `.agents/commands/` (project-local, checked first) or `~/.r
 `.agents/AGENTS.md` or `AGENTS.md` at the project root, if present, is appended to the system prompt on every turn — use it for project-specific conventions, build commands, or constraints the agent should always know about.
 
 ### 2.5 Skills
-A skill is a directory containing a `SKILL.md` under `.agents/skills/<name>/` (project-local, checked first) or `~/.rad/skills/<name>/` (user-global) — same precedence direction as custom slash commands. Unlike commands, skills aren't invoked by typing `/name`: each one is surfaced as an ordinary tool (via the `skill-tool-provider` extension) with its `description` as the tool description, so the model can choose to use it autonomously when relevant, the same way it decides to call any other tool.
+A skill is a directory containing a `SKILL.md` under `.agents/skills/<name>/` (project-local, checked first) or `~/.rad/skills/<name>/` (user-global) — same precedence direction as custom slash commands. Unlike commands, skills aren't invoked by typing `/name`: each one is surfaced as an ordinary tool (via the `skills` kernel module) with its `description` as the tool description, so the model can choose to use it autonomously when relevant, the same way it decides to call any other tool.
 
 `SKILL.md` starts with a `---`-delimited frontmatter block, then the body sent as the tool result when the skill is invoked:
 ```

@@ -6,27 +6,35 @@ echo "🚀 RAD Ecosystem One-Command Build Pipeline"
 echo "=========================================="
 
 echo "📦 Step 1: Building WASM Component Extensions..."
-cargo build --target wasm32-wasip2 --release \
-    -p rad-orchestrator \
-    -p llm-connector \
-    -p security-guard \
-    -p mcp-tool-provider \
-    -p skill-tool-provider \
-    -p context-module \
+# Packages and artefact names both derived from the workspace. Written by hand
+# they drifted repeatedly — `skills-module` was missing from CI's list, and both
+# of CI's wasm steps missed every module added after `context-module`. A
+# component that is never built looks exactly like one that builds cleanly.
+PKGS=$(cargo metadata --no-deps --format-version 1 \
+    | jq -r '.packages[] | select(.manifest_path | test("/(ext|modules)/")) | .name')
+echo "  components: $(echo "$PKGS" | tr '\n' ' ')"
+
+# shellcheck disable=SC2046  # word splitting is what turns the list into flags
+cargo build --target wasm32-wasip2 --release $(echo "$PKGS" | sed 's/^/-p /')
 
 mkdir -p ~/.rad/wasm
 mkdir -p target/wasm32-wasip2/debug
 
-WASM_FILES=(
-    "rad_orchestrator.wasm"
-    "llm_connector.wasm"
-    "security_guard.wasm"
-    "mcp_tool_provider.wasm"
-    "skill_tool_provider.wasm"
-    # A kernel module, not an extension. Configured under `modules` rather than
-    # `extensions` — see CONFIG.md.
-    "context_module.wasm"
-)
+# Cargo replaces `-` with `_` in artefact names. Test-only components opt out
+# with `[package.metadata.rad] ship = false`, so `modules/echo` and
+# `modules/relay` are built for the suite but not installed. Both extensions and
+# kernel modules land here; which of the two a component is depends on the world it
+# exports, and is declared in `~/.rad/config.json` under `extensions` or
+# `modules` respectively — see CONFIG.md.
+SHIP=$(cargo metadata --no-deps --format-version 1 \
+    | jq -r '.packages[]
+             | select(.manifest_path | test("/(ext|modules)/"))
+             | select(.metadata.rad.ship != false)
+             | .name')
+WASM_FILES=()
+while IFS= read -r pkg; do
+    WASM_FILES+=("${pkg//-/_}.wasm")
+done <<< "$SHIP"
 
 for file in "${WASM_FILES[@]}"; do
     cp "target/wasm32-wasip2/release/${file}" ~/.rad/wasm/

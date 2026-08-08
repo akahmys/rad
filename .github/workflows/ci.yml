@@ -82,10 +82,16 @@ jobs:
         # accept `\` line continuations and failed with "unexpected argument".
         shell: bash
         run: |
-          cargo build --target wasm32-wasip2 \
-            -p rad-orchestrator -p llm-connector -p security-guard \
-            -p mcp-tool-provider -p skill-tool-provider \
-            -p context-module -p skills-module -p echo-module -p relay-module
+          # Derived from the workspace rather than listed by hand. The hand-written
+          # list drifted three times — `skills-module` was missing from the
+          # integration build, and both steps here missed every module added
+          # after `context-module`. A package that never builds looks exactly
+          # like one that passes.
+          PKGS=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.manifest_path | test("/(ext|modules)/")) | "-p " + .name' \
+            | tr '\n' ' ')
+          echo "packages: $PKGS"
+          cargo build --target wasm32-wasip2 $PKGS
 
       # `--workspace` is required, not decorative: without it cargo selects only
       # the root package, silently skipping every test in `ext/*` and `models/`
@@ -143,10 +149,16 @@ jobs:
         # Linux-only jobs so adding an OS matrix later cannot break them.
         shell: bash
         run: |
-          cargo clippy --target wasm32-wasip2 \
-            -p rad-orchestrator -p llm-connector -p security-guard \
-            -p mcp-tool-provider -p skill-tool-provider -p context-module \
-            -- -D warnings
+          # Derived from the workspace rather than listed by hand. The hand-written
+          # list drifted three times — `skills-module` was missing from the
+          # integration build, and both steps here missed every module added
+          # after `context-module`. A package that never builds looks exactly
+          # like one that passes.
+          PKGS=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.manifest_path | test("/(ext|modules)/")) | "-p " + .name' \
+            | tr '\n' ' ')
+          echo "packages: $PKGS"
+          cargo clippy --target wasm32-wasip2 $PKGS -- -D warnings
 
       - name: Build (wasm32-wasip2)
         # `shell: bash` on every multi-line `run`: a Windows runner would
@@ -154,6 +166,13 @@ jobs:
         # Linux-only jobs so adding an OS matrix later cannot break them.
         shell: bash
         run: |
-          cargo build --target wasm32-wasip2 \
-            -p rad-orchestrator -p llm-connector -p security-guard \
-            -p mcp-tool-provider -p skill-tool-provider -p context-module
+          # Derived from the workspace rather than listed by hand. The hand-written
+          # list drifted three times — `skills-module` was missing from the
+          # integration build, and both steps here missed every module added
+          # after `context-module`. A package that never builds looks exactly
+          # like one that passes.
+          PKGS=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.manifest_path | test("/(ext|modules)/")) | "-p " + .name' \
+            | tr '\n' ' ')
+          echo "packages: $PKGS"
+          cargo build --target wasm32-wasip2 $PKGS

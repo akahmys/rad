@@ -26,8 +26,8 @@ graph TD
         Connector["2. LLM Connector <br> (llm_connector.wasm)"]
         SecurityGuard["3. Security Guard <br> (security_guard.wasm)"]
         ToolProvider["4. Tool/MCP Provider <br> (mcp_tool_provider.wasm)"]
-        SkillProvider["5. Skill Provider <br> (skill_tool_provider.wasm)"]
-        ContextCompactor["6. Context Compactor <br> (context_tools.wasm)"]
+        SkillModule["5. Skills <br> (skills_module.wasm — kernel module)"]
+        ContextModule["6. Context Compactor <br> (context_module.wasm — kernel module)"]
 
         Orchestrator -->|1. Generate Stream| Connector
         Connector -->|2. Request Stream RPC| WasmRuntime
@@ -79,9 +79,11 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
    - **Isolation**: Runs as a separate component, so its decision is not reachable from the Orchestrator's own logic — a prompt-injected Orchestrator cannot rewrite the rules it is judged by. It is **not** a containment boundary, however: it only sees calls that arrive on the host RPC surface, and both `std::fs` inside an extension and MCP server processes bypass that surface entirely (see the enforcement note in §1.1). Its practical value is catching an injected Orchestrator that is still cooperating with the RPC contract, not stopping code that has decided not to.
 3. **Tool/MCP Provider (Capability Bridging)**
    - **Responsibility**: Discovers, parses, and resolves dynamic schemas for external tools (e.g., via MCP servers) and marshals tool calls/replies.
-4. **Skill Provider (`skill-tool-provider`)**
-   - **Responsibility**: Discovers `.agents/skills/<name>/SKILL.md` (project-local) and `~/.rad/skills/<name>/SKILL.md` (user-global) via the `list-dir`/`file-read` host RPCs, parses each one's frontmatter, and surfaces them as ordinary tools. Invoking one (inline mode) returns the `SKILL.md` body — with `$ARGUMENTS` substituted if present — as the tool result.
-   - **Isolation**: Implements the same `rad-tool-provider` WIT world as `mcp-tool-provider`; the host merges tools from every extension exporting `get-tools`/`execute-tool` (see §5.4.1), so the two coexist without either needing to know about the other.
+4. **Skills (`skills`, kernel module)**
+   - **Responsibility**: Discovers `.agents/skills/<name>/SKILL.md` (project-local) and `~/.rad/skills/<name>/SKILL.md` (user-global) through `std::fs`, parses each one's frontmatter, and offers them as ordinary tools. Invoking one returns the `SKILL.md` body, with `$ARGUMENTS` substituted if present.
+   - **Isolation**: Not an extension — it exports the `rad:kernel` `module` world and answers `skills.tools.list` / `skills.tools.call`, which the host aggregates alongside every extension's tools (`src/kernel/tools.rs`). Its reach is whatever the kernel loader preopens, currently the working directory and `$HOME`, rather than a permission block in the config.
+   - **Why it moved**: the old `rad-tool-provider` WIT world made `execute-tool` return an `execution-handle`, so the extension produced its answer by shelling out to `open_process("echo -n '...'")` and therefore required `allow_bash` — a Markdown reader holding shell permission. A module returns a string, and the requirement disappeared with it.
+
 5. **LLM Connector (Model API translation & streaming)**
    - **Responsibility**: Translates standardized Message objects and tool definitions into model-specific API payloads, initiates connections (using Core HTTP capability), and parses SSE stream chunks.
    - **Isolation**: Decouples model-specific network packet parsing and JSON payload generation from the Orchestrator, rendering the main decision loop fully model-agnostic.
@@ -472,7 +474,7 @@ A corollary worth stating explicitly, because it has been violated before: any n
 
 * **Multi-provider merge**: the Core's `execute-tool`/`get-tools` WIT import (`src/wasm/imports_tool.rs`) doesn't hardcode any single Extension — it iterates every registered Wasm runtime, and any one exporting the `rad-tool-provider` world's `get-tools`/`execute-tool` functions has its tools merged into one flat pool the Orchestrator sees. Multiple tool-provider Extensions can coexist under this role with no coordination needed between them; a tool name collision is resolved by whichever provider's `get-tools` response the host consults first.
 * **External Model Context Protocol (MCP)** (`mcp-tool-provider`): launches each server declared in its own `config.mcp_servers`, fetches their tool schemas, merges them into one pool, and forwards tool invocations to the matching server. Without at least one MCP server configured there, the agent has no general-purpose file/shell tools — see [CONFIG.md](CONFIG.md) for the schema.
-* **Skills** (`skill-tool-provider`): discovers `.agents/skills/`/`~/.rad/skills/` Markdown skill definitions via the `list-dir`/`file-read` host RPCs and surfaces each as a tool whose description is the skill's own, letting the model choose to invoke one autonomously — see [CONFIG.md](CONFIG.md) §2.5.
+* **Skills** (`skills`, a kernel module): discovers `.agents/skills/`/`~/.rad/skills/` Markdown skill definitions through `std::fs` and offers each as a tool whose description is the skill's own, letting the model choose to invoke one autonomously — see [CONFIG.md](CONFIG.md) §2.5. Tools from modules and tools from extensions arrive in the same flat pool: the host asks each module for `<module>.tools.list` and merges the results with the extension providers' (`src/kernel/tools.rs`).
 
 #### 5.4.2 Rollback Boundaries & External Side-Effects
 
