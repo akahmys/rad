@@ -92,10 +92,26 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             messages_json,
             tools_json,
         } => {
-            if ctx.orchestrator.is_some() {
-                crate::wasm::rpc_meta_llm_connector::generate(model, messages_json, tools_json, ctx)
-            } else {
-                crate::wasm::rpc_meta_llm_fallback::generate(ctx)
+            // The module answers first when one is loaded, the same bridge
+            // `CallExtension` uses below: the caller keeps issuing the same RPC
+            // and which surface serves it is a deployment question. Removing
+            // `llm-openai` from `modules` falls straight back to the extension.
+            match ctx.orchestrator {
+                Some(orch) if crate::wasm::rpc_meta_llm_module::is_available(orch) => {
+                    crate::wasm::rpc_meta_llm_module::generate(
+                        model,
+                        messages_json,
+                        tools_json,
+                        ctx,
+                    )
+                }
+                Some(_) => crate::wasm::rpc_meta_llm_connector::generate(
+                    model,
+                    messages_json,
+                    tools_json,
+                    ctx,
+                ),
+                None => crate::wasm::rpc_meta_llm_fallback::generate(ctx),
             }
         }
         RasRpcCommand::CallExtension {

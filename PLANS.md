@@ -84,7 +84,7 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 ### 💡 Current AWU Status (stage 6)
 - [x] AWU 966: `net-open` — the fallible `byte-stream` and the 504 convention
 - [x] AWU 967: `modules/llm-openai` — port the dialect table and the SSE parser
-- [ ] AWU 968: Route `GenerateLlmStream` to the module
+- [x] AWU 968: Route `GenerateLlmStream` to the module
 - [ ] AWU 969: Delete `ext/llm-connector`
 
 Three decisions were taken before the split, and each is recorded where it will
@@ -209,6 +209,40 @@ be questioned again:
   function's body on the first attempt — the same failure as stage 3's
   timeout-assertion edit and stage 5's seven test files. **Three occurrences
   now.** Redone by hand.
+
+#### AWU 968: Route `GenerateLlmStream` to the module
+- **DoD**: A turn completes with no `llm-connector` extension configured, and
+  the same run without the module produces no answer.
+- **Done**. `src/wasm/rpc_meta_llm_module.rs`; the module answers first when one
+  is loaded, the same bridge `CallExtension` uses, so removing `llm-openai` from
+  `modules` falls straight back to the extension.
+  `tests/llm_module_e2e_tests.rs` is the pair. Verified by making
+  `is_available` return `false`: the answer never reaches the conversation.
+- **Endpoint resolution moved to the host**, as agreed: `RAD_TEST_PORT`,
+  `normalize_base_url`, the `api.openai.com` default and the "No LLM endpoint
+  configured" message. The dialect stayed in the module. The module now reads no
+  environment at all.
+- **The eager-load test's blind spot is closed.**
+  `tests/llm_connector_eager_load_tests.rs:167` asserts that message is
+  *absent*, which passes vacuously the moment the wording drifts — and moving
+  the message was exactly when that would happen. A unit test now pins the
+  string; both fail if it changes.
+- **A kernel bug that this AWU would have shipped.** `call_stack` was one
+  `Mutex<Vec<String>>` for the whole kernel, so two *threads* calling one module
+  looked like re-entrancy: the polling loop holds `llm-openai` while anything on
+  the main thread calling it gets `dispatch cycle: llm-openai -> llm-openai`.
+  §3.6.3's hazard is A→B→A, which is one thread by construction — `dispatch.call`
+  runs the target on the caller's thread and suspends the caller — so the stack
+  is now thread-local. Nothing drove a module from a background thread before
+  this AWU, which is why it had never fired.
+  `two_threads_calling_one_module_is_not_a_cycle` fails against the old shape.
+  - **Not fixed, and recorded**: two threads each holding one module's lock and
+    calling into the other's would deadlock on the locks, below where this check
+    sits. No module pair can do that today — the transport calls nothing — and
+    the answer is §3.6.1's single scheduler, which arrives with `agent-loop`.
+- The host still models nothing about the request: `messages_json` and
+  `tools_json` are spliced in as parsed JSON. `RemoteMessage`/`RemoteTool` and
+  the WIT conversion still exist for the extension path, and go with it in 969.
 
 ### 🔜 Stage 6 — what was already known
 

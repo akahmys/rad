@@ -29,6 +29,7 @@ pub mod rpc_fs;
 pub mod rpc_meta;
 mod rpc_meta_llm_connector;
 mod rpc_meta_llm_fallback;
+mod rpc_meta_llm_module;
 pub mod rpc_network;
 pub mod rpc_process;
 pub mod rpc_terminal;

@@ -28,6 +28,28 @@ fn config_with(modules: Vec<rad::config::ModuleConfig>) -> rad::config::Config {
     }
 }
 
+/// A kernel holding one module.
+fn kernel_with(name: &str, artefact: &str) -> Arc<KernelShared> {
+    let shared = KernelShared::new();
+    let rt = ModuleRuntime::load(
+        name,
+        &wasm(artefact),
+        &shared.engine,
+        Arc::downgrade(&shared),
+    )
+    .unwrap_or_else(|e| panic!("{name} should load: {e}"));
+    shared
+        .registry
+        .lock()
+        .register(rt.manifest.clone())
+        .unwrap();
+    shared
+        .modules
+        .lock()
+        .insert(name.to_string(), Arc::new(Mutex::new(rt)));
+    shared
+}
+
 /// Loads `echo` and `relay` into one kernel.
 fn kernel() -> Arc<KernelShared> {
     let (echo, relay) = (wasm("echo_module"), wasm("relay_module"));
@@ -122,6 +144,38 @@ fn an_unroutable_method_reports_rather_than_panicking() {
     let k = kernel();
     let err = k.call("test", "nobody", "nobody.method", "{}").unwrap_err();
     assert!(err.contains("no module provides"), "{err}");
+}
+
+/// Two threads calling one module concurrently is not re-entrancy.
+///
+/// §3.6.3's hazard is A→B→A, which is always one thread: `dispatch.call` runs
+/// the target on the caller's own thread and the caller is suspended until it
+/// returns. A call stack shared across threads confuses the two, and rejects an
+/// ordinary concurrent call with "dispatch cycle: spawn -> spawn". Nothing drove
+/// a module from a background thread until AWU 968's polling loop, which is why
+/// this went unnoticed.
+#[test]
+fn two_threads_calling_one_module_is_not_a_cycle() {
+    let k = kernel_with("spawn", "spawn_module");
+    let background = Arc::clone(&k);
+    let slow = std::thread::spawn(move || {
+        background.call(
+            "bg",
+            "spawn",
+            "spawn.run",
+            r#"{"argv":["sh","-c","sleep 1; echo slow"]}"#,
+        )
+    });
+
+    // Long enough that the background call is definitely inside the module.
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    let concurrent = k.call("main", "spawn", "spawn.run", r#"{"argv":["echo","quick"]}"#);
+
+    assert!(slow.join().unwrap().is_ok());
+    assert!(
+        concurrent.is_ok(),
+        "a concurrent call is not a cycle: {concurrent:?}"
+    );
 }
 
 #[test]

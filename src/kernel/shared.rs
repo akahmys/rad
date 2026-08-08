@@ -35,9 +35,6 @@ pub struct KernelShared {
     pub registry: Mutex<Registry>,
     /// Per-module locks, never a lock over the whole map — see the module docs.
     pub modules: Mutex<HashMap<String, Arc<Mutex<ModuleRuntime>>>>,
-    /// Modules currently mid-`call`, outermost first. Shared across every store
-    /// because a chain spans several of them.
-    pub call_stack: Mutex<Vec<String>>,
     pub post_queue: Mutex<VecDeque<Posted>>,
     /// Per-module config from `rad.json`, fetched by a module through
     /// `kernel.config`. Opaque to the kernel — it stores and returns it.
@@ -76,6 +73,27 @@ pub struct KernelShared {
 /// `kernel.config` uses the same call it would use for a peer and never has to
 /// special-case the host (§3.6.7).
 pub const KERNEL_TARGET: &str = "kernel";
+
+thread_local! {
+    /// Modules currently mid-`call` **on this thread**, outermost first.
+    ///
+    /// Per-thread, not per-kernel. A call chain is a single thread by
+    /// construction — `dispatch.call` runs the target's guest code on the
+    /// caller's own thread, and the caller is suspended until it returns — so
+    /// A→B→A (§3.6.3) is always one thread's stack. Sharing the stack across
+    /// threads instead made *concurrent* calls to one module look like
+    /// re-entrant ones: the moment anything drove a module from a background
+    /// thread, an unrelated call from the main thread was rejected with
+    /// "dispatch cycle: X -> X". Nothing did until AWU 968's polling loop.
+    ///
+    /// This does not make cross-thread call *chains* safe. Two threads each
+    /// holding one module's lock and calling into the other's would deadlock on
+    /// the locks themselves, below where this check sits. No module pair does
+    /// that today — the transport calls nothing — and the real answer is the
+    /// single scheduler of §3.6.1, which arrives with `agent-loop`.
+    static CALL_STACK: std::cell::RefCell<Vec<String>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
 
 impl KernelShared {
     /// # Panics
@@ -120,7 +138,6 @@ impl KernelShared {
             engine,
             registry: Mutex::new(Registry::new()),
             modules: Mutex::new(HashMap::new()),
-            call_stack: Mutex::new(Vec::new()),
             post_queue: Mutex::new(VecDeque::new()),
             module_config: Mutex::new(HashMap::new()),
             processes: Arc::new(crate::process::ProcessManager::new()),
@@ -231,19 +248,19 @@ impl KernelShared {
 
         // Checked before taking the target's lock: past that point a cycle is a
         // deadlock, not an error anyone could report.
-        {
-            let mut stack = self.call_stack.lock();
+        CALL_STACK.with_borrow_mut(|stack| {
             if stack.iter().any(|m| m == &name) {
                 let mut chain = stack.clone();
                 chain.push(name.clone());
                 return Err(format!("dispatch cycle: {}", chain.join(" -> ")));
             }
             stack.push(name.clone());
-        }
+            Ok(())
+        })?;
 
         let result = self.deliver(&name, method, payload);
 
-        self.call_stack.lock().pop();
+        CALL_STACK.with_borrow_mut(Vec::pop);
         result
     }
 
