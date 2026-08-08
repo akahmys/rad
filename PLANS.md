@@ -71,12 +71,10 @@
 
 ## 🛠️ Short-Term Plan: Phase 71 (Extensions to Modules, One at a Time)
 
-**Stage 3 of `ARCHITECTURE-NEXT.md` §9: `context-tools` first**, because its
-logic is the least entangled — `windowing.rs` states outright that it has no
-`host_rpc` dependency. Investigating the port turned up that `get-repo-map`, the
-extension's only other export, **has no caller at all**: it is reachable through
-the generic `CallExtension` router but nothing passes that method name, and the
-orchestrator never asks for a repo map. So `optimize` is the entire job.
+Stages 3 through 6 of `ARCHITECTURE-NEXT.md` §9 are done: `context-tools`,
+`skill-tool-provider`, `mcp-tool-provider` and `llm-connector` are modules.
+**Stage 7 (`security-guard` → `policy`) is next** — start at that section below,
+then the state summary under it.
 
 §9.4's invariant holds throughout: rad works at the end of every AWU, and
 `wit/rad.wit` is untouched.
@@ -270,9 +268,78 @@ be questioned again:
   no-orchestrator path's hardcoded endpoint, which would have surfaced as a
   connection failure explaining nothing.
 
-### 🔜 Stage 6 — what was already known
+### 🔜 Next: stage 7 (`security-guard` → `policy`)
 
-Recorded before the split so it is not re-derived:
+Not yet broken into AWUs. Read before planning: `ARCHITECTURE-NEXT.md` §3.4.3
+(policy is cooperative), §3.4.4 (the limit to state plainly), §3.4.5. What is
+already known from reading the code, so it is not re-derived:
+
+- **The extension is 148 lines and almost pure.** `ext/security-guard/src/`:
+  `lib.rs` 76, `policy.rs` 72. `verify_rpc(command) -> bool` plus a blocklist
+  fetched once via `GetExtensionConfig` and cached in a `thread_local`. It makes
+  no other host call. Of the 76 lines in `lib.rs`, roughly 40 are WIT conversion
+  macros that exist only to cross the extension boundary and go with it.
+- **The host has five call sites, and they are all `src/wasm/`** —
+  `imports_tool.rs:25`, `imports_http.rs:43`, `imports_process.rs:69`,
+  `imports_rpc.rs:32` and `:92` — all reaching
+  `Orchestrator::verify_rpc_exclude` (`src/orchestrator/runner/events.rs`).
+  That function walks every *extension* and asks each one. With two extensions
+  left, and `rad-orchestrator` the only non-guard among them, most of that
+  fan-out is now vestigial.
+- **The kernel has no equivalent, and that is the recorded gap.** `proc-spawn`
+  (AWU 965) and `net-open` (AWU 966) both skip the check because the kernel
+  holds no orchestrator handle. Two occurrences, both pointing here.
+- **A syscall asking `policy` is a plain module-to-module `call`, and the cycle
+  check already covers it.** A module reached through `call` is on the
+  thread's stack, so `proc-spawn` → `policy` pushes a second frame and returns;
+  a `policy` that tried to spawn something itself would be refused by name
+  rather than deadlocking. Worth a test rather than an assumption.
+- **`GetExtensionConfig` has no module equivalent and does not need one.** A
+  module's config comes from `kernel.config` (`KernelShared::handle_kernel`),
+  which is how `mcp` and `skills` already read theirs.
+- **Four test files register `security-guard`**: `multi_extension_tests.rs`,
+  `multi_extension_isolated_roles_tests.rs`, `security_guard_policy_tests.rs`,
+  `security_hook_tests.rs`. Plus `src/wasm/tests.rs` drives `verify_rpc`
+  directly against a real component. All five move before the extension does.
+- **§3.4.4 is part of the work, not commentary.** `ARCHITECTURE.md` §1.3 claims
+  the security guard prevents prompt-injection damage; §3.4.4 calls that an
+  overclaim and says not to pretend. Stage 7 is when that sentence gets fixed.
+- **Open design question, not yet decided**: §3.4.3 says one hook — `mcp-bridge`
+  asking before tool execution — is enough, which is a *narrower* surface than
+  the five call sites today. Deciding whether stage 7 preserves the current
+  fan-out or moves to the single hook is the first thing to settle, because it
+  determines whether this is a port or a redesign.
+
+### 📌 State at the end of stage 6
+
+- **2 extensions** (`rad-orchestrator`, `security-guard`) + **4 modules**
+  (`context`, `skills`, `mcp`, `llm-openai`), plus four `ship = false` test
+  fixtures (`echo`, `relay`, `spawn`, `net`).
+- 256 passed / 0 failed. Clippy clean on native and `wasm32-wasip2`.
+- All three syscalls are implemented; the surface is closed at three (§3.1).
+- Everything through AWU 969 is committed and pushed to `main`.
+
+Carried forward, none of it blocking:
+
+- **The known flake below is still unreproduced.**
+- **Cross-thread lock ordering is unaddressed** (AWU 968). Two threads each
+  holding one module's lock and calling into the other's would deadlock below
+  the cycle check. No module pair can do it today; §3.6.1's scheduler is the
+  answer, at stage 8.
+- **`modules/mcp` carries an `unsafe impl Send`** that a `thread_local` would
+  remove, the way `modules/llm-openai/src/session.rs` does. CODING.md §4
+  prohibits `unsafe` outright, so this is a real violation, not a preference.
+- **`report_tool_inventory`** (`src/orchestrator/runner/runtimes.rs`) is
+  uncovered — it only prints, and nothing asserts on its `[OK]`/`[FAILED]`
+  wording, which Phase 61 was about.
+- **`runtimes/tests.rs`'s 53-line test function** is over CODING.md §2's 40-line
+  rule, left alone deliberately: splitting one scenario is the fragmentation the
+  same rule warns against.
+- **Config-file cleanup stays deferred** until the migration finishes.
+
+### 📜 Stage 6 — what was known before it started (historical)
+
+Kept because two entries outlived the stage. The rest is settled.
 
 - ~~**`net-open` is half-built.**~~ Landed in AWU 966, along with the fallible
   reader `KernelStream` needed and the decision on async. All three are recorded
