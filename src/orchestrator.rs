@@ -35,6 +35,49 @@ pub struct Orchestrator {
     pub kernel: Mutex<Option<Arc<crate::kernel::KernelShared>>>,
 }
 
+/// A fresh session id: seconds since the epoch, which is also what orders
+/// sessions on disk.
+fn new_session_id() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+        .to_string()
+}
+
+/// The union of every extension's filesystem allow-lists, read and write.
+///
+/// Shared by construction and by `reload`, which have to agree: a sandbox
+/// rebuilt from a different rule than it was created with would widen or narrow
+/// access on a config reload for no reason anyone could see.
+fn fs_allow_lists(extensions: &[crate::config::ExtensionConfig]) -> (Vec<String>, Vec<String>) {
+    let mut read = Vec::new();
+    let mut write = Vec::new();
+    for permissions in extensions.iter().filter_map(|e| e.permissions.as_ref()) {
+        read.extend(permissions.fs_read_allow.iter().cloned());
+        write.extend(permissions.fs_write_allow.iter().cloned());
+    }
+    (read, write)
+}
+
+/// Brings the kernel up and reports what loaded.
+///
+/// Called during construction rather than from `main`, because `modules` is
+/// part of the config and an Orchestrator built from a config that declares
+/// them but silently has none is a trap — every integration test hit it, and
+/// each one had to remember to boot the kernel by hand. With nothing configured
+/// this loads nothing and costs nothing.
+fn boot_kernel(config: &Config) -> Arc<crate::kernel::KernelShared> {
+    let (kernel, loaded) = crate::kernel::boot(config);
+    if !loaded.is_empty() {
+        crate::log_host!(
+            "[kernel] loaded {} module(s): {}",
+            loaded.len(),
+            loaded.join(", ")
+        );
+    }
+    kernel
+}
+
 impl Orchestrator {
     #[must_use]
     pub fn new(
@@ -43,46 +86,16 @@ impl Orchestrator {
         dag: Arc<Mutex<Dag>>,
         config_path: Option<String>,
     ) -> Self {
+        let (fs_read_allow, fs_write_allow) = fs_allow_lists(&config.extensions);
         let sandbox = Arc::new(FsSandbox::new(
             config.core.workspace.clone().into(),
             config.core.snapshot.clone().into(),
-            config
-                .extensions
-                .iter()
-                .flat_map(|e| {
-                    e.permissions
-                        .as_ref()
-                        .map(|p| p.fs_read_allow.clone())
-                        .unwrap_or_default()
-                })
-                .collect(),
-            config
-                .extensions
-                .iter()
-                .flat_map(|e| {
-                    e.permissions
-                        .as_ref()
-                        .map(|p| p.fs_write_allow.clone())
-                        .unwrap_or_default()
-                })
-                .collect(),
+            fs_read_allow,
+            fs_write_allow,
         ));
         let process_manager = Arc::new(ProcessManager::new());
         let active_processes = Arc::new(Mutex::new(HashMap::new()));
-
-        // Modules come up here rather than in `main`, because `modules` is part
-        // of the config and an Orchestrator built from a config that declares
-        // them but silently has none is a trap — every integration test hit it,
-        // and each one had to remember to boot the kernel by hand. With nothing
-        // configured this loads nothing and costs nothing.
-        let (kernel, loaded) = crate::kernel::boot(&config);
-        if !loaded.is_empty() {
-            crate::log_host!(
-                "[kernel] loaded {} module(s): {}",
-                loaded.len(),
-                loaded.join(", ")
-            );
-        }
+        let kernel = boot_kernel(&config);
 
         Self {
             config: Mutex::new(config),
@@ -108,46 +121,29 @@ impl Orchestrator {
     pub fn reset_session(&self) -> Result<String, String> {
         let old_id = self.session_id.lock().clone();
         let config_guard = self.config.lock();
+        let workspace = &config_guard.core.workspace;
 
-        // 1. Save the current DAG
-        {
-            let dag_guard = self.dag.lock();
-            crate::session::save_session(&config_guard.core.workspace, &old_id, &dag_guard)?;
-        }
+        // Save the session that is ending before anything is cleared.
+        crate::session::save_session(workspace, &old_id, &self.dag.lock())?;
 
-        // 2. Generate a new session ID
-        let new_id = std::time::SystemTime::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs())
-            .to_string();
+        let new_id = new_session_id();
+        self.session_id.lock().clone_from(&new_id);
+        *self.dag.lock() = crate::dag::Dag::new();
 
-        // 3. Update session_id and DAG
-        {
-            let mut session_guard = self.session_id.lock();
-            session_guard.clone_from(&new_id);
-        }
+        // And save the empty one, so the new id exists on disk immediately.
+        crate::session::save_session(workspace, &new_id, &self.dag.lock())?;
 
-        {
-            let mut dag_guard = self.dag.lock();
-            *dag_guard = crate::dag::Dag::new();
-        }
-
-        // 4. Save the new empty DAG
-        {
-            let dag_guard = self.dag.lock();
-            crate::session::save_session(&config_guard.core.workspace, &new_id, &dag_guard)?;
-        }
-
-        // 5. Reset Wasm runtime state
-        self.wasm_runtime.lock().clear();
-
-        // Clear active processes
-        self.active_processes.lock().clear();
-
-        // 6. Reset token usage
-        *self.token_usage.lock() = TokenUsage::default();
-
+        self.discard_session_state();
         Ok(new_id)
+    }
+
+    /// Drops everything scoped to the session that just ended. Runtimes are
+    /// rebuilt on the next task; processes and token counts belong to the old
+    /// conversation and would otherwise be attributed to the new one.
+    fn discard_session_state(&self) {
+        self.wasm_runtime.lock().clear();
+        self.active_processes.lock().clear();
+        *self.token_usage.lock() = TokenUsage::default();
     }
 
     /// Dynamically reloads configuration from `config_path`.
@@ -166,28 +162,9 @@ impl Orchestrator {
         }
 
         // 2. Update sandbox file system permissions
-        self.sandbox.update_permissions(
-            new_cfg
-                .extensions
-                .iter()
-                .flat_map(|e| {
-                    e.permissions
-                        .as_ref()
-                        .map(|p| p.fs_read_allow.clone())
-                        .unwrap_or_default()
-                })
-                .collect(),
-            new_cfg
-                .extensions
-                .iter()
-                .flat_map(|e| {
-                    e.permissions
-                        .as_ref()
-                        .map(|p| p.fs_write_allow.clone())
-                        .unwrap_or_default()
-                })
-                .collect(),
-        );
+        let (fs_read_allow, fs_write_allow) = fs_allow_lists(&new_cfg.extensions);
+        self.sandbox
+            .update_permissions(fs_read_allow, fs_write_allow);
 
         // 3. Reset Wasm runtime state so it gets re-initialized with new configs on next run
         self.wasm_runtime.lock().clear();
