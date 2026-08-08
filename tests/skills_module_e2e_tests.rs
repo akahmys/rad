@@ -89,7 +89,8 @@ fn a_skill_runs_end_to_end_with_no_tool_provider_extension() {
     let port = listener.local_addr().unwrap().port();
     drop(listener);
     // Turn 1 calls the skill; turn 2 closes the task. Popped from the back.
-    let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_g\",\"type\":\"function\",\"function\":{\"name\":\"rad_e2e_greeter\",\"arguments\":\"{\\\"args\\\":\\\"Alice\\\"}\"}}]}}]}\n\ndata: [DONE]\n\n".to_string();
+    // Calls `skill`, not `rad_e2e_greeter`: one tool selects by argument (§4.5 ③).
+    let turn1 = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_g\",\"type\":\"function\",\"function\":{\"name\":\"skill\",\"arguments\":\"{\\\"name\\\":\\\"rad_e2e_greeter\\\",\\\"args\\\":\\\"Alice\\\"}\"}}]}}]}\n\ndata: [DONE]\n\n".to_string();
     let turn2 =
         "data: {\"choices\":[{\"delta\":{\"content\":\"Done.\"}}]}\n\ndata: [DONE]\n\n".to_string();
     let responses = Arc::new(Mutex::new(vec![turn2, turn1]));

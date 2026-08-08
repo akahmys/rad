@@ -103,7 +103,7 @@ fn discovers_skills_from_disk_and_executes_one() {
             "test",
             "skills",
             "skills.tools.call",
-            r#"{"name":"rad_test_review","arguments":"{\"args\":\"the diff\"}"}"#,
+            r#"{"name":"skill","arguments":"{\"name\":\"rad_test_review\",\"args\":\"the diff\"}"}"#,
         )
         .expect("execution should succeed");
     // Substituted, and returned directly — the extension had to escape this
@@ -125,7 +125,7 @@ fn a_legacy_subagent_mode_line_no_longer_blocks_execution() {
             "test",
             "skills",
             "skills.tools.call",
-            r#"{"name":"rad_test_legacy","arguments":"{}"}"#,
+            r#"{"name":"skill","arguments":"{\"name\":\"rad_test_legacy\"}"}"#,
         )
         .expect("a legacy mode line must not block execution");
     assert!(called.contains("Still works."), "{called}");
@@ -140,7 +140,7 @@ fn an_unknown_skill_is_reported_by_name() {
             "test",
             "skills",
             "skills.tools.call",
-            r#"{"name":"no_such_skill","arguments":"{}"}"#,
+            r#"{"name":"skill","arguments":"{\"name\":\"no_such_skill\"}"}"#,
         )
         .unwrap_err();
     assert!(err.contains("no_such_skill"), "{err}");
@@ -194,18 +194,35 @@ fn the_aggregate_tool_list_carries_module_tools_in_openai_shape() {
     let k = kernel_with_echo();
 
     let tools = rad::kernel::tools::list(&k);
-    let found = tools
-        .iter()
-        .find(|t| t.pointer("/function/name").and_then(|n| n.as_str()) == Some("rad_test_agg"))
-        .unwrap_or_else(|| panic!("rad_test_agg missing from {tools:?}"));
+    assert_eq!(
+        tools.len(),
+        1,
+        "one schema regardless of how many skills exist: {tools:?}"
+    );
+    let tool = &tools[0];
     // The connector sends this straight to the model, so the shape matters as
     // much as the presence.
-    assert_eq!(found.get("type").and_then(|t| t.as_str()), Some("function"));
+    assert_eq!(tool.get("type").and_then(|t| t.as_str()), Some("function"));
     assert_eq!(
-        found
-            .pointer("/function/description")
-            .and_then(|d| d.as_str()),
-        Some("Aggregated.")
+        tool.pointer("/function/name").and_then(|n| n.as_str()),
+        Some("skill")
+    );
+    // The skill is reachable through the index rather than through a schema of
+    // its own, so both its name and its description have to survive into the
+    // description — the name alone would not tell the model when to use it.
+    let description = tool
+        .pointer("/function/description")
+        .and_then(|d| d.as_str())
+        .unwrap();
+    assert!(
+        description.contains("rad_test_agg") && description.contains("Aggregated."),
+        "{description}"
+    );
+    // Listed in prose *and* constrained by an enum: the index is text the model
+    // may paraphrase, the enum is what it can actually emit.
+    assert_eq!(
+        tool.pointer("/function/parameters/properties/name/enum"),
+        Some(&serde_json::json!(["rad_test_agg"]))
     );
 }
 
@@ -217,9 +234,10 @@ fn execute_routes_to_the_owning_module_by_tool_name() {
     )]);
     let k = kernel_with_echo();
 
-    let out = rad::kernel::tools::execute(&k, "rad_test_route", r#"{"args":"input"}"#)
-        .expect("a module owns this tool")
-        .expect("and running it should succeed");
+    let out =
+        rad::kernel::tools::execute(&k, "skill", r#"{"name":"rad_test_route","args":"input"}"#)
+            .expect("a module owns this tool")
+            .expect("and running it should succeed");
     // Trailing newline included: the body is returned verbatim, exactly as
     // the extension's `echo -n '<body>'` did.
     assert_eq!(out, "Ran with input.\n");
@@ -301,4 +319,50 @@ fn user_global_skills_under_home_are_discoverable() {
         listed.contains("rad_test_global") && listed.contains("From HOME."),
         "user-global skills unreachable: {listed}"
     );
+}
+
+/// The point of the change (§4.5 ③), stated as a measurement.
+///
+/// One tool per skill cost ~468 characters of schema each (§4.4), growing the
+/// prompt linearly. The index grows too — it carries a line per skill — but a
+/// line is not a schema, so the slope is what changed. Asserting the shape
+/// alone would not catch a regression that reintroduced per-skill schemas while
+/// keeping the `skill` tool.
+#[test]
+fn ten_skills_cost_one_schema() {
+    let many: Vec<(String, String)> = (0..10)
+        .map(|i| {
+            (
+                format!("rad_test_bulk_{i}"),
+                format!("---\ndescription: Bulk skill {i}.\n---\n\nBody {i}.\n"),
+            )
+        })
+        .collect();
+    let refs: Vec<(&str, &str)> = many.iter().map(|(n, c)| (n.as_str(), c.as_str())).collect();
+    let _fixture = SkillFixture::new(&refs);
+    let k = kernel();
+
+    let tools = rad::kernel::tools::list(&k);
+    assert_eq!(tools.len(), 1, "ten skills, one schema: {tools:?}");
+
+    let bytes = serde_json::to_string(&tools[0]).unwrap().len();
+    // Measured at 935 bytes for these ten. The extension's ten schemas came to
+    // roughly 4,700 characters (§4.4's 468-character average). The budget is
+    // deliberately loose — this is a slope check, not a golden file, and
+    // tightening it would only make edits to the description text fail.
+    assert!(
+        bytes < 2000,
+        "the aggregate schema has grown back toward per-skill cost: {bytes} bytes"
+    );
+    // Every skill still reachable, or the saving would be a loss of function.
+    let description = tools[0]
+        .pointer("/function/description")
+        .and_then(|d| d.as_str())
+        .unwrap();
+    for i in 0..10 {
+        assert!(
+            description.contains(&format!("rad_test_bulk_{i}")),
+            "skill {i} missing from the index: {description}"
+        );
+    }
 }

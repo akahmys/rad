@@ -85,7 +85,7 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 - [✅] AWU 959: `modules/skills` — port discovery and execution (Result: Success — 10 ported tests plus 3 against a real skill tree; the SDK gained an `infallible` adapter on its third occurrence)
 - [x] AWU 960: Consult modules from `GetTools` and `execute_tool`
 - [x] AWU 961: Delete `ext/skill-tool-provider`
-- [ ] AWU 962: Collapse per-skill tools into one `skill` tool plus an index (§4.5.3)
+- [x] AWU 962: Collapse per-skill tools into one `skill` tool plus an index (§4.5 ③)
 
 #### AWU 959: `modules/skills` — port discovery and execution
 - **Objective**: SKILL.md discovery and inline execution, as a module.
@@ -159,12 +159,23 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
   looks exactly like one that passes.
 
 #### AWU 962: One `skill` tool plus an index
-- **Objective**: §4.5.3. Deliberately separate from the port.
+- **Objective**: §4.5 ③. Deliberately separate from the port.
 - **Context**: One tool schema averages 468 characters (§4.4), so a tool per
   skill costs context linearly. A single `skill(name, args)` whose description
   lists what is available is roughly a quarter of that at ten skills, and the
   body still loads only on invocation.
 - **DoD**: Ten skills cost one schema; invocation still resolves by name.
+- **Done**. `ten_skills_cost_one_schema` measures it: 935 bytes for ten, against
+  roughly 4,700 for the extension's ten schemas. The budget in that test is a
+  slope check, not a golden file — it fails if per-skill schemas come back, not
+  when the description text is edited.
+- The name is constrained by a JSON-Schema `enum` as well as listed in the
+  description. The index is prose a model may paraphrase; the enum is what it
+  can actually emit.
+- Zero skills produces zero tools rather than a tool with an empty index, which
+  would spend schema on an offer that cannot be taken.
+- User-visible, so CONFIG.md §2.5 says so plainly, and `mode` is now documented
+  as removed rather than reserved (a `SKILL.md` still carrying the line runs).
 
 ### 💡 Previous AWU Status (stage 3)
 - [✅] AWU 956: `modules/context` — port the optimize logic (Result: Success — 13 ported tests pass, `windowing.rs` logic byte-identical to the extension's)

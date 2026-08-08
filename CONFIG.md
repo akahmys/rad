@@ -244,22 +244,23 @@ Markdown files under `.agents/commands/` (project-local, checked first) or `~/.r
 `.agents/AGENTS.md` or `AGENTS.md` at the project root, if present, is appended to the system prompt on every turn — use it for project-specific conventions, build commands, or constraints the agent should always know about.
 
 ### 2.5 Skills
-A skill is a directory containing a `SKILL.md` under `.agents/skills/<name>/` (project-local, checked first) or `~/.rad/skills/<name>/` (user-global) — same precedence direction as custom slash commands. Unlike commands, skills aren't invoked by typing `/name`: each one is surfaced as an ordinary tool (via the `skills` kernel module) with its `description` as the tool description, so the model can choose to use it autonomously when relevant, the same way it decides to call any other tool.
+A skill is a directory containing a `SKILL.md` under `.agents/skills/<name>/` (project-local, checked first) or `~/.rad/skills/<name>/` (user-global) — same precedence direction as custom slash commands. Unlike commands, skills aren't invoked by typing `/name`: the `skills` kernel module offers the model a **single `skill(name, args?)` tool** whose description lists every skill it found, one line each, with that skill's own `description`. The model picks one by name, the same way it decides to call any other tool.
+
+This used to be one tool *per* skill. A tool schema costs roughly 468 characters, so ten skills spent about 4,700 characters of every prompt on entries differing only in a name and a line of prose; the index does it in under 1,000. What is *not* traded away is progressive disclosure — a skill's body is still read only when it runs.
 
 `SKILL.md` starts with a `---`-delimited frontmatter block, then the body sent as the tool result when the skill is invoked:
 ```
 ---
 description: Runs the team's PR review checklist against currently staged changes.
-mode: inline
 ---
 
 Check that the diff includes tests and an updated changelog entry.
 ```
 - `description` (required): shown to the model in the tool list. A skill missing this is skipped.
-- `mode` (optional, defaults to `inline`): only `inline` is implemented today — the body is returned as the tool result directly. `subagent` is a reserved value for a future nested-task execution mode; specifying it now returns a clear "not yet implemented" error rather than running inline.
-- `allowed_tools` (optional): reserved for a future access-scoping mechanism, currently parsed but not enforced.
+- `mode`: **removed.** It only ever accepted `inline`, with `subagent` reserved for a nested-task mode that returned "not yet implemented". Subagents were dropped as a goal, so the field went with them. An existing `SKILL.md` that still carries a `mode:` line is not rejected — the line is ignored and the skill runs.
+- `allowed_tools` (optional): reserved for a future access-scoping mechanism, currently parsed but not enforced. Enforcement is planned as the `policy` module's job rather than this one's, since what needs constraining is the model's choice, not the module's behaviour.
 
-Callers can pass an optional `args` string when invoking a skill; if the body contains a literal `$ARGUMENTS` placeholder it's substituted, otherwise `args` is appended on its own line (same substitution rule as custom slash commands' `$ARGUMENTS`).
+Callers can pass an optional `args` string when invoking a skill (`skill(name: "review-pr", args: "the staged diff")`); if the body contains a literal `$ARGUMENTS` placeholder it's substituted, otherwise `args` is appended on its own line (same substitution rule as custom slash commands' `$ARGUMENTS`).
 
 ---
 
@@ -267,5 +268,5 @@ Callers can pass an optional `args` string when invoking a skill; if the body co
 
 `rad` requires no system-level administrative privileges and runs entirely within user space.
 
-* **Core Update**: Pull the latest source and re-run `./scripts/build_all.sh` — it rebuilds all 6 extensions, runs the test/Clippy gates, and reinstalls the `rad` binary to `~/.cargo/bin/rad` via `cargo install --path .`.
+* **Core Update**: Pull the latest source and re-run `./scripts/build_all.sh` — it rebuilds every extension and kernel module in the workspace (the list is derived from `cargo metadata`, not maintained by hand), runs the test/Clippy gates, and reinstalls the `rad` binary to `~/.cargo/bin/rad` via `cargo install --path .`.
 * **Extension Update**: Overwrite the extension's `.wasm` file at its configured `source` path, then run `/reload` inside a running session (or just restart `rad`) — `/reload` re-reads the config and clears the cached WASM runtimes so the next task picks up the new binary.
