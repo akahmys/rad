@@ -42,7 +42,15 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
         }
         RasRpcCommand::GetTools => {
             if let Some(orch) = ctx.orchestrator {
-                let mut all_tools = serde_json::Value::Array(Vec::new());
+                // Modules first, so a ported provider's tools take the slot its
+                // extension used to hold if both happen to be live.
+                let kernel_tools = orch
+                    .kernel
+                    .lock()
+                    .clone()
+                    .map(|k| crate::kernel::tools::list(&k))
+                    .unwrap_or_default();
+                let mut all_tools = serde_json::Value::Array(kernel_tools);
                 let runtimes = {
                     let guard = orch.wasm_runtime.lock();
                     guard.values().cloned().collect::<Vec<_>>()

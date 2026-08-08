@@ -37,6 +37,14 @@ macro_rules! delegate_extension_imports {
                 bindings::RadExtensionImports::execute_tool(self, name, arguments)
             }
 
+            fn execute_tool_text(
+                &mut self,
+                name: String,
+                arguments: String,
+            ) -> Result<String, String> {
+                bindings::RadExtensionImports::execute_tool_text(self, name, arguments)
+            }
+
             fn open_http_stream(
                 &mut self,
                 url: String,

@@ -83,7 +83,7 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 
 ### 💡 Current AWU Status (stage 4)
 - [✅] AWU 959: `modules/skills` — port discovery and execution (Result: Success — 10 ported tests plus 3 against a real skill tree; the SDK gained an `infallible` adapter on its third occurrence)
-- [ ] AWU 960: Consult modules from `GetTools` and `execute_tool`
+- [x] AWU 960: Consult modules from `GetTools` and `execute_tool`
 - [ ] AWU 961: Delete `ext/skill-tool-provider`
 - [ ] AWU 962: Collapse per-skill tools into one `skill` tool plus an index (§4.5.3)
 
@@ -127,6 +127,25 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
   host iterates modules rather than resolving a single method — the same
   `role.method` concatenation rule stage 3 established.
 - **DoD**: Skills appear in `/tools` and execute, with the extension disabled.
+- **Done**. `src/kernel/tools.rs` aggregates `<module>.tools.list` and routes
+  `<module>.tools.call` by tool name; `GetTools` consults it first
+  (`src/wasm/rpc_meta.rs`) and a new `execute-tool-text` import carries the
+  result (`src/wasm/imports_tool.rs`). `tests/skills_module_e2e_tests.rs` runs a
+  skill through a real Orchestrator with **no tool-provider extension
+  configured**, and fails with "no registered tool provider handled it" when the
+  module is disabled — the negative control stage 3 lacked.
+- **Two things this turned up**, both invisible to the tests that existed:
+  - `execute-tool` returns an `execution-handle`, so a provider holding a plain
+    answer had to manufacture a process to carry it — the reason
+    `skill-tool-provider` shelled out to `echo -n`. Added `execute-tool-text`
+    rather than changing the existing function: §2.2's experiment says a new
+    import is safe, and this confirmed it a third time (all 8 components loaded
+    unrebuilt). §9.4's invariant is narrowed to match the evidence.
+  - The kernel loader preopened only `.` and passed no environment, so
+    `~/.rad/skills` was unreachable from `modules/skills` — a regression from
+    AWU 959 that every test missed by using `.agents/skills` alone. Loader now
+    matches `src/wasm/loader.rs`; `user_global_skills_under_home_are_discoverable`
+    fails without it.
 
 #### AWU 961: Delete `ext/skill-tool-provider`
 - **DoD**: Extension gone, suite green, skills still work.

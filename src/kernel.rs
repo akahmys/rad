@@ -10,6 +10,7 @@ mod host;
 mod loader;
 mod registry;
 mod shared;
+pub mod tools;
 
 #[cfg(test)]
 mod tests;

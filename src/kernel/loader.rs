@@ -52,14 +52,31 @@ impl ModuleRuntime {
         // Modules read the filesystem through `std::fs`, so reachability is
         // whatever is preopened here rather than a capability mask
         // (ARCHITECTURE-NEXT.md §3.4).
+        //
+        // These match `src/wasm/loader.rs` deliberately. A module has to be able
+        // to reach exactly what the extension it replaces could reach, or the
+        // port silently loses behaviour: `modules/skills` resolves
+        // `~/.rad/skills` through `$HOME`, and with neither the preopen nor the
+        // variable it found nothing there while still passing every test that
+        // only used `.agents/skills`.
         let mut wasi_builder = WasiCtxBuilder::new();
-        wasi_builder.inherit_stdout().inherit_stderr();
+        wasi_builder.inherit_stdout().inherit_stderr().inherit_env();
         let _ = wasi_builder.preopened_dir(
             ".",
             ".",
             wasmtime_wasi::DirPerms::all(),
             wasmtime_wasi::FilePerms::all(),
         );
+        // Preopened under its own absolute path so a guest-side `~` expansion
+        // resolves to a path WASI recognises.
+        if let Ok(home) = std::env::var("HOME") {
+            let _ = wasi_builder.preopened_dir(
+                &home,
+                &home,
+                wasmtime_wasi::DirPerms::all(),
+                wasmtime_wasi::FilePerms::all(),
+            );
+        }
 
         let state = KernelState::new(
             name.to_string(),

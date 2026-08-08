@@ -129,6 +129,10 @@ impl bindings::RadExtensionImports for WasmState {
         crate::wasm::imports_tool::execute_tool(self, name, arguments)
     }
 
+    fn execute_tool_text(&mut self, name: String, arguments: String) -> Result<String, String> {
+        crate::wasm::imports_tool::execute_tool_text(self, name, arguments)
+    }
+
     fn open_http_stream(
         &mut self,
         url: String,

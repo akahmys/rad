@@ -143,6 +143,25 @@ impl KernelShared {
         registry.route(method).map(ToString::to_string)
     }
 
+    /// Every loaded module, in registration order.
+    #[must_use]
+    pub fn modules(&self) -> Vec<String> {
+        self.registry
+            .lock()
+            .module_names()
+            .into_iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+
+    /// The module declaring `method`, by method alone. Unlike [`Self::resolve`],
+    /// a live module name is not itself an answer — callers that need to know
+    /// whether a module actually offers a method must ask this.
+    #[must_use]
+    pub fn provider_of(&self, method: &str) -> Option<String> {
+        self.registry.lock().route(method).map(ToString::to_string)
+    }
+
     /// Delivers a synchronous call, refusing to re-enter a module already on
     /// the stack.
     ///

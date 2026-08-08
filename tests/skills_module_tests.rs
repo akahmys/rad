@@ -145,3 +145,160 @@ fn an_unknown_skill_is_reported_by_name() {
         .unwrap_err();
     assert!(err.contains("no_such_skill"), "{err}");
 }
+
+// --- The host-side aggregation layer (`kernel::tools`) -----------------------
+//
+// `skills.tools.list` above proves the module answers. These prove the host
+// finds that answer without being told which module to ask, which is what the
+// tool path needs: the registry maps one method to one module, so providers
+// namespace their methods and the host walks the modules.
+
+/// A module that provides no tools at all — the aggregate must skip it rather
+/// than fail. Every non-tool module (`context-tools`, and every module a third
+/// party writes) is in this position.
+fn echo_wasm() -> PathBuf {
+    ["debug", "release"]
+        .iter()
+        .map(|p| PathBuf::from(format!("target/wasm32-wasip2/{p}/echo_module.wasm")))
+        .find(|p| p.exists())
+        .expect("echo_module.wasm not built for wasm32-wasip2")
+}
+
+fn kernel_with_echo() -> Arc<KernelShared> {
+    let shared = kernel();
+    let rt = ModuleRuntime::load(
+        "echo",
+        &echo_wasm(),
+        &shared.engine,
+        Arc::downgrade(&shared),
+    )
+    .expect("echo module should load");
+    shared
+        .registry
+        .lock()
+        .register(rt.manifest.clone())
+        .unwrap();
+    shared
+        .modules
+        .lock()
+        .insert("echo".to_string(), Arc::new(Mutex::new(rt)));
+    shared
+}
+
+#[test]
+fn the_aggregate_tool_list_carries_module_tools_in_openai_shape() {
+    let _fixture = SkillFixture::new(&[(
+        "rad_test_agg",
+        "---\ndescription: Aggregated.\n---\n\nBody.\n",
+    )]);
+    let k = kernel_with_echo();
+
+    let tools = rad::kernel::tools::list(&k);
+    let found = tools
+        .iter()
+        .find(|t| t.pointer("/function/name").and_then(|n| n.as_str()) == Some("rad_test_agg"))
+        .unwrap_or_else(|| panic!("rad_test_agg missing from {tools:?}"));
+    // The connector sends this straight to the model, so the shape matters as
+    // much as the presence.
+    assert_eq!(found.get("type").and_then(|t| t.as_str()), Some("function"));
+    assert_eq!(
+        found
+            .pointer("/function/description")
+            .and_then(|d| d.as_str()),
+        Some("Aggregated.")
+    );
+}
+
+#[test]
+fn execute_routes_to_the_owning_module_by_tool_name() {
+    let _fixture = SkillFixture::new(&[(
+        "rad_test_route",
+        "---\ndescription: Routed.\n---\n\nRan with $ARGUMENTS.\n",
+    )]);
+    let k = kernel_with_echo();
+
+    let out = rad::kernel::tools::execute(&k, "rad_test_route", r#"{"args":"input"}"#)
+        .expect("a module owns this tool")
+        .expect("and running it should succeed");
+    // Trailing newline included: the body is returned verbatim, exactly as
+    // the extension's `echo -n '<body>'` did.
+    assert_eq!(out, "Ran with input.\n");
+}
+
+/// `None`, not `Err`. During the migration extensions still provide most tools,
+/// and turning "no module has it" into a failure would break every one of them.
+#[test]
+fn execute_declines_a_tool_no_module_owns() {
+    let _fixture = SkillFixture::new(&[]);
+    let k = kernel_with_echo();
+    assert!(rad::kernel::tools::execute(&k, "bash", "{}").is_none());
+}
+
+/// User-global skills, which live outside the working directory.
+///
+/// This is the case every test above missed: they all write to
+/// `.agents/skills` under the crate root, which the `"."` preopen covers. With
+/// no `$HOME` preopen and no `$HOME` in the guest environment,
+/// `~/.rad/skills` was simply unreachable — the module returned an empty list
+/// and every existing test still passed. The extension being replaced could
+/// read it, so losing it would have been a silent regression.
+///
+/// `HOME` is redirected to a temporary directory rather than written to for
+/// real: the point is to prove the mechanism, not to touch a developer's actual
+/// skills.
+#[test]
+fn user_global_skills_under_home_are_discoverable() {
+    let _guard = TEST_MUTEX
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+    let home = tempfile::tempdir().unwrap();
+    let dir = home.path().join(".rad/skills/rad_test_global");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("SKILL.md"),
+        "---\ndescription: From HOME.\n---\n\nGlobal body.\n",
+    )
+    .unwrap();
+
+    let original = std::env::var("HOME").ok();
+    // SAFETY: the module reads `$HOME` at load time, so it has to be set in
+    // this process. Serialised by `TEST_MUTEX` above.
+    unsafe { std::env::set_var("HOME", home.path()) };
+    let listed = std::panic::catch_unwind(|| {
+        let shared = KernelShared::new();
+        let rt = ModuleRuntime::load(
+            "skills",
+            &skills_wasm(),
+            &shared.engine,
+            Arc::downgrade(&shared),
+        )
+        .expect("skills module should load");
+        shared
+            .registry
+            .lock()
+            .register(rt.manifest.clone())
+            .unwrap();
+        shared
+            .modules
+            .lock()
+            .insert("skills".to_string(), Arc::new(Mutex::new(rt)));
+        shared.call("test", "skills", "skills.tools.list", "{}")
+    });
+    // Restored before asserting, so a failure does not leave `HOME` pointing at
+    // a deleted directory for the rest of the binary.
+    unsafe {
+        match original {
+            Some(h) => std::env::set_var("HOME", h),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+
+    let listed = listed
+        .expect("loading must not panic")
+        .expect("listing should succeed");
+    assert!(
+        listed.contains("rad_test_global") && listed.contains("From HOME."),
+        "user-global skills unreachable: {listed}"
+    );
+}

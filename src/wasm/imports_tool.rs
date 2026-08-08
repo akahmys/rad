@@ -3,7 +3,96 @@
 use crate::wasm::format_wasm_error;
 use crate::wasm::{HostExecution, WasmState};
 
+/// Puts the call past `security-guard` before anything runs.
+///
+/// Extracted so the module path (`execute_tool_text`) is guarded by exactly the
+/// same policy as the extension path, and guarded *once* — running it on both
+/// would double any policy that has a side effect, such as prompting a human.
+fn verify_tool_call(state: &WasmState, name: &str, arguments: &str) -> Result<(), String> {
+    let Some(orchestrator) = state.orchestrator.as_ref().and_then(|w| w.upgrade()) else {
+        return Ok(());
+    };
+    let req = crate::ipc::RasRpcRequest {
+        id: Some("test".to_string()),
+        command: crate::ipc::RasRpcCommand::ExecuteTool {
+            call_id: "test".to_string(),
+            name: name.to_string(),
+            arguments: arguments.to_string(),
+        },
+    };
+    let req_bytes = serde_json::to_vec(&req).unwrap_or_default();
+    orchestrator
+        .verify_rpc_exclude(&state.name, &req, &req_bytes)
+        .map_err(|e| format!("Operation rejected by security extension: {e}"))
+}
+
+/// `execute-tool-text`: the tool's output as a string.
+///
+/// A module returns its answer directly; an extension still returns a process,
+/// so the handle is drained here instead of at every call site. Modules are
+/// consulted first — during the migration a ported provider and the extension
+/// it replaces can both be loaded, and the module is the one that should win.
+pub(crate) fn execute_tool_text(
+    state: &mut WasmState,
+    name: String,
+    arguments: String,
+) -> Result<String, String> {
+    verify_tool_call(state, &name, &arguments)?;
+
+    let kernel = state
+        .orchestrator
+        .as_ref()
+        .and_then(|w| w.upgrade())
+        .and_then(|orch| orch.kernel.lock().clone());
+    if let Some(kernel) = kernel
+        && let Some(result) = crate::kernel::tools::execute(&kernel, &name, &arguments)
+    {
+        return result;
+    }
+
+    let handle = execute_tool_unverified(state, name, arguments)?;
+    drain_to_string(state, handle)
+}
+
+/// Reads a finished extension tool's stdout to end-of-stream.
+///
+/// The receiver closes when the child's stdout does, so this ends on its own;
+/// `wait` afterwards is what reaps the child rather than leaving a zombie.
+fn drain_to_string(
+    state: &mut WasmState,
+    handle: wasmtime::component::Resource<HostExecution>,
+) -> Result<String, String> {
+    use wasmtime_wasi::WasiView;
+
+    let exec = state
+        .table()
+        .delete(handle)
+        .map_err(|e| format!("Failed to take execution handle: {e}"))?;
+    let receiver = exec.stdout.lock().take();
+    let mut out = Vec::new();
+    if let Some(rx) = receiver {
+        while let Ok(chunk) = rx.recv() {
+            out.extend_from_slice(&chunk);
+        }
+    }
+    let _ = exec
+        .running
+        .lock()
+        .wait_with_timeout(std::time::Duration::from_secs(1));
+    Ok(String::from_utf8_lossy(&out).into_owned())
+}
+
 pub(crate) fn execute_tool(
+    state: &mut WasmState,
+    name: String,
+    arguments: String,
+) -> Result<wasmtime::component::Resource<HostExecution>, String> {
+    verify_tool_call(state, &name, &arguments)?;
+    execute_tool_unverified(state, name, arguments)
+}
+
+/// The extension path proper. Callers must have run [`verify_tool_call`].
+fn execute_tool_unverified(
     state: &mut WasmState,
     name: String,
     arguments: String,
@@ -46,21 +135,7 @@ pub(crate) fn execute_tool(
         }
     }
 
-    if let Some(orchestrator) = state.orchestrator.as_ref().and_then(|w| w.upgrade()) {
-        let exec_cmd = crate::ipc::RasRpcCommand::ExecuteTool {
-            call_id: "test".to_string(),
-            name: name.clone(),
-            arguments: arguments.clone(),
-        };
-        let dummy_req = crate::ipc::RasRpcRequest {
-            id: Some("test".to_string()),
-            command: exec_cmd,
-        };
-        let req_bytes = serde_json::to_vec(&dummy_req).unwrap_or_default();
-        if let Err(e) = orchestrator.verify_rpc_exclude(&state.name, &dummy_req, &req_bytes) {
-            return Err(format!("Operation rejected by security extension: {e}"));
-        }
-    }
+    verify_tool_call(state, &name, &arguments)?;
 
     let provider_arc = match provider_opt {
         Some(arc) => arc,

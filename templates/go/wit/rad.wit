@@ -198,6 +198,19 @@ world rad-extension {
     import open-file: func(path: string, writeable: bool) -> result<file-handle, string>;
     import open-process: func(command: string) -> result<execution-handle, string>;
     import execute-tool: func(name: string, arguments: string) -> result<execution-handle, string>;
+    // Returns the tool's output directly instead of an `execution-handle`.
+    //
+    // Every caller of `execute-tool` reads the handle straight through to a
+    // string (see `rad-orchestrator`'s `execute_tool_sync`), so the handle is
+    // ceremony — and it forced any provider that merely *has* an answer to
+    // manufacture a process to carry it. `skill-tool-provider` shelled out to
+    // `echo -n` for exactly this reason, which meant a Markdown reader needed
+    // bash permission.
+    //
+    // Added rather than changing `execute-tool`: §2.2 of ARCHITECTURE-NEXT.md
+    // establishes, by experiment, that a *new* top-level import leaves existing
+    // components untouched, while altering an existing one breaks all of them.
+    import execute-tool-text: func(name: string, arguments: string) -> result<string, string>;
     import open-http-stream: func(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>;
 
     // guest functions exported by the extension
@@ -213,6 +226,19 @@ world rad-orchestrator {
     import open-file: func(path: string, writeable: bool) -> result<file-handle, string>;
     import open-process: func(command: string) -> result<execution-handle, string>;
     import execute-tool: func(name: string, arguments: string) -> result<execution-handle, string>;
+    // Returns the tool's output directly instead of an `execution-handle`.
+    //
+    // Every caller of `execute-tool` reads the handle straight through to a
+    // string (see `rad-orchestrator`'s `execute_tool_sync`), so the handle is
+    // ceremony — and it forced any provider that merely *has* an answer to
+    // manufacture a process to carry it. `skill-tool-provider` shelled out to
+    // `echo -n` for exactly this reason, which meant a Markdown reader needed
+    // bash permission.
+    //
+    // Added rather than changing `execute-tool`: §2.2 of ARCHITECTURE-NEXT.md
+    // establishes, by experiment, that a *new* top-level import leaves existing
+    // components untouched, while altering an existing one breaks all of them.
+    import execute-tool-text: func(name: string, arguments: string) -> result<string, string>;
     import open-http-stream: func(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>;
 
     export on-event: func(event: ras-core-event) -> result<_, string>;
@@ -233,6 +259,8 @@ world rad-tool-provider {
     import open-file: func(path: string, writeable: bool) -> result<file-handle, string>;
     import open-process: func(command: string) -> result<execution-handle, string>;
     import execute-tool: func(name: string, arguments: string) -> result<execution-handle, string>;
+    // See `rad-extension` above for why this exists alongside `execute-tool`.
+    import execute-tool-text: func(name: string, arguments: string) -> result<string, string>;
     import open-http-stream: func(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>;
 
     export get-tools: func() -> result<string, string>;

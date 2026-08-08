@@ -1,5 +1,5 @@
 use crate::radcomp::extension::types as wit;
-use crate::{execute_tool, host_rpc};
+use crate::{execute_tool_text, host_rpc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -51,31 +51,14 @@ pub struct ToolCallBuffer {
     pub arguments: String,
 }
 
+/// Runs a tool and returns its output.
+///
+/// Uses `execute-tool-text` rather than `execute-tool`: this function only ever
+/// wanted the string, and the drain loop it used to run — read, poll `wait`,
+/// sleep, drain again, 30s ceiling — now lives on the host, where a module can
+/// simply return its answer without a process in between.
 pub fn execute_tool_sync(name: &str, arguments: &str) -> Result<String, String> {
-    let exec = execute_tool(name, arguments)?;
-    let stdout = exec.get_stdout();
-    let mut output = Vec::new();
-    let start = std::time::Instant::now();
-
-    loop {
-        let chunk = stdout.read(4096)?;
-        if chunk.is_empty() {
-            if exec.wait().is_ok() {
-                // final drain
-                let last_chunk = stdout.read(4096)?;
-                output.extend(last_chunk);
-                break;
-            }
-            if start.elapsed() > std::time::Duration::from_secs(30) {
-                return Err("Tool execution timed out".to_string());
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        } else {
-            output.extend(chunk);
-        }
-    }
-
-    let res_str = String::from_utf8(output).map_err(|e| format!("Invalid UTF-8 from tool: {e}"))?;
+    let res_str = execute_tool_text(name, arguments)?;
     let is_rehydrating = crate::orchestrator::STATE
         .lock()
         .ok()
