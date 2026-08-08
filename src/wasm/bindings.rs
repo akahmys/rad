@@ -67,7 +67,7 @@ pub mod rad_kernel {
         // the real thing.
         with: {
             "rad:kernel/types/process": crate::kernel::proc::KernelProcess,
-            "rad:kernel/types/byte-stream": crate::kernel::proc::KernelStream,
+            "rad:kernel/types/byte-stream": crate::kernel::stream::KernelStream,
         },
     });
 }

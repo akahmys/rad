@@ -1555,6 +1555,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "net-module"
+version = "0.1.0"
+dependencies = [
+ "rad-sdk",
+ "serde",
+ "serde_json",
+ "wit-bindgen 0.36.0",
+]
+
+[[package]]
 name = "nibble_vec"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

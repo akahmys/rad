@@ -21,8 +21,8 @@ mkdir -p ~/.rad/wasm
 mkdir -p target/wasm32-wasip2/debug
 
 # Cargo replaces `-` with `_` in artefact names. Test-only components opt out
-# with `[package.metadata.rad] ship = false`, so `modules/echo` and
-# `modules/relay` are built for the suite but not installed. Both extensions and
+# with `[package.metadata.rad] ship = false` — `modules/echo`, `relay`, `spawn`
+# and `net` are built for the suite but not installed. Both extensions and
 # kernel modules land here; which of the two a component is depends on the world it
 # exports, and is declared in `~/.rad/config.json` under `extensions` or
 # `modules` respectively — see CONFIG.md.

@@ -1,11 +1,8 @@
 //! Host side of the kernel's imports.
 //!
-//! The implementations are stubs at this stage. That is not a placeholder in
-//! the sense `CODING.md` §3 forbids — the linker must supply every import a
-//! module might declare in order to instantiate it at all, and instantiation is
-//! what AWU 952 is verifying. `dispatch` gains a real implementation in AWU 953
-//! and the syscalls follow; until then a module calling one gets a clear error
-//! rather than a link failure naming an internal symbol.
+//! Every one of them is now implemented: `dispatch` here, `proc-spawn` in
+//! `proc.rs`, `net-open` in `net.rs`. The syscall surface is closed at three
+//! (§3.1) — anything else a module needs, it reaches through `std` on WASI.
 //!
 //! Note that a module importing *nothing* from `rad:kernel` still instantiates:
 //! `modules/echo` uses neither interface and its component declares no
@@ -43,16 +40,6 @@ impl KernelState {
             table,
         }
     }
-
-    fn unimplemented(&self, what: &str) -> types::Error {
-        types::Error {
-            code: 501,
-            message: format!(
-                "module '{}' called {what}, which the kernel does not implement yet",
-                self.module_name
-            ),
-        }
-    }
 }
 
 impl wasmtime_wasi::WasiView for KernelState {
@@ -77,11 +64,11 @@ impl syscall::Host for KernelState {
 
     fn net_open(
         &mut self,
-        _url: String,
-        _headers: Vec<(String, String)>,
-        _body: Vec<u8>,
+        url: String,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
     ) -> Result<wasmtime::component::Resource<types::ByteStream>, types::Error> {
-        Err(self.unimplemented("net-open"))
+        super::net::open(self, url, headers, body)
     }
 
     fn log(&mut self, trace_id: String, level: String, message: String) {

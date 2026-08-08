@@ -11,6 +11,7 @@
 //! below turns that from a hang into an error before the lock is ever reached.
 
 use super::loader::ModuleRuntime;
+use super::posts::Posted;
 use super::registry::Registry;
 use parking_lot::Mutex;
 use std::collections::{HashMap, VecDeque};
@@ -25,15 +26,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// cannot stop code that never checks it.
 pub const EPOCH_TICK_MS: u64 = 50;
 pub const HANDLE_DEADLINE_TICKS: u64 = 600; // 30s
-
-/// A message queued by `dispatch.post`, delivered once the target is idle.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Posted {
-    pub from: String,
-    pub target: String,
-    pub method: String,
-    pub payload: String,
-}
 
 /// Everything a host call needs to route a message.
 pub struct KernelShared {
@@ -69,6 +61,14 @@ pub struct KernelShared {
     /// until this was added — a user who had turned HITL on would have lost it
     /// silently. `tests/hitl_tests.rs` is what caught it.
     pub hitl_enabled: std::sync::atomic::AtomicBool,
+    /// Connect and per-chunk-heartbeat budgets for `net-open`.
+    ///
+    /// One per kernel, where the extension host has one per extension
+    /// (`src/wasm/loader.rs` builds a fresh policy for every `WasmState`). The
+    /// finer grain there is unused — no extension calls
+    /// `SetStreamTimeoutPolicy` — so this is the same behaviour with one owner
+    /// rather than a capability nobody exercises.
+    pub llm_timeout_policy: Arc<Mutex<crate::ipc::TimeoutPolicy>>,
     ticker_stop: Arc<AtomicBool>,
 }
 
@@ -86,6 +86,13 @@ impl KernelShared {
     pub fn new() -> Arc<Self> {
         Self::with_workspace(".")
     }
+
+    /// The heartbeat a kernel built without a config uses.
+    ///
+    /// Matches `config::default_llm_stream_heartbeat_ms`. Duplicated rather
+    /// than imported because that function is private to `config`, and a test
+    /// kernel should not need a `Config` to exist.
+    const DEFAULT_HEARTBEAT_MS: u64 = 15_000;
 
     /// The kernel, rooted at a workspace.
     ///
@@ -119,6 +126,10 @@ impl KernelShared {
             processes: Arc::new(crate::process::ProcessManager::new()),
             workspace: workspace.into(),
             hitl_enabled: std::sync::atomic::AtomicBool::new(false),
+            llm_timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Dynamic {
+                heartbeat_timeout_ms: Self::DEFAULT_HEARTBEAT_MS,
+                max_silent_wait_ms: Self::DEFAULT_HEARTBEAT_MS,
+            })),
             ticker_stop,
         })
     }
@@ -236,7 +247,12 @@ impl KernelShared {
         result
     }
 
-    fn deliver(&self, name: &str, method: &str, payload: &str) -> Result<String, String> {
+    pub(super) fn deliver(
+        &self,
+        name: &str,
+        method: &str,
+        payload: &str,
+    ) -> Result<String, String> {
         // Clone the Arc and drop the map lock immediately: holding it across the
         // guest call would serialise every module in the process.
         let runtime = {
@@ -250,48 +266,9 @@ impl KernelShared {
         runtime.handle(method, payload)
     }
 
-    /// Queues a message. Never fails and never blocks — that is the whole point
-    /// of `post` versus `call` (§3.6.2).
-    pub fn post(&self, from: &str, target: &str, method: &str, payload: &str) {
-        self.post_queue.lock().push_back(Posted {
-            from: from.to_string(),
-            target: target.to_string(),
-            method: method.to_string(),
-            payload: payload.to_string(),
-        });
-    }
-
     /// Stops the epoch ticker. Called on shutdown; the thread also exits on its
     /// own once the engine is dropped.
     pub fn stop(&self) {
         self.ticker_stop.store(true, Ordering::Relaxed);
-    }
-
-    /// Delivers everything currently queued, and anything queued while doing so.
-    ///
-    /// Runs outside any in-flight `call`, so the stack is empty and a posted
-    /// message can legitimately reach a module that posted it — which is how
-    /// event loops are supposed to work.
-    ///
-    /// Returns each delivery's outcome, oldest first.
-    pub fn drain_posts(&self) -> Vec<(Posted, Result<String, String>)> {
-        let mut delivered = Vec::new();
-        // Bounded so a module posting to itself on every message cannot spin
-        // here forever; the remainder stays queued for the next drain.
-        const MAX_PER_DRAIN: usize = 1024;
-        while delivered.len() < MAX_PER_DRAIN {
-            let Some(posted) = self.post_queue.lock().pop_front() else {
-                break;
-            };
-            let outcome = match self.resolve(&posted.target, &posted.method) {
-                Some(name) => self.deliver(&name, &posted.method, &posted.payload),
-                None => Err(format!(
-                    "no module provides '{}' (posted from '{}')",
-                    posted.method, posted.from
-                )),
-            };
-            delivered.push((posted, outcome));
-        }
-        delivered
     }
 }

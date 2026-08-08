@@ -55,6 +55,7 @@ members = [
     "modules/echo",
     "modules/relay",
     "modules/spawn",
+    "modules/net",
     "modules/skills",
     "templates/rust",
 ]

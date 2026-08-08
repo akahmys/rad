@@ -6,7 +6,7 @@
 
 use super::loader::ModuleRuntime;
 use super::shared::KernelShared;
-use crate::config::ModuleConfig;
+use crate::config::Config;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -19,19 +19,26 @@ use std::sync::Arc;
 ///
 /// A configuration with no modules yields a kernel with nothing in it, which is
 /// the normal state until stage 3 moves the first extension across.
+///
+/// Takes the whole `Config` rather than the fields it reads. Those now live
+/// under three different sections (`modules`, `core`, `default_timeout`), and
+/// a positional list of a `&str`, a `bool` and a `u64` is a transposition
+/// waiting to happen every time the kernel needs one more of them.
 #[must_use]
-pub fn boot(
-    modules: &[ModuleConfig],
-    workspace: &str,
-    hitl_enabled: bool,
-) -> (Arc<KernelShared>, Vec<String>) {
-    let shared = KernelShared::with_workspace(workspace);
-    shared
-        .hitl_enabled
-        .store(hitl_enabled, std::sync::atomic::Ordering::Relaxed);
+pub fn boot(config: &Config) -> (Arc<KernelShared>, Vec<String>) {
+    let shared = KernelShared::with_workspace(&config.core.workspace);
+    shared.hitl_enabled.store(
+        config.core.hitl_enabled,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    let heartbeat_ms = config.default_timeout.llm_stream_heartbeat_ms;
+    *shared.llm_timeout_policy.lock() = crate::ipc::TimeoutPolicy::Dynamic {
+        heartbeat_timeout_ms: heartbeat_ms,
+        max_silent_wait_ms: heartbeat_ms,
+    };
     let mut loaded = Vec::new();
 
-    for entry in modules.iter().filter(|m| m.enabled) {
+    for entry in config.modules.iter().filter(|m| m.enabled) {
         let path = crate::config::expand_tilde(&entry.source);
         let runtime = match ModuleRuntime::load(
             &entry.name,

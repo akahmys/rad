@@ -1,5 +1,5 @@
 # Project Work Plan (PLANS.md)
-**Last Updated**: 2026-08-07
+**Last Updated**: 2026-08-09
 
 ## 🗺️ Long-Term Plan (Roadmap)
 - [✅] Phase 10: Codebase Refactoring & Rule Alignment (v0.15.0)
@@ -63,7 +63,7 @@
 - [✅] Phase 68: Repository Hygiene & Convention Audit — Authorship Rewrite, CI Workspace Fix, Rule Documents Corrected (v0.73.0)
 - [✅] Phase 69: Microkernel Migration — Preparation & Stage 0 (v0.74.0)
 - [✅] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (v0.75.0) (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
-- [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8; stages 3–5 done)
+- [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8; stages 3–5 done, stage 6 in progress)
 - [ ] Phase 73: Windows Support — post-migration, once `proc-spawn` is the single point of process supervision (`ARCHITECTURE-NEXT.md` §8)
 - [ ] Phase 72: Microkernel Migration — DAG/UI Extraction and Author Tooling (§9 stages 9–10)
 
@@ -81,7 +81,117 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 §9.4's invariant holds throughout: rad works at the end of every AWU, and
 `wit/rad.wit` is untouched.
 
-### 💡 Current AWU Status (stage 5)
+### 💡 Current AWU Status (stage 6)
+- [x] AWU 966: `net-open` — the fallible `byte-stream` and the 504 convention
+- [ ] AWU 967: `modules/llm-openai` — port the dialect table and the SSE parser
+- [ ] AWU 968: Route `GenerateLlmStream` to the module
+- [ ] AWU 969: Delete `ext/llm-connector`
+
+Three decisions were taken before the split, and each is recorded where it will
+be questioned again:
+
+- **`async_support` stays off.** §3.6 defers it until `net-open` exists, so this
+  was the point to decide. `net-open`'s host side is a thread plus a channel,
+  exactly like `proc-spawn`'s, so bounded polling gives the same non-blocking
+  property without it — while turning it on would make every host import async
+  and rewrite every call site, including the two remaining extensions' interop
+  path. That is not "one extension moved" (§9.1). **Revisit when `agent-loop`
+  becomes a module (stage 8)**, which is where §3.6.4's `post`-driven scheduler
+  — the actual beneficiary — arrives.
+- **The method names are `llm.generate` / `llm.next`, unprefixed.** The
+  `<module>.tools.list` convention exists because tools are plural and
+  aggregated (`src/kernel/tools.rs`). Generation is singular: exactly one
+  transport serves, and §4.2's second transport is an alternative rather than a
+  peer. So the registry routes by method, and two installed transports are a
+  startup collision (§3.6.8) — which is the correct answer, not a limitation.
+- **URL resolution moves to the host**, as far as it can go. `RAD_TEST_PORT`,
+  `normalize_base_url`, the `https://api.openai.com` default and the "No LLM
+  endpoint configured" error become host-side; `dialect.url()` and
+  `dialect.headers()` stay in the module, because moving those would put the
+  dialect table back in the host and dissolve §4.2's reason for the module to
+  exist. The module then reads no environment at all.
+  - One behavioural difference, invisible today: `RAD_TEST_PORT` currently
+    hard-codes `/v1/chat/completions` and ignores the dialect, so a non-default
+    dialect combined with the test port will produce a different URL afterwards.
+    No test does that — `dialect` is set in exactly one test file, to `None`.
+  - `tests/llm_connector_eager_load_tests.rs:167` asserts the **absence** of
+    "No LLM endpoint configured", so it passes vacuously if the wording drifts.
+    Moving the message host-side is exactly when that would happen: AWU 968 owns
+    both the move and a test that fails when the wording changes.
+
+#### AWU 966: `net-open` — the fallible `byte-stream`
+- **Objective**: The second syscall, and the last one. `proc-spawn` already
+  returns a `byte-stream`; what was missing was the HTTP side.
+- **Done**. `src/kernel/net.rs` (the request machinery, ported from
+  `src/wasm/imports_http.rs` rather than rewritten) and `src/kernel/stream.rs`
+  (the resource, moved out of `proc.rs` because both syscalls hand it back and
+  neither file has room for both under the 300-line limit). Driven from
+  `modules/net` — a fixture, `ship = false` — through `tests/kernel_net_tests.rs`.
+- **An empty read cannot mean two things.** This is the whole design of the
+  file. `proc.rs` maps both "nothing yet" and "the pipe closed" to an empty
+  read, which is honest because `process.wait` distinguishes them. HTTP has no
+  `wait`, and the SSE parser already treats an empty read as end-of-response —
+  so porting that mapping unchanged would have ended a response 100ms into a
+  slow first token. "Nothing yet" is therefore a `504` error, reusing the
+  "call again" convention `WAIT_PENDING` already established, and empty keeps
+  meaning "the body is over".
+- **A transport failure must not arrive as bytes or as silence.** Non-2xx, a
+  refused connection, a stalled peer: all reach the guest as an error, which is
+  why `KernelStream` grew `Fallible` alongside `Reader`. The extension host
+  reached the same split (`PipeReader` / `PipeReaderFallible`) for the same
+  reason. Confirmed by removing the error arm: the 404 test then reports a
+  *successful* call with an empty body — a truncated answer presented as a
+  complete one.
+- **A latent data-loss bug in `proc-spawn`'s reader, fixed here.** `read(max)`
+  truncated any chunk larger than `max` and discarded the remainder. Harmless so
+  far only because the process reader thread chunks at 1024 bytes while every
+  caller asks for 4096 — a coupling nothing enforced. Off a socket, chunks
+  routinely exceed 4096. Both variants now hold the remainder (`Incoming`), and
+  `read(0)` is rejected rather than answered with an empty slice that a
+  `Fallible` reader would read as end-of-response.
+- **Every assertion was checked by breaking the thing it guards**: swallowing
+  the error (404 → empty success), collapsing `PENDING` into empty (body
+  truncated to its first half), removing the leftover buffer (4,000 bytes → 64),
+  and dropping the headers before sending (the dialect's `Authorization` line
+  going nowhere).
+- **The `security-guard` gap now has a second occurrence.** The extension host
+  runs `verify_rpc_exclude` before every request; the kernel cannot, holding no
+  orchestrator handle. Same shape as `proc-spawn`'s, same owner: the `policy`
+  module (§3.4.3, stage 7). Two occurrences rather than one strengthens the case
+  for doing it there rather than special-casing either syscall.
+- `boot` now takes the whole `Config`. The settings the kernel reads are spread
+  across `modules`, `core` and `default_timeout`, and a positional list of a
+  `&str`, a `bool` and a `u64` is a transposition waiting to happen.
+- `src/kernel/host.rs`'s `unimplemented` helper is gone: with `net-open` landed,
+  all three syscalls are implemented and the surface is closed at three (§3.1).
+
+### 🔜 Stage 6 — what was already known
+
+Recorded before the split so it is not re-derived:
+
+- ~~**`net-open` is half-built.**~~ Landed in AWU 966, along with the fallible
+  reader `KernelStream` needed and the decision on async. All three are recorded
+  above.
+- **WASI 0.3 is not a prerequisite** (§8): it deleted `wasi:io` and needs
+  Wasmtime 43+. Staying on 29 is a deliberate choice, not an oversight.
+- **The consumer of LLM events is still an extension.** `rad-orchestrator` reads
+  `RasCoreEvent::LlmConnectorEvent` through `src/wasm/bindings_event.rs`, so the
+  module has to feed that same bus with byte-identical JSON. §3.6.4's `post`
+  shape cannot be used yet: `agent-loop` does not exist until stage 8, and
+  nothing drives `drain_posts()` in production — only a test calls it. Stage 6
+  is therefore pull-based, and `rpc_meta_llm_connector.rs`'s existing polling
+  thread is the loop that stays.
+- **`ext/llm-connector` has no test that ever speaks to a server**, the same gap
+  `mcp-tool-provider` had in stage 5. `dialect/tests.rs` is its only test file.
+
+### ⚠️ Known flake (unresolved)
+One `cargo test --workspace` run during AWU 963 reported `122 passed / 1 failed`;
+cargo's fail-fast truncated the run, so 122 is a partial count. It did not
+reproduce across five subsequent full runs, and the failing test's name was not
+captured. Recorded so a recurrence is recognised rather than investigated from
+scratch.
+
+### 💡 Previous AWU Status (stage 5)
 - [x] AWU 963: Implement `proc-spawn`, `process`, and `byte-stream` in the kernel
 - [x] AWU 964: `modules/mcp` — port the MCP client
 - [x] AWU 965: Route tools to the module and delete `ext/mcp-tool-provider`
@@ -176,32 +286,6 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
   entries on the first attempt (non-greedy matching across whole blocks, the
   same failure as the timeout-assertion edit in stage 3). Reverted and redone by
   brace matching, asserting one `name:` per removed block.
-
-### 🔜 Next: stage 6 (`llm-connector` → `llm-transport-openai`)
-
-Not yet broken into AWUs. What is already known, so it is not re-derived:
-
-- **`net-open` is half-built.** It returns a `byte-stream`, and that resource
-  now exists with a working host implementation (`src/kernel/proc.rs`). What is
-  missing is the HTTP side. Reuse the bounding rule established there: a host
-  call must not block indefinitely, because epoch interruption preempts guest
-  code only.
-- **`KernelStream` needs a fallible reader.** Its variants are `Reader`,
-  `Writer`, `Closed`. HTTP has to carry a mid-stream error to the guest, which
-  is why the extension host has both `PipeReader` and `PipeReaderFallible`
-  (`src/wasm/imports_resources.rs`).
-- **Async is the open question.** §3.6 defers `Config::async_support` until
-  `net-open` exists; it exists as a signature, so this is the point to decide.
-  Confirmed present in wasmtime 29.0.1, which is what the workspace pins.
-- **WASI 0.3 is not a prerequisite** (§8): it deleted `wasi:io` and needs
-  Wasmtime 43+. Staying on 29 is a deliberate choice, not an oversight.
-
-### ⚠️ Known flake (unresolved)
-One `cargo test --workspace` run during AWU 963 reported `122 passed / 1 failed`;
-cargo's fail-fast truncated the run, so 122 is a partial count. It did not
-reproduce across five subsequent full runs, and the failing test's name was not
-captured. Recorded so a recurrence is recognised rather than investigated from
-scratch.
 
 ### 💡 Previous AWU Status (stage 4)
 - [✅] AWU 959: `modules/skills` — port discovery and execution (Result: Success — 10 ported tests plus 3 against a real skill tree; the SDK gained an `infallible` adapter on its third occurrence)

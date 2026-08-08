@@ -75,11 +75,7 @@ impl Orchestrator {
         // them but silently has none is a trap — every integration test hit it,
         // and each one had to remember to boot the kernel by hand. With nothing
         // configured this loads nothing and costs nothing.
-        let (kernel, loaded) = crate::kernel::boot(
-            &config.modules,
-            &config.core.workspace,
-            config.core.hitl_enabled,
-        );
+        let (kernel, loaded) = crate::kernel::boot(&config);
         if !loaded.is_empty() {
             crate::log_host!(
                 "[kernel] loaded {} module(s): {}",

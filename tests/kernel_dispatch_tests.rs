@@ -18,6 +18,16 @@ fn wasm(name: &str) -> PathBuf {
     panic!("{name}.wasm not built for wasm32-wasip2; run cargo build --target wasm32-wasip2")
 }
 
+/// A default config carrying just the modules under test. `boot` takes the
+/// whole `Config` because the settings it reads are spread across three
+/// sections; everything these tests do not set stays at its default.
+fn config_with(modules: Vec<rad::config::ModuleConfig>) -> rad::config::Config {
+    rad::config::Config {
+        modules,
+        ..Default::default()
+    }
+}
+
 /// Loads `echo` and `relay` into one kernel.
 fn kernel() -> Arc<KernelShared> {
     let (echo, relay) = (wasm("echo_module"), wasm("relay_module"));
@@ -190,16 +200,12 @@ fn boot_loads_modules_from_config_and_serves_kernel_config() {
     // its config comes back through `kernel.config` — the kernel answering
     // dispatch like any other target, so a module never special-cases the host.
     let path = wasm("echo_module");
-    let (k, loaded) = rad::kernel::boot(
-        &[rad::config::ModuleConfig {
-            name: "echo".to_string(),
-            source: path.to_string_lossy().to_string(),
-            enabled: true,
-            config: serde_json::json!({"greeting": "hi"}),
-        }],
-        ".",
-        false,
-    );
+    let (k, loaded) = rad::kernel::boot(&config_with(vec![rad::config::ModuleConfig {
+        name: "echo".to_string(),
+        source: path.to_string_lossy().to_string(),
+        enabled: true,
+        config: serde_json::json!({"greeting": "hi"}),
+    }]));
     assert_eq!(loaded, vec!["echo"]);
 
     let reply = k
@@ -214,16 +220,12 @@ fn boot_loads_modules_from_config_and_serves_kernel_config() {
 #[test]
 fn a_disabled_module_is_not_loaded() {
     let path = wasm("echo_module");
-    let (_k, loaded) = rad::kernel::boot(
-        &[rad::config::ModuleConfig {
-            name: "echo".to_string(),
-            source: path.to_string_lossy().to_string(),
-            enabled: false,
-            config: serde_json::Value::Null,
-        }],
-        ".",
-        false,
-    );
+    let (_k, loaded) = rad::kernel::boot(&config_with(vec![rad::config::ModuleConfig {
+        name: "echo".to_string(),
+        source: path.to_string_lossy().to_string(),
+        enabled: false,
+        config: serde_json::Value::Null,
+    }]));
     assert!(loaded.is_empty());
 }
 
@@ -231,23 +233,19 @@ fn a_disabled_module_is_not_loaded() {
 fn a_broken_module_is_skipped_rather_than_aborting_startup() {
     // One bad third-party module must not stop rad from running.
     let good = wasm("echo_module");
-    let (_k, loaded) = rad::kernel::boot(
-        &[
-            rad::config::ModuleConfig {
-                name: "missing".to_string(),
-                source: "/nonexistent/module.wasm".to_string(),
-                enabled: true,
-                config: serde_json::Value::Null,
-            },
-            rad::config::ModuleConfig {
-                name: "echo".to_string(),
-                source: good.to_string_lossy().to_string(),
-                enabled: true,
-                config: serde_json::Value::Null,
-            },
-        ],
-        ".",
-        false,
-    );
+    let (_k, loaded) = rad::kernel::boot(&config_with(vec![
+        rad::config::ModuleConfig {
+            name: "missing".to_string(),
+            source: "/nonexistent/module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+        rad::config::ModuleConfig {
+            name: "echo".to_string(),
+            source: good.to_string_lossy().to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+    ]));
     assert_eq!(loaded, vec!["echo"], "the good module should still load");
 }
