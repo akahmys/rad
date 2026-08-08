@@ -40,17 +40,6 @@ pub mod rad_tool_provider {
     });
 }
 
-pub mod rad_llm_connector {
-    wasmtime::component::bindgen!({
-        path: "wit/connector/llm-connector.wit",
-        world: "llm-connector",
-        additional_derives: [serde::Serialize, serde::Deserialize],
-        with: {
-            "radcomp:connector/types/stream-handle": crate::wasm::HostStream,
-        }
-    });
-}
-
 pub mod rad_kernel {
     // The migration's new surface, live alongside the existing one. A fourth,
     // unrelated package: adding it cannot change the type of anything the six

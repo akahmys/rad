@@ -117,6 +117,6 @@ impl bindings::wit::HostStreamHandle for WasmState {
     }
 }
 
-// `file-handle` (imports_resources_file.rs) and `execution-handle` +
-// llm-connector stream glue (imports_resources_exec.rs) implementations
-// live in sibling files to keep this one under the 300-line limit.
+// `file-handle` (imports_resources_file.rs) and `execution-handle`
+// (imports_resources_exec.rs) implementations live in sibling files to keep
+// this one under the 300-line limit.

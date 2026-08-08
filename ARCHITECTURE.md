@@ -23,7 +23,7 @@ graph TD
         WasmRuntime[Wasm Runtime] -->|RPC Orders / Verification| Gateway
         
         Orchestrator["1. LLM Orchestrator <br> (rad_orchestrator.wasm)"]
-        Connector["2. LLM Connector <br> (llm_connector.wasm)"]
+        Connector["2. LLM Transport <br> (llm_openai_module.wasm — kernel module)"]
         SecurityGuard["3. Security Guard <br> (security_guard.wasm)"]
         ToolProvider["4. Tool/MCP Provider <br> (mcp_module.wasm — kernel module)"]
         SkillModule["5. Skills <br> (skills_module.wasm — kernel module)"]
@@ -85,9 +85,10 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
    - **Isolation**: Not an extension — it exports the `rad:kernel` `module` world and answers `skills.tools.list` / `skills.tools.call`, which the host aggregates alongside every extension's tools (`src/kernel/tools.rs`). Its reach is whatever the kernel loader preopens, currently the working directory and `$HOME`, rather than a permission block in the config.
    - **Why it moved**: the old `rad-tool-provider` WIT world made `execute-tool` return an `execution-handle`, so the extension produced its answer by shelling out to `open_process("echo -n '...'")` and therefore required `allow_bash` — a Markdown reader holding shell permission. A module returns a string, and the requirement disappeared with it.
 
-5. **LLM Connector (Model API translation & streaming)**
-   - **Responsibility**: Translates standardized Message objects and tool definitions into model-specific API payloads, initiates connections (using Core HTTP capability), and parses SSE stream chunks.
-   - **Isolation**: Decouples model-specific network packet parsing and JSON payload generation from the Orchestrator, rendering the main decision loop fully model-agnostic.
+5. **LLM Transport (`llm-openai`)**
+   - **Responsibility**: Builds the `/v1/chat/completions` payload, opens the connection through the `net-open` syscall, and parses SSE chunks into events. Provider differences live in a compiled-in dialect table (URL path, auth header, JSON Pointers into the payload); an `llm.endpoints` profile picks a row by name.
+   - **Isolation**: Not an extension — it exports the `rad:kernel` `module` world and answers `llm.generate` / `llm.next`. Endpoint *resolution* is the host's (`RAD_TEST_PORT`, URL normalisation, the default endpoint, and the error when nothing is configured), so the module reads no environment and what it requests is a function of its arguments.
+   - **Why it moved**: it was `ext/llm-connector` until AWU 967–969. Three parallel descriptions of the same wire shape — a WIT record, a serde struct, and the host's own parse target — collapse to one when the boundary is JSON rather than WIT.
 6. **Context Compactor (`context-tools`)**
    - **Responsibility**: Owns all context-size-reduction policy once the Orchestrator has assembled the raw message list — trimming it to a configurable history-length budget (count-based windowing) and/or a character budget derived from the active LLM endpoint's real context window (size-based windowing), whichever is more restrictive. Also exposes auxiliary context-gathering utilities (`get-repo-map`, which delegates to the same semantic/tree-sitter repo map every other extension gets via the shared `GetRepoMap` RPC).
    - **Isolation**: Stateless and pure — takes a message list (and thresholds) in, returns a possibly-shortened list and a human-readable summary out. It does not read the DAG or hold session state itself. Failure degrades gracefully: the Orchestrator falls back to sending the uncompacted list rather than blocking the turn, since compaction is a quality optimization, not a correctness requirement.
@@ -160,7 +161,7 @@ pub enum RasCoreEvent {
     Rehydrate {
         active_calls: Vec<PendingToolCallInfo>,
     },
-    /// A decoded event from the LLM Connector extension (content token,
+    /// A decoded event from the LLM transport (content token,
     /// reasoning token, tool-call delta, completion/usage, or error),
     /// carried as a JSON string so the Core stays unaware of model-specific
     /// shapes. This is the Orchestrator's primary input during a turn.
@@ -414,7 +415,7 @@ The threshold is deliberately generous rather than minimal: two or three retries
 
 ### 5.2 Diversity Protocol (Handling Different API Connectors)
 
-The Core is completely unaware of LLM-specific API differences (OpenAI, Anthropic, Ollama, etc.) or MCP (Model Context Protocol) schemas. Model adaptation is offloaded to a specialized, hot-swappable **LLM Connector** Wasm extension.
+The Core is completely unaware of LLM-specific API differences (OpenAI, Anthropic, Ollama, etc.) or MCP (Model Context Protocol) schemas. Model adaptation is offloaded to a specialized, hot-swappable **LLM transport** kernel module (`llm-openai`).
 
 ```mermaid
 sequenceDiagram

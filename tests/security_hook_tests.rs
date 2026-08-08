@@ -112,15 +112,15 @@ fn test_security_verification_hook_rejection() {
                 ),
             ]),
         },
-        ExtensionConfig {
-            name: "llm-connector".to_string(),
-            enabled: true,
-            role: "llm-connector".to_string(),
-            source: "target/wasm32-wasip2/debug/llm_connector.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::new(),
-        },
     ];
+    // The LLM transport is a kernel module as of AWU 969;
+    // `Orchestrator::new` boots whatever `modules` declares.
+    config.modules = vec![rad::config::ModuleConfig {
+        name: "llm-openai".to_string(),
+        source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
+        enabled: true,
+        config: serde_json::Value::Null,
+    }];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {

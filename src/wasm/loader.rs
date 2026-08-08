@@ -64,10 +64,6 @@ impl WasmRuntime {
                 bindings::rad_tool_provider::RadToolProvider::add_to_linker(&mut linker, |s| s)
                     .map_err(|e| format!("Linker error RadToolProvider: {e}"))?
             }
-            "llm-connector" => {
-                bindings::rad_llm_connector::LlmConnector::add_to_linker(&mut linker, |s| s)
-                    .map_err(|e| format!("Linker error LlmConnector: {e}"))?
-            }
             _ => bindings::RadExtension::add_to_linker(&mut linker, |s| s)
                 .map_err(|e| format!("Linker error RadExtension: {e}"))?,
         }
@@ -121,7 +117,6 @@ impl WasmRuntime {
         let mut orchestrator = None;
         let mut security_guard = None;
         let mut tool_provider = None;
-        let mut llm_connector = None;
 
         match role.as_str() {
             "orchestrator" => {
@@ -142,12 +137,6 @@ impl WasmRuntime {
                         .map_err(|e| format!("Failed to create tool-provider bindings: {e}"))?,
                 )
             }
-            "llm-connector" => {
-                llm_connector = Some(
-                    bindings::rad_llm_connector::LlmConnector::new(&mut store, &instance)
-                        .map_err(|e| format!("Failed to create llm-connector bindings: {e}"))?,
-                )
-            }
             _ => {
                 extension = Some(
                     bindings::RadExtension::new(&mut store, &instance)
@@ -162,7 +151,6 @@ impl WasmRuntime {
             orchestrator,
             security_guard,
             tool_provider,
-            llm_connector,
             instance,
             role,
         })

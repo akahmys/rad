@@ -92,10 +92,8 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
             messages_json,
             tools_json,
         } => {
-            // The module answers first when one is loaded, the same bridge
-            // `CallExtension` uses below: the caller keeps issuing the same RPC
-            // and which surface serves it is a deployment question. Removing
-            // `llm-openai` from `modules` falls straight back to the extension.
+            // The transport is a kernel module as of AWU 969; the
+            // `llm-connector` extension and its branch are gone with it.
             match ctx.orchestrator {
                 Some(orch) if crate::wasm::rpc_meta_llm_module::is_available(orch) => {
                     crate::wasm::rpc_meta_llm_module::generate(
@@ -105,11 +103,13 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
                         ctx,
                     )
                 }
-                Some(_) => crate::wasm::rpc_meta_llm_connector::generate(
-                    model,
-                    messages_json,
-                    tools_json,
-                    ctx,
+                // Named rather than left to the no-orchestrator path below,
+                // whose hardcoded endpoint would surface as a connection
+                // failure that explains nothing about what is missing.
+                Some(_) => Err(
+                    "No LLM transport is loaded. Add \"llm-openai\" to `modules` \
+                     in ~/.rad/config.json."
+                        .to_string(),
                 ),
                 None => crate::wasm::rpc_meta_llm_fallback::generate(ctx),
             }
@@ -186,7 +186,7 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
 /// `api_key`, which `active_llm_profile_json` deliberately omits from the
 /// generic `GetActiveLlmProfile` RPC response (that's reachable by any
 /// extension; a credential doesn't belong in a broadly-readable fact
-/// query). Used host-internally by `rpc_meta_llm_connector`, which passes
+/// query). Used host-internally by `rpc_meta_llm_module`, which passes
 /// `base_url`/`api_key` as explicit call arguments to the one extension
 /// that actually needs them, instead of the old approach of setting
 /// process environment variables for a Wasm guest to read — a `WasiCtxBuilder`

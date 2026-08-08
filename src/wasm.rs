@@ -27,7 +27,6 @@ pub mod rpc;
 pub mod rpc_dag;
 pub mod rpc_fs;
 pub mod rpc_meta;
-mod rpc_meta_llm_connector;
 mod rpc_meta_llm_fallback;
 mod rpc_meta_llm_module;
 pub mod rpc_network;
@@ -43,7 +42,7 @@ pub enum HostStream {
     /// Like `PipeReader`, but the producer can report a mid-stream failure
     /// (connect/read timeout, HTTP error) as an `Err` instead of it being
     /// silently swallowed as an empty/unparseable chunk. Used by
-    /// `open_http_stream` for the `llm-connector` extension.
+    /// `open_http_stream` for an extension that streams from the network.
     PipeReaderFallible(Mutex<std::sync::mpsc::Receiver<Result<Vec<u8>, String>>>),
     PipeWriter(Mutex<Box<dyn std::io::Write + Send>>),
     Closed,
@@ -105,7 +104,6 @@ pub struct WasmRuntime {
     pub orchestrator: Option<bindings::rad_orchestrator::RadOrchestrator>,
     pub security_guard: Option<bindings::rad_security_guard::RadSecurityGuard>,
     pub tool_provider: Option<bindings::rad_tool_provider::RadToolProvider>,
-    pub llm_connector: Option<bindings::rad_llm_connector::LlmConnector>,
     pub instance: wasmtime::component::Instance,
     pub role: String,
 }
@@ -135,7 +133,6 @@ impl WasmRuntime {
             }
         } else if self.role == "security"
             || self.role == "tool-provider"
-            || self.role == "llm-connector"
             || self.role == "context-tools"
             || self.role == "web-access"
         {
@@ -182,11 +179,10 @@ impl WasmRuntime {
             }
         } else if self.role == "orchestrator"
             || self.role == "tool-provider"
-            || self.role == "llm-connector"
             || self.role == "context-tools"
             || self.role == "web-access"
         {
-            // Orchestrator, tool-provider, and llm-connector are auto-approved by host unless targeted by a security guard
+            // Orchestrator and tool-provider are auto-approved by the host unless targeted by a security guard
         } else {
             if let Some(ref ext) = self.extension {
                 let approved = ext

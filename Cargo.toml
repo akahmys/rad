@@ -46,7 +46,6 @@ members = [
     ".",
     "ext/rad-orchestrator",
     "ext/security-guard",
-    "ext/llm-connector",
     "models",
     "crates/rad-abi",
     "crates/rad-sdk",

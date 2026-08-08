@@ -35,7 +35,7 @@ fn a_blank_base_url_is_treated_as_unset() {
 
 /// The exact wording, not merely "an error".
 ///
-/// `tests/llm_connector_eager_load_tests.rs` asserts this string is **absent**
+/// `tests/llm_endpoint_config_tests.rs` asserts this string is **absent**
 /// from the conversation, which is a check that passes vacuously the moment the
 /// wording drifts. This is the other half: something has to fail when it
 /// changes, or that test stops meaning anything.

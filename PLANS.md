@@ -63,7 +63,7 @@
 - [✅] Phase 68: Repository Hygiene & Convention Audit — Authorship Rewrite, CI Workspace Fix, Rule Documents Corrected (v0.73.0)
 - [✅] Phase 69: Microkernel Migration — Preparation & Stage 0 (v0.74.0)
 - [✅] Phase 70: Microkernel Migration — Kernel Surface Alongside the Existing One (v0.75.0) (`ARCHITECTURE-NEXT.md` §9 stages 1–2)
-- [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8; stages 3–5 done, stage 6 in progress)
+- [🔄] Phase 71: Microkernel Migration — Extensions to Modules, One at a Time (§9 stages 3–8; stages 3–6 done)
 - [ ] Phase 73: Windows Support — post-migration, once `proc-spawn` is the single point of process supervision (`ARCHITECTURE-NEXT.md` §8)
 - [ ] Phase 72: Microkernel Migration — DAG/UI Extraction and Author Tooling (§9 stages 9–10)
 
@@ -81,11 +81,11 @@ orchestrator never asks for a repo map. So `optimize` is the entire job.
 §9.4's invariant holds throughout: rad works at the end of every AWU, and
 `wit/rad.wit` is untouched.
 
-### 💡 Current AWU Status (stage 6)
+### 💡 Current AWU Status (stage 6 — complete)
 - [x] AWU 966: `net-open` — the fallible `byte-stream` and the 504 convention
 - [x] AWU 967: `modules/llm-openai` — port the dialect table and the SSE parser
 - [x] AWU 968: Route `GenerateLlmStream` to the module
-- [ ] AWU 969: Delete `ext/llm-connector`
+- [x] AWU 969: Delete `ext/llm-connector`
 
 Three decisions were taken before the split, and each is recorded where it will
 be questioned again:
@@ -243,6 +243,32 @@ be questioned again:
 - The host still models nothing about the request: `messages_json` and
   `tools_json` are spliced in as parsed JSON. `RemoteMessage`/`RemoteTool` and
   the WIT conversion still exist for the extension path, and go with it in 969.
+
+#### AWU 969: Delete `ext/llm-connector`
+- **DoD**: Extension gone, suite green, generation still works.
+- **Done. Stage 6 complete: 2 extensions, 4 modules.** Crate, `wit/connector/`,
+  `bindings::rad_llm_connector`, `WasmRuntime::llm_connector`, the loader's
+  `"llm-connector"` role branches, the connector-only host impls in
+  `imports_resources_exec.rs`, and `rpc_meta_llm_connector.rs` are all gone.
+- **Every test moved before the extension did**, per the rule stage 5 set. Ten
+  files swapped their `llm-connector` extension entry for an `llm-openai`
+  module entry, and `llm_connector_eager_load_tests.rs` — the only test that
+  drives a *real* `llm.endpoints` config rather than the `RAD_TEST_PORT` bypass
+  — was migrated and renamed `llm_endpoint_config_tests.rs` rather than deleted
+  with its subject. The module cannot have the bug it guards (it reads no
+  environment), but that is a property worth holding in place.
+- **The edit was scripted, and the script's assertions caught two things** —
+  which is the whole reason for asserting rather than trusting a regex. A
+  `rad::config::ExtensionConfig` path prefix broke the brace match on the second
+  file, and two stale doc comments naming `mcp-tool-provider` (already gone
+  since stage 5) surfaced as "leftover reference". Neither was the failure mode
+  that bit three times before; the guard is what made the difference.
+- 256 passed, down exactly 8 from 264: the extension's own `dialect/tests.rs`,
+  whose copies live in the module and were counted twice while both existed.
+- With the extension gone there is no fall-back branch left, so an orchestrator
+  with no transport module now gets a named error rather than the
+  no-orchestrator path's hardcoded endpoint, which would have surfaced as a
+  connection failure explaining nothing.
 
 ### 🔜 Stage 6 — what was already known
 

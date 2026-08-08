@@ -1,4 +1,4 @@
-// Regression test for a bug found during real-world dogfeeding: `WasmRuntime`
+// Regression test for a bug found during real-world dogfooding: `WasmRuntime`
 // snapshots the host process's environment once at Wasm instance creation
 // (`WasiCtxBuilder::inherit_env()`), so a *later* `std::env::set_var` on the
 // host is invisible to an already-running instance. Since Phase 47-3 made
@@ -6,11 +6,14 @@
 // used to read its base_url/api_key from env vars that were only set once a
 // task actually started — so the very first task after boot always failed
 // with "No LLM endpoint configured", only succeeding after a self-healing
-// respawn recreated the instance. The fix (this session) has the host
-// resolve base_url/api_key from config and pass them as explicit call
-// arguments on every `generate_stream` invocation instead — this test
-// exercises the exact eager-loading order and a *real* (non-`RAD_TEST_PORT`)
-// `llm.endpoints` config to prove the first attempt now succeeds outright.
+// respawn recreated the instance. The fix had the host resolve base_url/api_key
+// from config and pass them as explicit call arguments on every invocation.
+//
+// Migrated to the transport module in AWU 969 rather than deleted with the
+// extension. The module cannot have this bug — it reads no environment at all,
+// and `rpc_meta_llm_module::resolve_base_url` runs per call — but that is a
+// property worth holding in place, and this is the only test that drives a
+// *real* `llm.endpoints` config rather than the `RAD_TEST_PORT` bypass.
 use rad::config::{
     Config, CoreConfig, ExtensionConfig, LlmConfig, LlmEndpointProfile, PermissionConfig,
 };
@@ -41,7 +44,7 @@ fn run_mock_http_server(addr: &str) -> std::thread::JoinHandle<()> {
 }
 
 #[test]
-fn test_first_task_after_eager_load_succeeds_with_real_base_url_config() {
+fn a_real_base_url_config_serves_the_first_task_after_eager_load() {
     // Deliberately does NOT set RAD_TEST_PORT — that env var is a separate
     // test-infrastructure bypass unrelated to this bug. This test exercises
     // the real `llm.endpoints[active].base_url` resolution path a real user
@@ -94,24 +97,20 @@ fn test_first_task_after_eager_load_succeeds_with_real_base_url_config() {
             active: Some("local".to_string()),
             endpoints,
         },
-        extensions: vec![
-            ExtensionConfig {
-                name: "rad-orchestrator".to_string(),
-                source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
-                enabled: true,
-                role: "orchestrator".to_string(),
-                permissions: Some(perms.clone()),
-                config: HashMap::new(),
-            },
-            ExtensionConfig {
-                name: "llm-connector".to_string(),
-                source: "target/wasm32-wasip2/debug/llm_connector.wasm".to_string(),
-                enabled: true,
-                role: "llm-connector".to_string(),
-                permissions: Some(perms),
-                config: HashMap::new(),
-            },
-        ],
+        extensions: vec![ExtensionConfig {
+            name: "rad-orchestrator".to_string(),
+            source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
+            enabled: true,
+            role: "orchestrator".to_string(),
+            permissions: Some(perms),
+            config: HashMap::new(),
+        }],
+        modules: vec![rad::config::ModuleConfig {
+            name: "llm-openai".to_string(),
+            source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        }],
         ..Default::default()
     };
 
@@ -131,9 +130,8 @@ fn test_first_task_after_eager_load_succeeds_with_real_base_url_config() {
         None,
     ));
 
-    // Mirrors main.rs: eagerly initialize all Wasm runtimes (llm-connector
-    // included) *before* any task runs — the exact ordering that triggered
-    // the stale-env-snapshot bug.
+    // Mirrors main.rs: eagerly initialize all Wasm runtimes *before* any task
+    // runs — the exact ordering that triggered the stale-env-snapshot bug.
     let (throwaway_tx, _throwaway_rx) = std::sync::mpsc::channel();
     orchestrator.get_or_init_runtimes(&throwaway_tx).unwrap();
 

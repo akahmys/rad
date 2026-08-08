@@ -105,14 +105,6 @@ fn test_core_auto_self_healing_integration() {
             permissions: Some(perms.clone()),
             config: HashMap::new(),
         },
-        rad::config::ExtensionConfig {
-            name: "llm-connector".to_string(),
-            enabled: true,
-            role: "llm-connector".to_string(),
-            source: "target/wasm32-wasip2/debug/llm_connector.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::new(),
-        },
         // Real tool-provider so the "execute" tool call above resolves to
         // an actual provider instead of the (now removed) host-side
         // built-in-tool fallback. `RAD_TEST_PORT` (already set above for
@@ -123,12 +115,20 @@ fn test_core_auto_self_healing_integration() {
     // offers the synthetic read/write/execute set this suite drives. It was
     // `mcp-tool-provider` until AWU 965. `Orchestrator::new` boots whatever
     // `modules` declares, so there is nothing to wire up here.
-    config.modules = vec![rad::config::ModuleConfig {
-        name: "mcp".to_string(),
-        source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
-        enabled: true,
-        config: serde_json::Value::Null,
-    }];
+    config.modules = vec![
+        rad::config::ModuleConfig {
+            name: "mcp".to_string(),
+            source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+        rad::config::ModuleConfig {
+            name: "llm-openai".to_string(),
+            source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+    ];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {

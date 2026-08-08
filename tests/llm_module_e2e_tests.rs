@@ -1,5 +1,9 @@
-//! The DoD for AWU 968: a task runs to completion **with `llm-connector`
-//! absent from the configuration**.
+//! A task runs to completion through the transport module.
+//!
+//! Was AWU 968's DoD — completing **with `llm-connector` absent** — back when
+//! the extension still existed to be absent from. AWU 969 deleted it, so what
+//! this now holds is that the module serves a real turn end to end, and that
+//! nothing else quietly does when it is removed.
 //!
 //! `llm_module_tests.rs` calls the kernel directly, which proves the module
 //! works but not that the host's LLM path finds it. Stage 3 taught why that
@@ -79,7 +83,7 @@ fn config_for(dir: &std::path::Path, with_module: bool) -> rad::config::Config {
         },
         ..Default::default()
     };
-    // No `llm-connector`: whatever answers the model must be the module.
+    // The transport module is the only thing that can answer.
     config.extensions = vec![ExtensionConfig {
         name: "rad-orchestrator".to_string(),
         enabled: true,
@@ -129,7 +133,7 @@ fn run_to_completion(orchestrator: &Arc<rad::orchestrator::Orchestrator>) {
 }
 
 #[test]
-fn a_turn_completes_with_no_llm_connector_extension() {
+fn a_turn_completes_through_the_transport_module() {
     let _lock = TEST_MUTEX
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -194,8 +198,8 @@ fn a_turn_completes_with_no_llm_connector_extension() {
 /// the module served it rather than something else having.
 ///
 /// The failure itself surfaces on the terminal and through the recovery loop
-/// ("LLM Connector extension not found or not loaded", twice, then "Wasm
-/// execution failed after maximum recovery attempts"), not as a DAG node — the
+/// ("No LLM transport is loaded...", twice, then "Wasm execution failed after
+/// maximum recovery attempts"), not as a DAG node — the
 /// orchestrator extension reports it as an L1 internal error. Asserted on what
 /// is observable from here rather than on where it would be tidier to find it.
 #[test]

@@ -1,8 +1,8 @@
 //! `GenerateLlmStream` served by the `llm-openai` kernel module (AWU 968).
 //!
-//! The sibling of `rpc_meta_llm_connector.rs`, which does the same job through
-//! the extension. Both feed the same event bus with the same JSON, because the
-//! consumer — `rad-orchestrator` — is still an extension until stage 8.
+//! The only path there is, since AWU 969 deleted `ext/llm-connector`. It feeds
+//! the core event bus in the shape `rad-orchestrator` parses, because the
+//! consumer is still an extension until stage 8.
 //!
 //! Two things move here from the extension, and both are the host's business
 //! rather than the transport's:
@@ -49,7 +49,7 @@ fn kernel_of(orch: &crate::orchestrator::Orchestrator) -> Option<Arc<crate::kern
 /// # Errors
 ///
 /// Returns the message a user can act on when nothing is configured. The
-/// wording is load-bearing: `tests/llm_connector_eager_load_tests.rs` asserts
+/// wording is load-bearing: `tests/llm_endpoint_config_tests.rs` asserts
 /// its *absence*, so a silent rewording would make that test pass vacuously.
 pub(crate) fn resolve_base_url(
     profile: &super::rpc_meta::ActiveLlmProfile,

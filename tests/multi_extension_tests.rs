@@ -130,25 +130,25 @@ fn test_multi_extension_verification_chain() {
             permissions: Some(perms.clone()),
             config: security_guard_config(),
         },
-        ExtensionConfig {
-            name: "llm-connector".to_string(),
-            enabled: true,
-            role: "llm-connector".to_string(),
-            source: "target/wasm32-wasip2/debug/llm_connector.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::new(),
-        },
     ];
     // Tools come from the `mcp` kernel module, which under `RAD_TEST_PORT`
     // offers the synthetic read/write/execute set this suite drives. It was
     // `mcp-tool-provider` until AWU 965. `Orchestrator::new` boots whatever
     // `modules` declares, so there is nothing to wire up here.
-    config.modules = vec![rad::config::ModuleConfig {
-        name: "mcp".to_string(),
-        source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
-        enabled: true,
-        config: serde_json::Value::Null,
-    }];
+    config.modules = vec![
+        rad::config::ModuleConfig {
+            name: "mcp".to_string(),
+            source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+        rad::config::ModuleConfig {
+            name: "llm-openai".to_string(),
+            source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+    ];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {

@@ -19,7 +19,7 @@ When the `rad` Core starts, the system resolves operational parameters and crede
 > `rad.local.json` is a local-only file designed to hold personal secrets like API keys. To prevent sharing credentials in repositories, it must always be excluded from Git version control (add it to `.gitignore`).
 
 ### 1.2 Configuration Schema Example (Full Parameters with Comments)
-The config file supports JSON with comments (JSONC). The following example registers the 3 extensions and 3 kernel modules `rad` ships, plus two locally-installed MCP servers — without at least one MCP server registered under the `mcp` module, `rad` has no built-in file/shell tools at all and can't act on anything (see [README.md](README.md) §3.2 for more on this):
+The config file supports JSON with comments (JSONC). The following example registers the 2 extensions and 4 kernel modules `rad` ships, plus two locally-installed MCP servers — without at least one MCP server registered under the `mcp` module, `rad` has no built-in file/shell tools at all and can't act on anything (see [README.md](README.md) §3.2 for more on this):
 
 ```json
 {
@@ -110,13 +110,6 @@ The config file supports JSON with comments (JSONC). The following example regis
         "block_path_patterns": ["secrets.env"],
         "block_command_patterns": ["rm -rf /"]
       }
-    },
-    {
-      "name": "llm-connector",
-      "source": "~/.rad/wasm/llm_connector.wasm",
-      "enabled": true,
-      "role": "llm-connector",
-      "permissions": { "network": { "allow_network": true, "allow_domains": [] } }
     }
   ],
   // Kernel modules. Unlike extensions these declare no role and no
@@ -135,6 +128,15 @@ The config file supports JSON with comments (JSONC). The following example regis
       "enabled": true,
       // Opaque to the kernel; the module reads it via `kernel.config`.
       "config": {}
+    },
+    {
+      // The LLM transport. Provider differences — URL path, auth header, where
+      // the interesting fields sit in the SSE payload — are a compiled-in table
+      // (`dialect` on an `llm.endpoints` profile selects a row), not settings
+      // here. Was the `llm-connector` extension until v0.76.0.
+      "name": "llm-openai",
+      "source": "~/.rad/wasm/llm_openai_module.wasm",
+      "enabled": true
     },
     {
       "name": "mcp",
@@ -156,12 +158,13 @@ The config file supports JSON with comments (JSONC). The following example regis
 }
 ```
 
-Both were extensions until recently. `context-tools` moved in AWU 957,
-`skill-tool-provider` became the `skills` module in AWU 959/960, and
-`mcp-tool-provider` became `mcp` in AWU 964/965 — the latter
-also shed its `allow_bash` requirement, which existed only because the old WIT
-made it return results through `open_process("echo ...")`. A module returns a
-string, so a Markdown reader no longer asks for shell execution.
+All four were extensions until recently. `context-tools` moved in AWU 957,
+`skill-tool-provider` became the `skills` module in AWU 959/960,
+`mcp-tool-provider` became `mcp` in AWU 964/965 — the latter also shed its
+`allow_bash` requirement, which existed only because the old WIT made it return
+results through `open_process("echo ...")` — and `llm-connector` became
+`llm-openai` in AWU 967–969. A module returns a string, so a Markdown reader no
+longer asks for shell execution.
 
 ### 1.3 Handling Sensitive Information
 To handle API keys and other secrets securely, pass them to `rad` using the following methods:

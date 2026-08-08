@@ -1,6 +1,5 @@
-// Host-side WIT `execution-handle` implementation, plus the `llm-connector`
-// resource glue that just delegates to the primary `stream-handle` impl,
-// split out of `imports_resources.rs` to stay under the 300-line file limit.
+// Host-side WIT `execution-handle` implementation, split out of
+// `imports_resources.rs` to stay under the 300-line file limit.
 use crate::wasm::imports_resources::push_closed_fallback;
 use crate::wasm::{WasmState, bindings};
 use parking_lot::Mutex;
@@ -127,49 +126,5 @@ impl bindings::wit::HostExecutionHandle for WasmState {
     ) -> Result<(), wasmtime::Error> {
         self.table().delete(rep)?;
         Ok(())
-    }
-}
-
-impl crate::wasm::bindings::rad_llm_connector::radcomp::connector::types::Host for WasmState {}
-
-impl crate::wasm::bindings::rad_llm_connector::radcomp::connector::types::HostStreamHandle
-    for WasmState
-{
-    fn read(
-        &mut self,
-        self_: wasmtime::component::Resource<crate::wasm::HostStream>,
-        max_bytes: u32,
-    ) -> Result<Vec<u8>, String> {
-        bindings::wit::HostStreamHandle::read(self, self_, max_bytes)
-    }
-
-    fn write(
-        &mut self,
-        self_: wasmtime::component::Resource<crate::wasm::HostStream>,
-        data: Vec<u8>,
-    ) -> Result<(), String> {
-        bindings::wit::HostStreamHandle::write(self, self_, data)
-    }
-
-    fn close(&mut self, self_: wasmtime::component::Resource<crate::wasm::HostStream>) {
-        bindings::wit::HostStreamHandle::close(self, self_);
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<crate::wasm::HostStream>,
-    ) -> Result<(), wasmtime::Error> {
-        bindings::wit::HostStreamHandle::drop(self, rep)
-    }
-}
-
-impl crate::wasm::bindings::rad_llm_connector::LlmConnectorImports for WasmState {
-    fn open_http_stream(
-        &mut self,
-        url: String,
-        headers: Vec<(String, String)>,
-        body: String,
-    ) -> Result<wasmtime::component::Resource<crate::wasm::HostStream>, String> {
-        <WasmState as bindings::RadExtensionImports>::open_http_stream(self, url, headers, body)
     }
 }

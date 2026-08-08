@@ -117,30 +117,28 @@ fn a_skill_runs_end_to_end_with_no_tool_provider_extension() {
 
     // No `skill-tool-provider`, and no tool-provider extension of any kind:
     // whatever tools the model is offered must come from the module.
-    config.extensions = vec![
-        ExtensionConfig {
-            name: "rad-orchestrator".to_string(),
+    config.extensions = vec![ExtensionConfig {
+        name: "rad-orchestrator".to_string(),
+        enabled: true,
+        role: "orchestrator".to_string(),
+        source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
+        permissions: Some(perms.clone()),
+        config: HashMap::new(),
+    }];
+    config.modules = vec![
+        ModuleConfig {
+            name: "skills".to_string(),
+            source: "target/wasm32-wasip2/debug/skills_module.wasm".to_string(),
             enabled: true,
-            role: "orchestrator".to_string(),
-            source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::new(),
+            config: serde_json::Value::Null,
         },
-        ExtensionConfig {
-            name: "llm-connector".to_string(),
+        ModuleConfig {
+            name: "llm-openai".to_string(),
+            source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
             enabled: true,
-            role: "llm-connector".to_string(),
-            source: "target/wasm32-wasip2/debug/llm_connector.wasm".to_string(),
-            permissions: Some(perms),
-            config: HashMap::new(),
+            config: serde_json::Value::Null,
         },
     ];
-    config.modules = vec![ModuleConfig {
-        name: "skills".to_string(),
-        source: "target/wasm32-wasip2/debug/skills_module.wasm".to_string(),
-        enabled: true,
-        config: serde_json::Value::Null,
-    }];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     {
@@ -165,10 +163,11 @@ fn a_skill_runs_end_to_end_with_no_tool_provider_extension() {
         .as_ref()
         .map(|k| k.modules())
         .unwrap_or_default();
-    assert_eq!(
-        loaded,
-        vec!["skills".to_string()],
-        "the skills module must load"
+    // Membership, not equality: the transport is a module too as of AWU 969,
+    // and this test is about `skills` being there — not about being alone.
+    assert!(
+        loaded.iter().any(|m| m == "skills"),
+        "the skills module must load, got {loaded:?}"
     );
 
     orchestrator

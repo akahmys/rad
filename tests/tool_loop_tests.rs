@@ -56,8 +56,8 @@ fn perms() -> PermissionConfig {
     }
 }
 
-/// Registers rad-orchestrator + llm-connector + mcp-tool-provider (in its
-/// self-contained `RAD_TEST_PORT` test-tool mode) and drives one task
+/// Registers rad-orchestrator, plus the `llm-openai` and `mcp` kernel
+/// modules (the latter in its self-contained `RAD_TEST_PORT` test-tool mode) and drives one task
 /// through the real `Orchestrator::run_task`, sharing `dag` with the
 /// caller so multiple calls can simulate independent sessions recovering
 /// the same conversation history (same shape as `hitl_tests.rs` and
@@ -91,34 +91,32 @@ fn run_session(
         verification_command: None,
         ..Default::default()
     };
-    config.extensions = vec![
-        rad::config::ExtensionConfig {
-            name: "rad-orchestrator".to_string(),
-            enabled: true,
-            role: "orchestrator".to_string(),
-            source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
-            permissions: Some(perms()),
-            config: HashMap::new(),
-        },
-        rad::config::ExtensionConfig {
-            name: "llm-connector".to_string(),
-            enabled: true,
-            role: "llm-connector".to_string(),
-            source: "target/wasm32-wasip2/debug/llm_connector.wasm".to_string(),
-            permissions: Some(perms()),
-            config: HashMap::new(),
-        },
-    ];
+    config.extensions = vec![rad::config::ExtensionConfig {
+        name: "rad-orchestrator".to_string(),
+        enabled: true,
+        role: "orchestrator".to_string(),
+        source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
+        permissions: Some(perms()),
+        config: HashMap::new(),
+    }];
     // Tools come from the `mcp` kernel module, which under `RAD_TEST_PORT`
     // offers the synthetic read/write/execute set this suite drives. It was
     // `mcp-tool-provider` until AWU 965. `Orchestrator::new` boots whatever
     // `modules` declares, so there is nothing to wire up here.
-    config.modules = vec![rad::config::ModuleConfig {
-        name: "mcp".to_string(),
-        source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
-        enabled: true,
-        config: serde_json::Value::Null,
-    }];
+    config.modules = vec![
+        rad::config::ModuleConfig {
+            name: "mcp".to_string(),
+            source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+        rad::config::ModuleConfig {
+            name: "llm-openai".to_string(),
+            source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+    ];
 
     let orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(
         config,

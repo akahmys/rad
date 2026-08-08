@@ -79,34 +79,22 @@ fn setup_autopilot_orchestrator(
         }),
     };
 
-    let conn_perms = PermissionConfig {
-        fs_read_allow: vec!["*".to_string()],
-        fs_write_allow: vec!["*".to_string()],
-        network: Some(rad::config::NetworkConfig {
-            allow_network: true,
-            allow_domains: vec!["127.0.0.1".to_string()],
-        }),
-        ..Default::default()
-    };
-
-    config.extensions = vec![
-        rad::config::ExtensionConfig {
-            name: "rad-orchestrator".to_string(),
-            enabled: true,
-            role: "orchestrator".to_string(),
-            source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
-            permissions: Some(perms),
-            config: std::collections::HashMap::new(),
-        },
-        rad::config::ExtensionConfig {
-            name: "llm-connector".to_string(),
-            enabled: true,
-            role: "llm-connector".to_string(),
-            source: "target/wasm32-wasip2/debug/llm_connector.wasm".to_string(),
-            permissions: Some(conn_perms),
-            config: std::collections::HashMap::new(),
-        },
-    ];
+    config.extensions = vec![rad::config::ExtensionConfig {
+        name: "rad-orchestrator".to_string(),
+        enabled: true,
+        role: "orchestrator".to_string(),
+        source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
+        permissions: Some(perms),
+        config: std::collections::HashMap::new(),
+    }];
+    // The LLM transport is a kernel module as of AWU 969;
+    // `Orchestrator::new` boots whatever `modules` declares.
+    config.modules = vec![rad::config::ModuleConfig {
+        name: "llm-openai".to_string(),
+        source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
+        enabled: true,
+        config: serde_json::Value::Null,
+    }];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     // Create initial node to start task from

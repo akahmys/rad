@@ -1,6 +1,6 @@
 // `GenerateLlmStream` handling via a raw HTTP SSE stream, split out of
 // `rpc_meta.rs` to stay under the 300-line file limit. Used when no
-// orchestrator (and therefore no Wasm `llm-connector` runtime) is present.
+// orchestrator (and therefore no kernel, and no transport module) is present.
 use crate::wasm::rpc::RpcContext;
 
 pub(crate) fn generate(ctx: &RpcContext<'_>) -> Result<serde_json::Value, String> {

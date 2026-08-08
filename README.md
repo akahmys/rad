@@ -167,8 +167,8 @@ Before contributing code, verify compliance with project standards:
   ```
 * **Both Targets**: Extensions compile to WebAssembly, so lint and build them for `wasm32-wasip2` as well — a native-only check can miss target-specific breakage:
   ```bash
-  cargo clippy --target wasm32-wasip2 -p rad-orchestrator -p llm-connector \
-      -p security-guard -p llm-connector -- -D warnings
+  cargo clippy --target wasm32-wasip2 -p rad-orchestrator \
+      -p security-guard -p llm-openai-module -- -D warnings
   ```
 
 Running `./scripts/build_all.sh` performs all of the above (plus the WIT sync gate, formatting, license, and secret scans) in one pass.
