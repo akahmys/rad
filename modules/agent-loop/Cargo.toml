@@ -1,0 +1,17 @@
+[package]
+name = "agent-loop-module"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# The reasoning and tool loop, as a kernel module. Ported from
+# `ext/rad-orchestrator` across AWU 979-984; this crate starts as the event
+# intake alone and grows the loop as each piece moves.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

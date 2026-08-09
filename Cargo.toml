@@ -58,5 +58,6 @@ members = [
     "modules/llm-openai",
     "modules/skills",
     "modules/policy",
+    "modules/agent-loop",
     "templates/rust",
 ]

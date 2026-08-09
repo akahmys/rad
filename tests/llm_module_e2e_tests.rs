@@ -93,12 +93,24 @@ fn config_for(dir: &std::path::Path, with_module: bool) -> rad::config::Config {
         config: HashMap::new(),
     }];
     if with_module {
-        config.modules = vec![ModuleConfig {
-            name: "llm-openai".to_string(),
-            source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
-            enabled: true,
-            config: serde_json::Value::Null,
-        }];
+        config.modules = vec![
+            ModuleConfig {
+                name: "llm-openai".to_string(),
+                source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
+                enabled: true,
+                config: serde_json::Value::Null,
+            },
+            // Loaded alongside from AWU 979. It only accumulates — the
+            // extension still runs the turn — so its presence changes nothing
+            // about the assertions below, and its absence would leave the
+            // transport's new `post` path untested against a real stream.
+            ModuleConfig {
+                name: "agent-loop".to_string(),
+                source: "target/wasm32-wasip2/debug/agent_loop_module.wasm".to_string(),
+                enabled: true,
+                config: serde_json::Value::Null,
+            },
+        ];
     }
     config
 }
@@ -170,7 +182,7 @@ fn a_turn_completes_through_the_transport_module() {
         .unwrap_or_default();
     assert_eq!(
         loaded,
-        vec!["llm-openai".to_string()],
+        vec!["agent-loop".to_string(), "llm-openai".to_string()],
         "the transport module must load"
     );
 
@@ -190,6 +202,25 @@ fn a_turn_completes_through_the_transport_module() {
             .map(|n| &n.text)
             .collect::<Vec<_>>()
     );
+    drop(dag_guard);
+
+    // The same stream, seen by the module. `tests/agent_loop_tests.rs` drives
+    // the intake with hand-built posts; this is the only place the transport
+    // actually produces them, through the relay thread and the event loop's
+    // drain. Removing `post_to_agent` fails here and nowhere else.
+    let turn = orchestrator
+        .kernel
+        .lock()
+        .as_ref()
+        .map(|k| k.call("test", "agent-loop", "agent.turn", "{}"))
+        .expect("the kernel is loaded")
+        .expect("agent.turn must answer");
+    let turn: serde_json::Value = serde_json::from_str(&turn).unwrap();
+    assert_eq!(
+        turn["text"], "Answered by the module.",
+        "the transport's events never reached agent-loop: {turn}"
+    );
+    assert_eq!(turn["done"], true, "the turn never saw its terminator");
 }
 
 /// The negative control stage 3 lacked: the same run with the module removed

@@ -608,8 +608,44 @@ impossible to attribute.
 - [x] AWU 977: Demonstrate the lock-order deadlock
 - [x] AWU 978: Drive `drain_posts` in production
 - [ ] ~~AWU 979: `llm-openai` from pull to push~~ — **premature, see below**
-- [ ] AWU 980+: `modules/agent-loop` — split after 978/979 fix the shape
-- [ ] AWU final: delete the old world, the old RPC surface, `models/`'s macros
+- [x] AWU 979 (revised): `modules/agent-loop` — the event intake
+- [ ] AWU 980: `llm.rs` — request assembly and response parsing (299 lines)
+- [ ] AWU 981: `orchestrator.rs` — the event state machine (282)
+- [ ] AWU 982: `runner/done.rs` + `inline_tool_calls.rs` (565)
+- [ ] AWU 983: `reasoning.rs` (the two `unsafe` blocks) / `digest` /
+      `context_recovery` / `tool` (428)
+- [ ] AWU 984: delete the extension, the old world, the old RPC surface, and
+      `models/`'s conversion macros
+
+#### AWU 979 (revised): `modules/agent-loop` — the event intake
+- **Objective**: The module exists, and the transport's events reach it, before
+  any decision-making moves onto it.
+- **DoD**: A real turn through the transport is visible in the module.
+  290 passed / 0 failed.
+- **Done**. `modules/agent-loop/{lib.rs,intake.rs,intake/tests.rs}`,
+  `tests/agent_loop_tests.rs`, and the relay in
+  `src/wasm/rpc_meta_llm_module.rs` now posts each event to `agent-loop` when
+  one is loaded.
+- **`RawEvent` is copied field for field**, not redesigned. It is the contract
+  with `llm-openai`, which is still emitting exactly those bytes; changing the
+  shape and the consumer together would leave no way to tell which broke a turn.
+- **Both consumers are fed during the migration.** The extension still runs the
+  turn off the `RasCoreEvent` bus; the module only accumulates. A doubled event
+  costs nothing while that is true, and it means the new path is exercised by
+  every real turn long before anything depends on it.
+- **Events are posted, never called.** From the relay thread a `call` would put
+  a second thread inside a module while the event-loop thread calls out of one —
+  AWU 977's deadlock exactly. `post` touches only the queue, and AWU 978's drain
+  delivers it on the one thread allowed to hold two module locks.
+- **Three test layers, each catching what the others cannot.** The unit tests
+  (11) cover the fold; `tests/agent_loop_tests.rs` (5) covers what only exists
+  across dispatch — method names resolving, the payload envelope matching what
+  the host builds; and the extended `llm_module_e2e_tests` covers the relay
+  actually producing posts from a real stream. Verified by neutering
+  `post_to_agent`: only the e2e test fails, the other 16 pass.
+- `the_module_declares_the_methods_the_host_posts_to` exists because a drift
+  between the method names here and in `rpc_meta_llm_module.rs` would make the
+  host silently stop posting, with every other test still green.
 
 #### AWU 979 was mis-scoped, and the reason is worth keeping
 Planned as "fold the polling thread away so the transport pushes chunks".

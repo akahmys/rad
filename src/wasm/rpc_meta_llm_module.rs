@@ -28,6 +28,16 @@ mod tests;
 pub(crate) const GENERATE: &str = "llm.generate";
 pub(crate) const NEXT: &str = "llm.next";
 
+/// Where `agent-loop` takes the transport's events, when it is loaded.
+///
+/// Posted, never called. The relay runs on its own thread, and `post` touches
+/// only the queue — the event-loop thread drains it (AWU 978). A `call` from
+/// here would put a second thread inside a module while the first is calling
+/// out of one, which `tests/kernel_lock_order_tests.rs` shows deadlocks
+/// beneath the cycle check.
+const AGENT_EVENT: &str = "agent.event";
+const AGENT_TURN_START: &str = "agent.turn.start";
+
 /// How long to wait between `llm.next` calls once one comes back empty.
 ///
 /// The module already blocks up to 100ms inside `read` before reporting
@@ -120,12 +130,24 @@ pub(crate) fn generate(
         .call("host", &module, GENERATE, &payload)
         .map_err(|e| format!("LLM Stream Generation Error: {e}"))?;
 
+    // Before the first event, and posted rather than called for the same
+    // reason the events are. FIFO ordering is what makes this a reset of the
+    // turn the events below belong to.
+    if kernel.provider_of(AGENT_TURN_START).is_some() {
+        kernel.post("llm-openai", "agent-loop", AGENT_TURN_START, "{}");
+    }
+
     relay_events(kernel, module, ctx.event_tx.clone());
     Ok(serde_json::Value::Null)
 }
 
 /// Drains `llm.next` on a background thread, forwarding each event onto the
-/// core event bus in the shape `rad-orchestrator` already parses.
+/// core event bus in the shape `rad-orchestrator` already parses — and, when
+/// `agent-loop` is loaded, posting the same event to it.
+///
+/// Both, during the migration. The extension still runs the turn; the module
+/// only accumulates, so a doubled event costs nothing and the path is exercised
+/// by every real turn well before anything depends on it.
 fn relay_events(
     kernel: Arc<crate::kernel::KernelShared>,
     module: String,
@@ -136,23 +158,21 @@ fn relay_events(
             let reply = match kernel.call("host", &module, NEXT, "{}") {
                 Ok(reply) => reply,
                 Err(e) => {
-                    send(
-                        &event_tx,
-                        &serde_json::json!({"type": "error", "payload": e}),
-                    );
+                    let ev = serde_json::json!({"type": "error", "payload": e});
+                    send(&event_tx, &ev);
+                    post_to_agent(&kernel, &ev);
                     return;
                 }
             };
             let batch: NextBatch = match serde_json::from_str(&reply) {
                 Ok(batch) => batch,
                 Err(e) => {
-                    send(
-                        &event_tx,
-                        &serde_json::json!({
-                            "type": "error",
-                            "payload": format!("{NEXT} returned an unreadable reply: {e}")
-                        }),
-                    );
+                    let ev = serde_json::json!({
+                        "type": "error",
+                        "payload": format!("{NEXT} returned an unreadable reply: {e}")
+                    });
+                    send(&event_tx, &ev);
+                    post_to_agent(&kernel, &ev);
                     return;
                 }
             };
@@ -160,9 +180,12 @@ fn relay_events(
             let idle = batch.events.is_empty();
             for event in &batch.events {
                 send(&event_tx, event);
+                post_to_agent(&kernel, event);
             }
             if batch.done {
-                send(&event_tx, &serde_json::json!({ "type": "done" }));
+                let done = serde_json::json!({ "type": "done" });
+                send(&event_tx, &done);
+                post_to_agent(&kernel, &done);
                 return;
             }
             if idle {
@@ -182,4 +205,18 @@ fn send(event_tx: &std::sync::mpsc::Sender<crate::ipc::RasCoreEvent>, event: &se
     let _ = event_tx.send(crate::ipc::RasCoreEvent::LlmConnectorEvent {
         event: event.to_string(),
     });
+}
+
+/// Posts one event to `agent-loop`, if it is loaded.
+///
+/// Checked by method rather than by module name: `provider_of` answers only for
+/// a module that actually declares it, where `resolve` would say yes to any
+/// live module of that name. Skipping the post when nothing provides it keeps
+/// the drain's failure log meaningful.
+fn post_to_agent(kernel: &Arc<crate::kernel::KernelShared>, event: &serde_json::Value) {
+    if kernel.provider_of(AGENT_EVENT).is_none() {
+        return;
+    }
+    let payload = serde_json::json!({ "event": event.to_string() }).to_string();
+    kernel.post("llm-openai", "agent-loop", AGENT_EVENT, &payload);
 }
