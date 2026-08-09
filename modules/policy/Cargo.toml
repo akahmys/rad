@@ -1,0 +1,17 @@
+[package]
+name = "policy-module"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# Approval and refusal policy, as a kernel module. Ported from
+# `ext/security-guard`. Cooperative by design: it has no enforcement power and
+# is not meant to have any (ARCHITECTURE-NEXT.md §3.4.3).
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

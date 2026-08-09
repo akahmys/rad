@@ -57,5 +57,6 @@ members = [
     "modules/net",
     "modules/llm-openai",
     "modules/skills",
+    "modules/policy",
     "templates/rust",
 ]

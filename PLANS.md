@@ -271,7 +271,7 @@ be questioned again:
 ### 🚧 In progress: stage 7 (`security-guard` → `policy`)
 
 - [x] AWU 970: Delete the three verification sites no guest reaches
-- [ ] AWU 971: `modules/policy` — the blocklist as a module
+- [x] AWU 971: `modules/policy` — the blocklist as a module
 - [ ] AWU 972: `mcp` asks `policy`, and `verify_tool_call` goes in the same AWU
 - [ ] AWU 973: Delete `ext/security-guard` and the host's verification machinery
 - [ ] AWU 974: §3.4.4 — write down what is not defended
@@ -362,6 +362,30 @@ the code, so it is not re-derived:
   "SHOULD exist" assertion), which is what makes the three silences evidence.
 - Two `RasRpcRequest` imports became unused with the blocks, which is the
   compiler confirming the bindings existed for the check and nothing else.
+
+#### AWU 971: `modules/policy`
+- **Objective**: The blocklist as a module, config from `kernel.config`.
+- **DoD**: `policy.check` answers through a real kernel; the patterns arrive
+  from config rather than from a literal.
+- **Done**. `modules/policy/{lib.rs,rules.rs,rules/tests.rs}` and
+  `tests/policy_module_tests.rs`. 269 passed, up 13: 8 unit + 5 integration.
+- **`block_path_patterns` is gone, and the measurement is why.** Three runs:
+  both keys configured — blocks, green; `block_command_patterns` alone —
+  blocks, green; neither — the test fails. So the path list changed no outcome
+  on any end-to-end path. It is not a config-cleanup exception either: the new
+  module defines its own schema, and `block_command_patterns` keeps its name so
+  a config moved from `extensions` to `modules` keeps working.
+- **`policy.check` returns `Ok(allow: false)` to refuse; `Err` means the module
+  failed.** The distinction is what lets AWU 972 fail *closed* on a missing or
+  crashed policy without a crashed policy being indistinguishable from a
+  refusal.
+- **The two test layers were shown to cover different things, not the same
+  thing twice.** Breaking `refuse` fails 3 of the 8 unit tests and none of the
+  integration tests; misspelling `kernel.config` fails 2 integration tests and
+  *none* of the unit tests. The unit tests deliberately never call `fetch` —
+  the generated dispatch bindings have no host behind them in a native test
+  binary — so without that second layer the whole config path would have been
+  unverified.
 
 ### 📌 State at the end of stage 6
 

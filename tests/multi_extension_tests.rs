@@ -12,16 +12,10 @@ use std::time::{Duration, Instant};
 /// wiring by explicitly configuring the same patterns the extension used to
 /// carry as literals, rather than relying on a fallback.
 fn security_guard_config() -> HashMap<String, serde_json::Value> {
-    HashMap::from([
-        (
-            "block_path_patterns".to_string(),
-            serde_json::json!(["blocked.txt"]),
-        ),
-        (
-            "block_command_patterns".to_string(),
-            serde_json::json!(["blocked_command", "blocked.txt"]),
-        ),
-    ])
+    HashMap::from([(
+        "block_command_patterns".to_string(),
+        serde_json::json!(["blocked_command", "blocked.txt"]),
+    )])
 }
 
 fn run_mock_http_server(
