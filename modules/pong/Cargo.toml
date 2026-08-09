@@ -1,0 +1,22 @@
+[package]
+name = "pong-module"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# The other half of a cross-module call pair. `relay` can forward, but only one
+# component may claim a given method (ARCHITECTURE-NEXT.md §3.6.8), so relay
+# cannot be loaded twice to call itself from two directions. `pong` forwards the
+# same way under its own method name, which is what makes an A->B / B->A pair
+# expressible at all — see `tests/kernel_lock_order_tests.rs`.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+serde = { workspace = true }
+wit-bindgen = { workspace = true }
+
+# A test fixture, not something a user installs.
+[package.metadata.rad]
+ship = false

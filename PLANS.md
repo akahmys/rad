@@ -555,8 +555,10 @@ the code, so it is not re-derived:
 Carried forward, none of it blocking:
 
 - **The known flake below is still unreproduced.**
-- **Cross-thread lock ordering is unaddressed** (AWU 968). §3.6.1's scheduler
-  is the answer, at stage 8.
+- **Cross-thread lock ordering is unaddressed** (AWU 968), and as of AWU 977 it
+  is **demonstrated rather than theoretical** — see
+  `tests/kernel_lock_order_tests.rs`. The old note said no module pair could do
+  it; that was true only because no second forwarding fixture existed.
 - **`ext/rad-orchestrator` has two `unsafe` blocks**
   (`orchestrator/reasoning.rs`). That extension goes in stage 8.
 - **`report_tool_inventory`** (`src/orchestrator/runner/runtimes.rs`) is still
@@ -593,6 +595,48 @@ Carried forward, none of it blocking:
   rule, left alone deliberately: splitting one scenario is the fragmentation the
   same rule warns against.
 - **Config-file cleanup stays deferred** until the migration finishes.
+
+### 🚧 In progress: stage 8 (`rad-orchestrator` → `agent-loop`)
+
+Approach **(C)**, chosen before any code: drive `drain_posts` in production and
+route `agent-loop`'s events through `post`, but leave §3.6.1's async wasmtime
+and per-module Stores for later. What removes the lock-order hazard is the
+`post` path, not the async runtime, and §3.6.9 admits per-Store memory is an
+unmeasured unknown — pairing that with a 2,061-line port would make a failure
+impossible to attribute.
+
+- [x] AWU 977: Demonstrate the lock-order deadlock
+- [ ] AWU 978: Drive `drain_posts` in production
+- [ ] AWU 979: `llm-openai` from pull to push
+- [ ] AWU 980+: `modules/agent-loop` — split after 978/979 fix the shape
+- [ ] AWU final: delete the old world, the old RPC surface, `models/`'s macros
+
+#### AWU 977: Demonstrate the lock-order deadlock
+- **Objective**: Decide whether `post` is load-bearing or merely tidy, by
+  reproducing the hazard rather than reasoning about it.
+- **Done**. `modules/pong` (`ship = false`) and
+  `tests/kernel_lock_order_tests.rs`. 271 passed / 0 failed.
+- **It reproduces, deterministically.** Two threads taking `relay` and `pong`
+  in opposite orders both wedge; `deliver` holds a module's lock across the
+  nested guest call, and the cycle check cannot see it because its stack is
+  thread-local by design. Epoch interruption does not help: both threads are
+  blocked in a *host* call on a `Mutex`, and epochs preempt guest code only —
+  the same reason `src/kernel/proc.rs` bounds its `wait` by hand.
+- **A new fixture was unavoidable.** `relay` was the only module that forwards,
+  and one method may be claimed by one module (§3.6.8), so it cannot be loaded
+  twice to face itself. `pong` forwards under its own method name and can be
+  told to hold its store first — without that lever the interleaving is a race,
+  and a deadlock test that only sometimes reproduces cannot be trusted when it
+  passes.
+- **The control is what makes the result mean anything.** The same pair, the
+  same holds, the same harness, but both threads taking the locks in the *same*
+  order: they serialise and complete. A harness that reported a timeout
+  unconditionally would be indistinguishable from the deadlock test otherwise.
+- The test asserts the deadlock *occurs*, so it fails the day the kernel gains
+  lock ordering or §3.6.1's scheduler — which is the point at which the `post`
+  routing stops being load-bearing and the note here should go.
+- **These threads stay wedged for the life of the process**, which is why the
+  file is its own test binary with nothing else in it.
 
 ### 📜 Stage 6 — what was known before it started (historical)
 

@@ -52,6 +52,7 @@ members = [
     "modules/mcp",
     "modules/echo",
     "modules/relay",
+    "modules/pong",
     "modules/spawn",
     "modules/net",
     "modules/llm-openai",
