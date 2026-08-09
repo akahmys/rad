@@ -272,7 +272,7 @@ be questioned again:
 
 - [x] AWU 970: Delete the three verification sites no guest reaches
 - [x] AWU 971: `modules/policy` — the blocklist as a module
-- [ ] AWU 972: `mcp` asks `policy`, and `verify_tool_call` goes in the same AWU
+- [x] AWU 972: `mcp` asks `policy`, and `verify_tool_call` goes in the same AWU
 - [ ] AWU 973: Delete `ext/security-guard` and the host's verification machinery
 - [ ] AWU 974: §3.4.4 — write down what is not defended
 - [ ] AWU 975 (optional): remove `modules/mcp`'s `unsafe impl Send`
@@ -386,6 +386,46 @@ the code, so it is not re-derived:
   the generated dispatch bindings have no host behind them in a native test
   binary — so without that second layer the whole config path would have been
   unverified.
+
+#### AWU 972: `mcp` asks `policy`; the host's tool gate goes
+- **Objective**: The one live hook moves into `modules/mcp`, and the host stops
+  modelling policy. Added and removed in one AWU so no commit has both live.
+- **DoD**: Blocking works end to end through the module path; removing the gate
+  makes the blocking tests fail.
+- **Done**. `modules/mcp/src/gate.rs`, `tests/policy_gate_tests.rs`.
+  272 passed / 0 failed. Clippy clean on native and `wasm32-wasip2`.
+- **`verify_tool_call` had three call sites, not one**, and
+  `execute_tool_unverified`'s doc comment claimed its callers had already run
+  it — so the extension path verified twice. Probing both extension-path sites
+  found them dead (`execute_tool` the handle-returning one, and
+  `execute_tool_unverified`): 269/0 with panics on entry. Only
+  `execute_tool_text` was live, which is the single hook §3.4.3 describes.
+- **`kernel.modules` decides whether a policy exists**, rather than matching on
+  a dispatch error string. The two answers have to go opposite ways: no policy
+  configured allows (opt-in, as the extension was), a policy present but
+  unreachable refuses. A crashed policy that read as approval would be a gate
+  that vanishes exactly when something is wrong.
+- **`security_hook_tests` had no `mcp` module, and that was hiding something.**
+  The extension rejected `write` at the host before anything looked for a
+  provider, so the test asserted a refusal for a tool that did not exist in its
+  own config. The gate now sits inside the provider, so the tool has to be real
+  — `mcp` was added and the test means more than it did.
+- **A test in the new file passed for the wrong reason first.**
+  `RAD_TEST_PORT` was set after the component was instantiated, leaving `mcp`
+  in real-MCP mode where the synthetic `execute` does not exist — and
+  `a_blocked_command_never_reaches_proc_spawn` passed anyway, because the gate
+  refuses above the point where that matters. Caught by the two allow-path
+  tests failing; the env var now moves before `load`. Both allow-path tests
+  exist precisely so a refusal cannot be confused with a tool that never works.
+- **`tests/multi_extension_tests.rs` is deleted, not ported.** Its subject was
+  `verify_rpc_exclude`'s fan-out over two `security-guard` instances, and one
+  method routes to exactly one module, so "two policies" is not expressible.
+  Confirmed it was really testing that mechanism before deleting it: with the
+  host gate gone it failed at `blocked.txt should NOT exist`, meaning the
+  extensions had been the enforcing party. `multi_extension_isolated_roles_tests`
+  keeps the part that outlived it.
+- Removing `gate::check` fails exactly the three blocking tests and none of the
+  opt-in or allow-path ones.
 
 ### 📌 State at the end of stage 6
 

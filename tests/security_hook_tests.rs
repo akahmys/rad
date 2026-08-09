@@ -86,35 +86,43 @@ fn test_security_verification_hook_rejection() {
         ..Default::default()
     };
 
-    config.extensions = vec![
-        ExtensionConfig {
-            name: "rad-orchestrator".to_string(),
-            enabled: true,
-            role: "orchestrator".to_string(),
-            source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::new(),
-        },
-        ExtensionConfig {
-            name: "security-guard".to_string(),
-            enabled: true,
-            role: "security".to_string(),
-            source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::from([(
-                "block_command_patterns".to_string(),
-                serde_json::json!(["blocked_command", "blocked.txt"]),
-            )]),
-        },
-    ];
+    config.extensions = vec![ExtensionConfig {
+        name: "rad-orchestrator".to_string(),
+        enabled: true,
+        role: "orchestrator".to_string(),
+        source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
+        permissions: Some(perms.clone()),
+        config: HashMap::new(),
+    }];
     // The LLM transport is a kernel module as of AWU 969;
     // `Orchestrator::new` boots whatever `modules` declares.
-    config.modules = vec![rad::config::ModuleConfig {
-        name: "llm-openai".to_string(),
-        source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
-        enabled: true,
-        config: serde_json::Value::Null,
-    }];
+    // `mcp` is new here, and its absence was hiding something. The security
+    // extension rejected `write` at the host, before anything looked for a
+    // provider, so this test asserted a rejection for a tool that did not
+    // exist in its own config. The gate now lives inside `mcp`, which means
+    // the tool has to be real for the refusal to mean anything.
+    config.modules = vec![
+        rad::config::ModuleConfig {
+            name: "policy".to_string(),
+            source: "target/wasm32-wasip2/debug/policy_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::json!({
+                "block_command_patterns": ["blocked_command", "blocked.txt"]
+            }),
+        },
+        rad::config::ModuleConfig {
+            name: "mcp".to_string(),
+            source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+        rad::config::ModuleConfig {
+            name: "llm-openai".to_string(),
+            source: "target/wasm32-wasip2/debug/llm_openai_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
+    ];
 
     let dag = Arc::new(Mutex::new(Dag::new()));
     let _initial_node = {
@@ -166,11 +174,7 @@ fn test_security_verification_hook_rejection() {
     let mut found_fs_rejection = false;
 
     for node in dag_guard.nodes.values() {
-        if node
-            .text
-            .contains("Operation rejected by security extension")
-            && node.text.contains("call_1")
-        {
+        if node.text.contains("Operation rejected by policy") && node.text.contains("call_1") {
             found_fs_rejection = true;
         }
     }

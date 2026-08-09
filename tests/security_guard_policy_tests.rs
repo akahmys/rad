@@ -96,31 +96,27 @@ fn test_security_guard_blocklist_is_opt_in_and_blocks_nothing_when_unconfigured(
     };
 
     // Same shape as `test_multi_extension_isolated_roles`, but the
-    // security-guard extension is registered with an empty `config` — no
-    // blocklist patterns at all.
-    config.extensions = vec![
-        ExtensionConfig {
-            name: "rad-orchestrator".to_string(),
-            enabled: true,
-            role: "orchestrator".to_string(),
-            source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::new(),
-        },
-        ExtensionConfig {
-            name: "security-guard".to_string(),
-            enabled: true,
-            role: "security".to_string(),
-            source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::new(),
-        },
-    ];
+    // `policy` module is registered with no `config` at all — no
+    // blocklist patterns.
+    config.extensions = vec![ExtensionConfig {
+        name: "rad-orchestrator".to_string(),
+        enabled: true,
+        role: "orchestrator".to_string(),
+        source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
+        permissions: Some(perms.clone()),
+        config: HashMap::new(),
+    }];
     // Tools come from the `mcp` kernel module, which under `RAD_TEST_PORT`
     // offers the synthetic read/write/execute set this suite drives. It was
     // `mcp-tool-provider` until AWU 965. `Orchestrator::new` boots whatever
     // `modules` declares, so there is nothing to wire up here.
     config.modules = vec![
+        rad::config::ModuleConfig {
+            name: "policy".to_string(),
+            source: "target/wasm32-wasip2/debug/policy_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::Value::Null,
+        },
         rad::config::ModuleConfig {
             name: "mcp".to_string(),
             source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
@@ -180,6 +176,6 @@ fn test_security_guard_blocklist_is_opt_in_and_blocks_nothing_when_unconfigured(
     let path = workspace.join("blocked.txt");
     assert!(
         path.exists(),
-        "File blocked.txt SHOULD exist when the security guard has no configured policy"
+        "File blocked.txt SHOULD exist when the policy module has no configured patterns"
     );
 }

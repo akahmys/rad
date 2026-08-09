@@ -3,42 +3,23 @@
 use crate::wasm::format_wasm_error;
 use crate::wasm::{HostExecution, WasmState};
 
-/// Puts the call past `security-guard` before anything runs.
-///
-/// Extracted so the module path (`execute_tool_text`) is guarded by exactly the
-/// same policy as the extension path, and guarded *once* — running it on both
-/// would double any policy that has a side effect, such as prompting a human.
-fn verify_tool_call(state: &WasmState, name: &str, arguments: &str) -> Result<(), String> {
-    let Some(orchestrator) = state.orchestrator.as_ref().and_then(|w| w.upgrade()) else {
-        return Ok(());
-    };
-    let req = crate::ipc::RasRpcRequest {
-        id: Some("test".to_string()),
-        command: crate::ipc::RasRpcCommand::ExecuteTool {
-            call_id: "test".to_string(),
-            name: name.to_string(),
-            arguments: arguments.to_string(),
-        },
-    };
-    let req_bytes = serde_json::to_vec(&req).unwrap_or_default();
-    orchestrator
-        .verify_rpc_exclude(&state.name, &req, &req_bytes)
-        .map_err(|e| format!("Operation rejected by security extension: {e}"))
-}
-
 /// `execute-tool-text`: the tool's output as a string.
 ///
 /// A module returns its answer directly; an extension still returns a process,
 /// so the handle is drained here instead of at every call site. Modules are
 /// consulted first — during the migration a ported provider and the extension
 /// it replaces can both be loaded, and the module is the one that should win.
+///
+/// **The policy check is no longer here.** It moved into `modules/mcp`, which
+/// asks `policy` before it runs anything (§3.4.3, AWU 972). The host models no
+/// policy at all now, which is the point: §3.4.2's extension point is the
+/// module composition, and a gate the host owns cannot be replaced by swapping
+/// the module that provides tools.
 pub(crate) fn execute_tool_text(
     state: &mut WasmState,
     name: String,
     arguments: String,
 ) -> Result<String, String> {
-    verify_tool_call(state, &name, &arguments)?;
-
     let kernel = state
         .orchestrator
         .as_ref()
@@ -87,11 +68,12 @@ pub(crate) fn execute_tool(
     name: String,
     arguments: String,
 ) -> Result<wasmtime::component::Resource<HostExecution>, String> {
-    verify_tool_call(state, &name, &arguments)?;
     execute_tool_unverified(state, name, arguments)
 }
 
-/// The extension path proper. Callers must have run [`verify_tool_call`].
+/// The extension path proper — dead since AWU 965 and 969 removed every
+/// tool-provider extension, and probed as such in AWU 972. It stays because
+/// `wit/rad.wit` still declares `execute-tool`.
 fn execute_tool_unverified(
     state: &mut WasmState,
     name: String,
@@ -134,8 +116,6 @@ fn execute_tool_unverified(
             }
         }
     }
-
-    verify_tool_call(state, &name, &arguments)?;
 
     let provider_arc = match provider_opt {
         Some(arc) => arc,

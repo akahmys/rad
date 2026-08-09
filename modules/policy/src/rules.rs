@@ -52,7 +52,7 @@ impl Rules {
         self.block_command_patterns
             .iter()
             .find(|p| arguments.contains(p.as_str()))
-            .map(|p| format!("blocked by policy pattern '{p}'"))
+            .map(|p| format!("blocked by pattern '{p}'"))
     }
 }
 

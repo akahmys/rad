@@ -9,6 +9,7 @@
 #![deny(clippy::pedantic)]
 
 mod client;
+mod gate;
 mod testmode;
 mod tool;
 mod transport;
@@ -48,8 +49,12 @@ fn list(_req: ListReq) -> Result<ListRes, Error> {
     })
 }
 
+/// Asks `policy` first, and before `testmode` — the synthetic tools run real
+/// commands through `bash`, so a gate that sat below them would leave the one
+/// path where the model's text reaches `argv` unguarded.
 fn call(req: CallReq) -> Result<CallRes, Error> {
     let CallReq { name, arguments } = req;
+    gate::check(&name, &arguments).map_err(Error::invalid)?;
     if let Some(content) = testmode::call(&name, &arguments) {
         return Ok(CallRes { content });
     }

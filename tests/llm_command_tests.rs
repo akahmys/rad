@@ -12,7 +12,8 @@
 // (falling back to the real `~/.rad/config.json` otherwise — see AWU 918).
 // `RAD_TEST_CONFIG_HOME` is process-global env state, so every test here
 // holds `TEST_MUTEX` for its full duration to serialize against the others
-// in this binary (same pattern as `tests/multi_extension_tests.rs`). A
+// in this binary (the pattern `tests/multi_extension_tests.rs` set, before
+// AWU 972 deleted it along with the verification chain it tested). A
 // prior version of this file didn't do this and clobbered a real
 // developer's `~/.rad/config.json` with tempdir paths and dummy profiles.
 use parking_lot::Mutex;

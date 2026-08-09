@@ -1,7 +1,8 @@
-// Split out of `multi_extension_tests.rs` to stay under the 300-line file
-// limit — this file covers the "isolated roles" scenario specifically,
-// while `multi_extension_tests.rs` covers the "verification chain" (two
-// security-guard instances) scenario. Each file is its own test binary
+// Was split out of `multi_extension_tests.rs`, which covered the "verification
+// chain" over two guard instances and went with that mechanism in AWU 972.
+// What remains here is the scenario that outlived it: an orchestrator
+// extension and a `policy` module side by side, with the refusal reaching the
+// DAG. Each file is its own test binary
 // (cargo's usual `tests/*.rs` convention) with exactly one test, so no
 // `TEST_MUTEX`/env-var serialization is needed here — that was only ever
 // about tests sharing a process, not sharing a machine.
@@ -13,17 +14,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-/// `security-guard`'s blocklist policy is config-driven (fetched via the
-/// `GetExtensionConfig` RPC), not hardcoded — this test exercises the real
-/// wiring by explicitly configuring the same patterns the extension used to
-/// carry as literals, rather than relying on a fallback.
-fn security_guard_config() -> HashMap<String, serde_json::Value> {
-    HashMap::from([(
-        "block_command_patterns".to_string(),
-        serde_json::json!(["blocked_command", "blocked.txt"]),
-    )])
-}
 
 fn run_mock_http_server(
     addr: &str,
@@ -105,29 +95,27 @@ fn test_multi_extension_isolated_roles() {
     };
 
     // Instantiate with isolated roles (Orchestrator, Security Guard, and Tool Provider)
-    config.extensions = vec![
-        ExtensionConfig {
-            name: "rad-orchestrator".to_string(),
-            enabled: true,
-            role: "orchestrator".to_string(),
-            source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: HashMap::new(),
-        },
-        ExtensionConfig {
-            name: "security-guard".to_string(),
-            enabled: true,
-            role: "security".to_string(),
-            source: "target/wasm32-wasip2/debug/security_guard.wasm".to_string(),
-            permissions: Some(perms.clone()),
-            config: security_guard_config(),
-        },
-    ];
+    config.extensions = vec![ExtensionConfig {
+        name: "rad-orchestrator".to_string(),
+        enabled: true,
+        role: "orchestrator".to_string(),
+        source: "target/wasm32-wasip2/debug/rad_orchestrator.wasm".to_string(),
+        permissions: Some(perms.clone()),
+        config: HashMap::new(),
+    }];
     // Tools come from the `mcp` kernel module, which under `RAD_TEST_PORT`
     // offers the synthetic read/write/execute set this suite drives. It was
     // `mcp-tool-provider` until AWU 965. `Orchestrator::new` boots whatever
     // `modules` declares, so there is nothing to wire up here.
     config.modules = vec![
+        rad::config::ModuleConfig {
+            name: "policy".to_string(),
+            source: "target/wasm32-wasip2/debug/policy_module.wasm".to_string(),
+            enabled: true,
+            config: serde_json::json!({
+                "block_command_patterns": ["blocked_command", "blocked.txt"]
+            }),
+        },
         rad::config::ModuleConfig {
             name: "mcp".to_string(),
             source: "target/wasm32-wasip2/debug/mcp_module.wasm".to_string(),
@@ -192,10 +180,7 @@ fn test_multi_extension_isolated_roles() {
 
     let mut found_rejection = false;
     for node in dag_guard.nodes.values() {
-        if node
-            .text
-            .contains("Operation rejected by security extension")
-        {
+        if node.text.contains("Operation rejected by policy") {
             found_rejection = true;
             break;
         }
