@@ -1,6 +1,14 @@
 // `open_process` implementation, split out of `imports_rpc.rs` to stay
 // under the 300-line file limit.
-use crate::ipc::RasRpcRequest;
+//
+// The `verify_rpc_exclude` call that stood before the HITL check is gone
+// (AWU 970). No guest has imported `open-process` since `mcp-tool-provider`
+// was deleted in AWU 965; the import survives only because `wit/rad.wit`
+// keeps its existing functions' types unchanged during the migration. The
+// removal was made after instrumenting this function to panic on entry and
+// running the full suite without it firing — and after confirming the same
+// probe on `execute_tool_text` does fail a test, so an unfired probe means
+// something.
 use crate::wasm::{HostExecution, WasmState, permissions};
 use parking_lot::Mutex;
 
@@ -39,7 +47,6 @@ pub(crate) fn open_process(
         command.clone()
     };
 
-    // Validate command via security guard check
     let cmd = rad_models::RasRpcCommand::SpawnBashProcess {
         command: expanded_command.clone(),
     };
@@ -56,19 +63,6 @@ pub(crate) fn open_process(
             "Permission denied in extension '{}': {e}",
             state.name
         ));
-    }
-
-    let orchestrator = state.orchestrator.as_ref().and_then(|w| w.upgrade());
-    if let Some(ref orch) = orchestrator {
-        let req = RasRpcRequest {
-            id: Some("wasm_call".to_string()),
-            command: cmd.clone(),
-        };
-        let buf =
-            serde_json::to_vec(&req).map_err(|e| format!("Failed to serialize request: {e}"))?;
-        if let Err(e) = orch.verify_rpc_exclude(&state.name, &req, &buf) {
-            return Err(format!("Security verification failed: {e}"));
-        }
     }
 
     // HITL check

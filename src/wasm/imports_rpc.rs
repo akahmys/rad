@@ -64,6 +64,9 @@ impl bindings::RadExtensionImports for WasmState {
         }
     }
 
+    /// The path check and the permission mask remain; the `verify_rpc_exclude`
+    /// call between them is gone (AWU 970). No guest imports `open-file` —
+    /// proven by probe, see `imports_process.rs`.
     fn open_file(
         &mut self,
         path: String,
@@ -72,7 +75,6 @@ impl bindings::RadExtensionImports for WasmState {
         let workspace = self.sandbox.workspace_dir();
         let resolved = resolve_and_verify_path(workspace, &path)?;
 
-        // Validate via security guard (verify_rpc)
         let cmd = rad_models::RasRpcCommand::OpenFile {
             path: resolved.clone(),
             writeable,
@@ -80,19 +82,6 @@ impl bindings::RadExtensionImports for WasmState {
 
         permissions::check_permissions(&cmd, &self.permissions, self.sandbox.workspace_dir())
             .map_err(|e| format!("Permission denied in extension '{}': {e}", self.name))?;
-
-        let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
-        if let Some(ref orch) = orchestrator {
-            let req = RasRpcRequest {
-                id: Some("wasm_call".to_string()),
-                command: cmd.clone(),
-            };
-            let buf = serde_json::to_vec(&req)
-                .map_err(|e| format!("Failed to serialize request: {e}"))?;
-            if let Err(e) = orch.verify_rpc_exclude(&self.name, &req, &buf) {
-                return Err(format!("Security verification failed: {e}"));
-            }
-        }
 
         let mut options = std::fs::OpenOptions::new();
         options.read(true);

@@ -268,11 +268,48 @@ be questioned again:
   no-orchestrator path's hardcoded endpoint, which would have surfaced as a
   connection failure explaining nothing.
 
-### 🔜 Next: stage 7 (`security-guard` → `policy`)
+### 🚧 In progress: stage 7 (`security-guard` → `policy`)
 
-Not yet broken into AWUs. Read before planning: `ARCHITECTURE-NEXT.md` §3.4.3
-(policy is cooperative), §3.4.4 (the limit to state plainly), §3.4.5. What is
-already known from reading the code, so it is not re-derived:
+- [x] AWU 970: Delete the three verification sites no guest reaches
+- [ ] AWU 971: `modules/policy` — the blocklist as a module
+- [ ] AWU 972: `mcp` asks `policy`, and `verify_tool_call` goes in the same AWU
+- [ ] AWU 973: Delete `ext/security-guard` and the host's verification machinery
+- [ ] AWU 974: §3.4.4 — write down what is not defended
+- [ ] AWU 975 (optional): remove `modules/mcp`'s `unsafe impl Send`
+
+**The open design question is settled: one hook, inside `modules/mcp`.**
+Moving from five call sites to one is not a narrowing of what is enforced —
+four of the five enforce nothing today, and the narrowing already happened in
+stages 5 and 6 as a side effect of deleting their callers. Measured before
+deciding:
+
+| site | guest that calls it | branch in `policy::evaluate` | live |
+|---|---|---|---|
+| `imports_tool.rs:25` `execute_tool` | `rad-orchestrator` | `ExecuteTool { arguments }` | **yes — the only one that ever blocks** |
+| `imports_rpc.rs:32` `host_rpc` | `rad-orchestrator`, 13 commands | none of them hit a branch | yes, always allows |
+| `imports_rpc.rs:92` `open_file` | nobody | `_ => true` | no |
+| `imports_http.rs:43` `open_http_stream` | nobody (AWU 969) | `_ => true` | no |
+| `imports_process.rs:69` `open_process` | nobody (AWU 965) | `SpawnBashProcess` | no |
+
+**`proc-spawn`/`net-open` do not get a check, and the recorded "gap" is
+closed upstream rather than filled.** §3.4.2 discarded the `syscall-gate` role
+and its reasoning still holds in the code: model-derived data reaches neither
+`argv` nor the URL. `mcp` spawns from `kernel.config` and sends the model's
+tool calls over an already-running server's *stdin*; `llm-openai`'s URL is
+config-derived. The one exception is `testmode`, where `bash -c <model's
+command>` does put model text in `argv` — and the tool-execution hook sees the
+same string first. The one hook is upstream of both kernel sites on every path
+where model-controlled data exists. AWU 972 tests that rather than asserting it.
+
+**`block_path_patterns` is already dead.** The `write` tool is served by
+`modules/mcp/src/testmode.rs` through `bash`, not through `FileWrite`, and
+`rad-orchestrator` issues no `FileWrite` at all. The only thing still executing
+that branch is `src/wasm/tests.rs:119`, which drives `verify_rpc` directly.
+AWU 971 measures this before removing it.
+
+Read before planning: `ARCHITECTURE-NEXT.md` §3.4.3 (policy is cooperative),
+§3.4.4 (the limit to state plainly), §3.4.5. What is already known from reading
+the code, so it is not re-derived:
 
 - **The extension is 148 lines and almost pure.** `ext/security-guard/src/`:
   `lib.rs` 76, `policy.rs` 72. `verify_rpc(command) -> bool` plus a blocklist
@@ -304,11 +341,27 @@ already known from reading the code, so it is not re-derived:
 - **§3.4.4 is part of the work, not commentary.** `ARCHITECTURE.md` §1.3 claims
   the security guard prevents prompt-injection damage; §3.4.4 calls that an
   overclaim and says not to pretend. Stage 7 is when that sentence gets fixed.
-- **Open design question, not yet decided**: §3.4.3 says one hook — `mcp-bridge`
-  asking before tool execution — is enough, which is a *narrower* surface than
-  the five call sites today. Deciding whether stage 7 preserves the current
-  fan-out or moves to the single hook is the first thing to settle, because it
-  determines whether this is a port or a redesign.
+- ~~**Open design question, not yet decided**~~ — settled above: one hook, in
+  `modules/mcp`. Mostly deletion, not a redesign.
+
+#### AWU 970: Delete the three verification sites no guest reaches
+- **Objective**: Remove `verify_rpc_exclude` from `open_file`,
+  `open_http_stream` and `open_process`, which nothing has called since AWU 965
+  and 969 deleted their only callers.
+- **DoD**: Suite unchanged at 256, and the removal justified by measurement
+  rather than by reading the call graph.
+- **Done**. 43 lines out, 17 in — the difference is the comments recording why.
+  The WIT imports stay: `wit/rad.wit`'s existing functions do not change type
+  during the migration, so the host impls remain and only the policy call goes.
+- **The probe needed its own positive control, and that is the point.** Each of
+  the three functions was made to `panic!` on entry; the full suite then ran
+  256/0, never firing one. That alone proves nothing — an unfired probe and a
+  probe that cannot fire look identical. The same probe placed on
+  `execute_tool_text` failed `security_guard_policy_tests` immediately
+  (`AWU970-PROBE: execute_tool_text reached`, then the test's own
+  "SHOULD exist" assertion), which is what makes the three silences evidence.
+- Two `RasRpcRequest` imports became unused with the blocks, which is the
+  compiler confirming the bindings existed for the check and nothing else.
 
 ### 📌 State at the end of stage 6
 

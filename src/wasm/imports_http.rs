@@ -8,7 +8,12 @@
 // surfaced to the user. Failures are sent through the channel as `Err` (via
 // `HostStream::PipeReaderFallible`) rather than encoded as byte chunks, so
 // they can't be silently swallowed by the SSE parser on the guest side.
-use crate::ipc::{RasRpcRequest, TimeoutPolicy};
+//
+// The `verify_rpc_exclude` call `open_http_stream` used to make is gone
+// (AWU 970): no guest has imported `open-http-stream` since `ext/llm-connector`
+// was deleted in AWU 969. Proven by probe, not by inspection — see
+// `imports_process.rs`.
+use crate::ipc::TimeoutPolicy;
 use crate::wasm::{HostStream, WasmState, permissions};
 use futures_util::StreamExt;
 use parking_lot::Mutex;
@@ -31,19 +36,6 @@ pub(crate) fn open_http_stream(
 
     permissions::check_permissions(&cmd, &state.permissions, state.sandbox.workspace_dir())
         .map_err(|e| format!("Permission denied in extension '{}': {e}", state.name))?;
-
-    let orchestrator = state.orchestrator.as_ref().and_then(|w| w.upgrade());
-    if let Some(ref orch) = orchestrator {
-        let req = RasRpcRequest {
-            id: Some("wasm_call".to_string()),
-            command: cmd.clone(),
-        };
-        let buf =
-            serde_json::to_vec(&req).map_err(|e| format!("Failed to serialize request: {e}"))?;
-        if let Err(e) = orch.verify_rpc_exclude(&state.name, &req, &buf) {
-            return Err(format!("Security verification failed: {e}"));
-        }
-    }
 
     let (tx, rx) = std::sync::mpsc::channel::<Result<Vec<u8>, String>>();
 
