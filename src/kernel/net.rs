@@ -9,12 +9,20 @@
 //! rewritten. Two things do not come with it:
 //!
 //! - **The permission mask.** Modules have no permission mechanism (§3.4).
-//! - **`verify_rpc_exclude`.** The kernel holds no orchestrator handle, so the
-//!   `security-guard` check the extension host runs before every request has no
-//!   equivalent here. This is the *second* occurrence of that gap — `proc-spawn`
-//!   is the first — and both belong to the `policy` module (§3.4.3, stage 7).
-//!   Exposure today is the same as `proc-spawn`'s: a module's URL comes from
-//!   the host's own configuration, not from the model.
+//! - **A policy check.** The extension host ran one before every request, and
+//!   this syscall has no equivalent — deliberately, not as a gap left open.
+//!   §3.4.2 considered a `syscall-gate` role and discarded it: watching
+//!   syscalls defends nothing, because the filesystem is reachable through
+//!   WASI regardless, and the actual hazard — a tool call to an already-running
+//!   MCP server — never appears as a syscall at all.
+//!
+//!   What makes that safe here is where the untrusted text goes. A URL comes
+//!   from the host's own configuration, never from the model, so `net-open`
+//!   carries nothing the model chose. The same argument covers `proc-spawn`,
+//!   whose `argv` comes from `kernel.config`. Model-controlled text does reach
+//!   `argv` on exactly one path — `modules/mcp`'s testmode running `bash -c` —
+//!   and the `policy` check inside `modules/mcp` sits above it.
+//!   `tests/policy_gate_tests.rs` asserts that rather than assuming it.
 
 use super::host::KernelState;
 use super::stream::{Incoming, KernelStream, err};

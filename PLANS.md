@@ -274,7 +274,7 @@ be questioned again:
 - [x] AWU 971: `modules/policy` — the blocklist as a module
 - [x] AWU 972: `mcp` asks `policy`, and `verify_tool_call` goes in the same AWU
 - [x] AWU 973: Delete `ext/security-guard` and the host's verification machinery
-- [ ] AWU 974: §3.4.4 — write down what is not defended
+- [x] AWU 974: §3.4.4 — write down what is not defended
 - [ ] AWU 975 (optional): remove `modules/mcp`'s `unsafe impl Send`
 
 **The open design question is settled: one hook, inside `modules/mcp`.**
@@ -464,6 +464,35 @@ the code, so it is not re-derived:
   in stages 5 and 6. Config cleanup stays deferred by decision, so nothing was
   changed on the machine; the three stale entries want removing before the next
   real run.
+
+#### AWU 974: §3.4.4 — write down what is not defended
+- **Objective**: The sentence `ARCHITECTURE.md` §1.3 was making about
+  prompt-injection, and every doc still describing a hook that no longer fires.
+- **DoD**: No document describes `verify-rpc` as live, and the limit §3.4.4
+  names is stated where a reader meets the claim rather than in a design doc.
+- **Done**. `ARCHITECTURE.md` (diagram, §1.1's gateway checks, §1.3's entry 2,
+  the config example), `CONFIG.md`, `EXTENSIONS.md`, `src/kernel/net.rs`,
+  `src/kernel/proc.rs`, `ARCHITECTURE-NEXT.md` §9.3/§9.4.
+- **The overclaim is now stated as a limit, next to the thing it limits.** §1.3
+  carries a note saying plainly that once a tool call reaches an MCP server rad
+  constrains nothing, that the effective defence is which servers a user
+  registers, and — the part §3.4.4 asks for — that **no component here prevents
+  prompt-injection damage** and earlier revisions said otherwise.
+- **The two kernel headers said the opposite of the decision.**
+  `net.rs` described the missing check as "the *second* occurrence of that gap"
+  belonging to `policy` at stage 7, which reads as "a check will be added
+  here". It will not. Both headers now carry §3.4.2's argument — a syscall gate
+  defends nothing — plus the reason it is safe: no model-chosen text reaches
+  `argv` or a URL, except `mcp`'s testmode `bash -c`, which the gate sits above
+  and `tests/policy_gate_tests.rs` proves it sits above.
+- **`EXTENSIONS.md` was teaching new authors to implement `verify_rpc`.** The
+  skeleton, the world listing, the bullet, and the diagram node are gone, with
+  a note pointing at the module world instead.
+- **§9.4's invariant needed narrowing a third time.** Removing
+  `export verify-rpc` from `rad-extension` is not a type change: a component
+  carrying an export the world no longer requires still instantiates, so the
+  breakage runs the opposite way from the one the invariant guards against.
+  Recorded there with the evidence, not left as a silent exception.
 
 ### 📌 State at the end of stage 6
 

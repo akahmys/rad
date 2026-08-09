@@ -966,7 +966,7 @@ wit/context-tools.wit           → context-tools-extension
 | 4 | `skill-tool-provider` → module(§4.5 の3変更を同時に反映) | ✅ 完了 (AWU 959/960)。4拡張 + 2モジュール |
 | 5 | `mcp-tool-provider` → `mcp` module | ✅ 完了 (AWU 963/964/965)。3拡張 + 3モジュール |
 | 6 | `llm-connector` → `llm-transport-openai` module | ✅ 完了 (AWU 966〜969)。2拡張 + 4モジュール |
-| 7 | `security-guard` → `policy` module | 1拡張 + 5モジュール |
+| 7 | `security-guard` → `policy` module | ✅ 完了 (AWU 970〜974)。1拡張 + 5モジュール |
 | 8 | `rad-orchestrator` → `agent-loop` module | **旧world・旧RPC面・`models/` の変換マクロを削除** |
 | 9 | `dag` / `ui-repl` を Core から module へ切り出す | 残ったCoreがカーネル |
 | 10 | `llm-transport-raw`(minijinja)、`templates/module-rust`、`cargo xtask new-module` | 拡張作者向けが揃う |
@@ -985,6 +985,13 @@ wit/context-tools.wit           → context-tools-extension
   を追加した際、旧WITでビルド済みの8つの `.wasm` を一切再ビルドせずに全テストが
   通り、これを3度目に確認した。
   当初この不変条件は「ファイルに一切触れない」と書いていたが、それは実測より広い。
-  狭めた根拠は上記であって、都合ではない
+  狭めた根拠は上記であって、都合ではない。
+  **段階7でもう一度狭めた**: AWU 973 で `rad-extension` から `export verify-rpc` を、
+  `world rad-security-guard` ごと削除した。これは型変更ではなく export の削除であり、
+  壊れる方向が逆である — world が要求しなくなった export をコンポーネントが余分に
+  持っていても、wasmtime はそれを無視して実体化する。ホスト側の呼び出し元
+  (`WasmRuntime::verify_rpc`)が消えた以上、残せば「起動できないフック」を契約が
+  宣言し続け、`templates/` が新規作者にそれを実装させることになる。
+  スイート緑と `rad-extension-template` のビルドで確認済み
 - **各段階の終わりに rad は動作する。** 動かない状態で次に進まない
 - CI(`--workspace` + wasm32-wasip2)が全段階を通して緑であること

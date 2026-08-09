@@ -24,7 +24,7 @@ graph TD
         
         Orchestrator["1. LLM Orchestrator <br> (rad_orchestrator.wasm)"]
         Connector["2. LLM Transport <br> (llm_openai_module.wasm — kernel module)"]
-        SecurityGuard["3. Security Guard <br> (security_guard.wasm)"]
+        Policy["3. Policy <br> (policy_module.wasm — kernel module)"]
         ToolProvider["4. Tool/MCP Provider <br> (mcp_module.wasm — kernel module)"]
         SkillModule["5. Skills <br> (skills_module.wasm — kernel module)"]
         ContextModule["6. Context Compactor <br> (context_module.wasm — kernel module)"]
@@ -33,10 +33,10 @@ graph TD
         Connector -->|2. Request Stream RPC| WasmRuntime
         WasmRuntime -->|3. Route Connection| Gateway
         Orchestrator -->|4. Exec Tool RPC| WasmRuntime
-        WasmRuntime -->|5. Query Hook| SecurityGuard
-        WasmRuntime -->|6. Resolve Tools| ToolProvider
-        WasmRuntime -->|7. Discover Skills| SkillProvider
-        Orchestrator -->|8. Compact History| ContextCompactor
+        WasmRuntime -->|5. Resolve Tools| ToolProvider
+        ToolProvider -->|6. Ask before running| Policy
+        WasmRuntime -->|7. Discover Skills| SkillModule
+        Orchestrator -->|8. Compact History| ContextModule
     end
 ```
 
@@ -46,13 +46,13 @@ The Core focuses on executing low-level physical operations (primitives) on the 
 * **Trait-based Subsystem Isolation**: To keep the implementation clean and modular, all physical operations are encapsulated under internal Rust Traits (e.g., `FsSubsystem`, `ProcessSubsystem`).
 * **API Gateway & Capability Check**: Wasm resource-instantiation and RPC requests pass through a single gateway before any handle is returned. Two distinct checks apply, and they do **not** cover the same set of calls:
   * **Capability mask** (`permissions::check_permissions`, driven by `rad.json`): applied to calls that name a physical resource — `open-file`/`file-read`/`file-write`/`list-dir`, `open-process`/`spawn-bash-process`, `open-http-stream`. This is what applies `fs_read_allow`/`fs_write_allow`/`execution`/`network` **to calls that come through this gateway** — see the enforcement note below.
-  * **Security-guard hook** (`verify_rpc_exclude`): applied additionally, delegating an approve/deny decision to the `security` role extension.
-  * `execute-tool` is deliberately **only** subject to the security-guard hook, not the capability mask: `PermissionConfig` has no dimension describing "which tools may be invoked", so a mask check there would be structurally vacuous. Introducing a real per-extension tool allowlist would be a new permission dimension, not a fix to this layer.
+  * **There is no second check at this gateway.** Until AWU 973 a `verify_rpc_exclude` hook asked every loaded `security`-role extension to approve each request. It is gone: policy is a `policy` kernel module now, and `modules/mcp` asks it directly before running a tool (§1.3). Four of that hook's five call sites had stopped being reachable when their callers were deleted, and the fifth — `execute-tool` — is the one that moved.
+  * `execute-tool` is deliberately **not** subject to the capability mask: `PermissionConfig` has no dimension describing "which tools may be invoked", so a mask check there would be structurally vacuous. Introducing a real per-extension tool allowlist would be a new permission dimension, not a fix to this layer. What gates a tool call is the `policy` module, one layer up.
 
 > [!IMPORTANT]
 > **What the capability mask actually enforces.** The mask governs calls that pass through the host RPC surface. It is not a containment boundary, for two independent reasons — both verified against the running system, not inferred:
 >
-> 1. **Extensions can bypass it with `std::fs`.** `src/wasm/loader.rs` gives every extension WASI preopens for `.` and `$HOME` with `DirPerms::all()` / `FilePerms::all()`. An extension that calls `std::fs` directly reads and writes the entire home directory without touching the gateway, the mask, or the security guard. This was demonstrated by adding three lines to an extension and observing the write succeed. Every extension `rad` ships routes through the RPC surface by convention, and the mask constrains those calls — but nothing forces that choice.
+> 1. **Extensions can bypass it with `std::fs`.** `src/wasm/loader.rs` gives every extension WASI preopens for `.` and `$HOME` with `DirPerms::all()` / `FilePerms::all()`. An extension that calls `std::fs` directly reads and writes the entire home directory without touching the gateway, the mask, or any policy. This was demonstrated by adding three lines to an extension and observing the write succeed. Every extension `rad` ships routes through the RPC surface by convention, and the mask constrains those calls — but nothing forces that choice.
 > 2. **Tools do not run inside the sandbox at all.** Tools come from MCP servers, which are separate OS processes holding the user's full privileges. `core-utilities-mcp` calls `std::fs::write` in its own process; `rad` never observes those writes, so no mask can apply to them.
 >
 > What *is* genuinely enforced is the WebAssembly sandbox itself — an extension cannot reach outside its preopens, corrupt host memory, or call a host function the world does not export — together with process-group cleanup (§2.1). Treat `fs_read_allow`/`fs_write_allow` as a guard rail for cooperating extensions and a statement of intent, not as a security boundary against hostile code.
@@ -74,9 +74,16 @@ To maximize modularity and robustness, `rad` supports chaining multiple extensio
 1. **LLM Orchestrator (Decision Loop)**
    - **Responsibility**: Manages the prompt logic, calls the LLM, and orchestrates the steps of the agent loop.
    - **Isolation**: Focuses strictly on token completion and reasoning, calling tools abstractly via Core APIs.
-2. **Security Guard (Validation / verify-rpc)**
-   - **Responsibility**: Implements deep inspect rules to approve or deny resource instantiation requests before the host returns the handle. The blocklist (path/command substring patterns) is config-driven, not hardcoded: on first `verify_rpc` call it fetches its own `ExtensionConfig.config` (`~/.rad/config.json`) via the generic `GetExtensionConfig` RPC and caches it for the life of the component instance. No configured patterns means the policy blocks nothing — it's opt-in, not a fallback demo.
-   - **Isolation**: Runs as a separate component, so its decision is not reachable from the Orchestrator's own logic — a prompt-injected Orchestrator cannot rewrite the rules it is judged by. It is **not** a containment boundary, however: it only sees calls that arrive on the host RPC surface, and both `std::fs` inside an extension and MCP server processes bypass that surface entirely (see the enforcement note in §1.1). Its practical value is catching an injected Orchestrator that is still cooperating with the RPC contract, not stopping code that has decided not to.
+2. **Policy (`policy`, kernel module)**
+   - **Responsibility**: Answers `policy.check` with an approve/deny for one tool call. The blocklist (command substring patterns) is config-driven, not hardcoded: it reads `block_command_patterns` from `kernel.config` once per component instance. No configured patterns means it blocks nothing — it is opt-in, not a fallback demo. A refusal is a successful call returning `allow: false`; an `Err` means the module itself failed, and `mcp` treats that as a denial so a crashed policy cannot read as approval.
+   - **Isolation**: Not an extension — it exports the `rad:kernel` `module` world, and `modules/mcp` asks it over `dispatch.call` before running anything. Running as a separate component means its decision is not reachable from the Orchestrator's own logic: a prompt-injected Orchestrator cannot rewrite the rules it is judged by.
+   - **Cooperative, with no enforcement power.** A module that declines to ask is not stopped by anything. That is deliberate: what this defends against is the model acting on untrusted input it read, not a malicious module — the user installed those, and "installed" is already a trust decision. Enforcement, if wanted, is done by replacing `mcp` with a gated implementation, because routing follows `manifest().provides` and swapping the provider swaps the gate with it.
+   - **Why it moved**: it was `ext/security-guard` until AWU 971–973. The extension was reached through a host-side fan-out that asked every loaded extension to approve every request, from five call sites. Four of the five guarded imports no guest had called since stages 5 and 6, and the fan-out's own subject — "ask all of them" — stopped meaning anything at two extensions.
+
+> [!IMPORTANT]
+> **What no policy in `rad` defends against.** Once a tool call reaches an MCP server, `rad` cannot constrain that process. The server is a separate OS process running with the user's full privileges; `rad` neither sees nor mediates what it does. The effective defence is which MCP servers a user chooses to register, and that decision lives outside `rad`.
+>
+> This is a consequence of adopting MCP, not a defect in the design — but it means **no component here prevents prompt-injection damage**, and earlier revisions of this section claimed otherwise. What human approval and a blocklist actually buy is a chance for a person to stop the model when the model is still cooperating. Code that has decided not to cooperate is not in scope for any of it.
 3. **Tool/MCP Provider (`mcp`, kernel module)**
    - **Responsibility**: Spawns each stdio MCP server named in its own config, speaks JSON-RPC over the server's pipes, and offers the union of their tools. Discovers, parses, and resolves dynamic schemas and marshals tool calls/replies.
    - **Isolation**: Not an extension — it answers `mcp.tools.list` / `mcp.tools.call`, which the host aggregates alongside every other provider (`src/kernel/tools.rs`). Servers are launched through the `proc-spawn` syscall, which takes an argv list; the extension joined `command` and `args` into a string the host then split back apart.
@@ -321,16 +328,14 @@ Configuration is restricted to a single `rad.json` file so the policy is readabl
         "fs_write_allow": ["*"],
         "execution": { "allow_bash": true, "allow_commands": [], "block_commands": [] }
       }
-    },
+    }
+  ],
+  "modules": [
     {
-      "name": "security-guard",
-      "source": "~/.rad/wasm/security_guard.wasm",
+      "name": "policy",
+      "source": "~/.rad/wasm/policy_module.wasm",
       "enabled": true,
-      "role": "security",
-      "permissions": {
-        "fs_read_allow": ["*"],
-        "fs_write_allow": ["*"]
-      }
+      "config": { "block_command_patterns": ["rm -rf /"] }
     }
   ]
 }
@@ -339,6 +344,7 @@ Configuration is restricted to a single `rad.json` file so the policy is readabl
 * **Local Verification**: The Core matches every RPC call (`file_read`, `file_write`, `spawn_bash_process`, etc.) against the Extension's `permissions` mask.
 * **Core Configuration**: The `core` block defines the workspace, snapshot, and log directories used by the runtime.
 * **Extension Configuration**: Each entry in `extensions` defines the Wasm module source, its enabled status, and its specific capability mask.
+* **Module Configuration**: Entries in `modules` declare no role and no permissions. A module reaches whatever the kernel preopens for it, and what it provides comes from the manifest it exports rather than from this file; its `config` is opaque to the kernel and read by the module through `kernel.config`.
 
 ---
 

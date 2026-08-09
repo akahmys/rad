@@ -8,6 +8,12 @@
 //! Split from `host.rs` to keep that file under the 300-line limit. The
 //! `byte-stream` resource this hands back lives in `stream.rs`, because
 //! `net-open` returns the same one.
+//!
+//! **There is no policy check here, on purpose.** See `net.rs`'s header for
+//! the argument in full: §3.4.2 discarded a syscall-level gate, and what keeps
+//! that safe is that `argv` carries no text the model chose. The human-approval
+//! prompt below is a different mechanism and does stay — it is the one thing
+//! that reliably stops a model mid-run (§3.4.3).
 
 use super::host::KernelState;
 use super::stream::{Incoming, KernelStream, err};

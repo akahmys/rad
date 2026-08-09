@@ -96,20 +96,6 @@ The config file supports JSON with comments (JSONC). The following example regis
         },
         "network": { "allow_network": true, "allow_domains": [] }
       }
-    },
-    {
-      "name": "security-guard",
-      "source": "~/.rad/wasm/security_guard.wasm",
-      "enabled": true,
-      "role": "security",
-      "permissions": { "fs_read_allow": ["*"], "fs_write_allow": ["*"] },
-      // Extension-specific settings, passed through opaquely by the Core (it
-      // does not interpret them — only the Extension itself does). Empty or
-      // omitted means the blocklist is opt-in and blocks nothing.
-      "config": {
-        "block_path_patterns": ["secrets.env"],
-        "block_command_patterns": ["rm -rf /"]
-      }
     }
   ],
   // Kernel modules. Unlike extensions these declare no role and no
@@ -121,6 +107,20 @@ The config file supports JSON with comments (JSONC). The following example regis
       "name": "context-tools",
       "source": "~/.rad/wasm/context_module.wasm",
       "enabled": true
+    },
+    {
+      // Approval policy — `mcp` asks this module before it runs a tool. With
+      // no policy module configured nothing is asked and nothing is blocked;
+      // the mechanism is opt-in. Was the `security-guard` extension until
+      // v0.77.0, where it also carried a path-pattern list; that list matched
+      // `FileWrite` RPCs, which no path still issues, so it changed no
+      // outcome and did not come with it.
+      "name": "policy",
+      "source": "~/.rad/wasm/policy_module.wasm",
+      "enabled": true,
+      "config": {
+        "block_command_patterns": ["rm -rf /"]
+      }
     },
     {
       "name": "skills",

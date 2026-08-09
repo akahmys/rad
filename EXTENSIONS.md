@@ -17,20 +17,21 @@ graph TD
     
     subgraph WASM Extension (Guest)
         on_event[on-event]
-        verify_rpc[verify-rpc]
     end
     
     wasm_runtime -- "1. Dispatch Event (on-event)" --> WASM Extension
     WASM Extension -- "2. Call Host Function (host-rpc)" --> wasm_runtime
-    wasm_runtime -- "3. Query Security Hook (verify-rpc)" --> WASM Extension
-    wasm_runtime -- "4. Execute Action" --> subsystems
+    wasm_runtime -- "3. Execute Action" --> subsystems
 ```
 
 ---
 
 ## 2. WIT Contract Definition
 
-The contract is located at `wit/rad.wit`. It defines role-specific worlds (`rad-extension`, `rad-orchestrator`, `rad-security-guard`, `rad-tool-provider`) that extensions implement depending on their role.
+The contract is located at `wit/rad.wit`. It defines role-specific worlds (`rad-extension`, `rad-orchestrator`, `rad-tool-provider`) that extensions implement depending on their role.
+
+> [!NOTE]
+> A fourth world, `rad-security-guard`, exported a hook the host called to approve each RPC. It was removed in v0.77.0, together with the same export on `rad-extension`: approval policy is a kernel module now (`modules/policy`), asked by whichever module runs the tool rather than by the host. See `ARCHITECTURE.md` §1.3. Extensions are being replaced by kernel modules generally — new components should target `wit/kernel/kernel.wit`'s `module` world, not the worlds below.
 
 ### The `rad-extension` World
 
@@ -48,13 +49,11 @@ world rad-extension {
 
     // Guest functions that the extension must implement (export)
     export on-event: func(event: ras-core-event) -> result<_, string>;
-    export verify-rpc: func(command: ras-rpc-command) -> bool;
 }
 ```
 
 * **`host-rpc`**: Allows extensions to execute physical operations (e.g., read files, list directories, run shell commands, access DAG).
 * **`on-event`**: Dispatched by the core when an event occurs (e.g., terminal output received, file modified, HTTP stream chunk returned).
-* **`verify-rpc`**: A security hook. When another extension or component triggers an RPC call, RAD Core queries active security extensions to approve or deny the action.
 
 ---
 
@@ -128,7 +127,7 @@ Use `wit-bindgen` to generate host-guest communication interfaces:
 * **Go**: Run `wit-bindgen-go` command to generate Go stubs.
 
 ### Step 3: Implement Exports
-Implement the `on-event` and `verify-rpc` functions. 
+Implement the `on-event` function.
 
 Example Rust skeleton:
 ```rust
@@ -144,11 +143,6 @@ impl Guest for MyExtension {
             _ => {}
         }
         Ok(())
-    }
-
-    fn verify_rpc(command: RasRpcCommand) -> bool {
-        // Approve all RPC actions, or restrict unsafe operations
-        true
     }
 }
 ```
