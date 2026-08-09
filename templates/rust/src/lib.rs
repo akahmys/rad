@@ -24,19 +24,6 @@ impl Guest for ExtensionImpl {
         }
         Ok(())
     }
-
-    /// Security hook triggered before executing sensitive RPC actions.
-    /// Return `true` to approve, or `false` to deny.
-    fn verify_rpc(command: wit::RasRpcCommand) -> bool {
-        match command {
-            // Examples of inspecting incoming commands
-            wit::RasRpcCommand::SpawnBashProcess(cmd) => {
-                println!("Verifying command execution: {cmd}");
-                true
-            }
-            _ => true,
-        }
-    }
 }
 
 // Export the ExtensionImpl struct as the handler for the rad-extension world

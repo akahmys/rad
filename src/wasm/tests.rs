@@ -1,187 +1,21 @@
-use super::*;
-use crate::config::{ExecutionConfig, PermissionConfig};
-use crate::dag::Dag;
-use crate::fs::FsSandbox;
-use crate::process::ProcessManager;
-
-use parking_lot::Mutex;
-use std::collections::HashMap;
+//! What is left after AWU 973 took `verify_rpc` and the component harness that
+//! existed to drive it.
+//!
+//! The three tests that lived here called `WasmRuntime::verify_rpc` against a
+//! real `security-guard` component. Their subjects moved before the extension
+//! did, per the rule stage 5 set:
+//!
+//! - `test_verify_rpc_blocked_command` → `tests/policy_module_tests.rs`'s
+//!   `patterns_from_kernel_config_are_applied`, and end to end in
+//!   `tests/policy_gate_tests.rs`'s `a_blocked_command_never_reaches_proc_spawn`.
+//! - `test_verify_rpc_allowed` → `an_unconfigured_policy_allows_everything` and
+//!   `a_configured_policy_allows_an_unmatched_call`.
+//! - `test_verify_rpc_blocked_file` has **no equivalent, deliberately.** It
+//!   drove `block_path_patterns` against `FileWrite`, and AWU 971 measured that
+//!   list as changing no outcome on any end-to-end path before dropping it. It
+//!   was the only thing still executing that branch, which is the point: a test
+//!   whose subject exists only because the test drives it directly.
 use std::fs;
-use std::sync::Arc;
-
-struct TestContext {
-    _temp_dir: tempfile::TempDir,
-    _sandbox: Arc<FsSandbox>,
-    _process_manager: Arc<ProcessManager>,
-    _dag: Arc<Mutex<Dag>>,
-    _active_processes: Arc<Mutex<HashMap<String, RunningProcess>>>,
-    _orchestrator: Arc<crate::orchestrator::Orchestrator>,
-    runtime: WasmRuntime,
-}
-
-/// The blocklist patterns `security-guard` used to carry as hardcoded
-/// literals, now fetched via `GetExtensionConfig` — these tests register
-/// them on a minimal `Orchestrator` so `verify_rpc` has a real config to
-/// resolve, matching how the extension is actually configured in
-/// `~/.rad/config.json`.
-fn blocklist_config() -> HashMap<String, serde_json::Value> {
-    HashMap::from([
-        (
-            "block_path_patterns".to_string(),
-            serde_json::json!(["blocked.txt"]),
-        ),
-        (
-            "block_command_patterns".to_string(),
-            serde_json::json!(["blocked_command", "blocked.txt"]),
-        ),
-    ])
-}
-
-fn setup_test_context(
-    perms: PermissionConfig,
-    ext_config: HashMap<String, serde_json::Value>,
-) -> TestContext {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let workspace = temp_dir.path().join("workspace");
-    let snapshots = temp_dir.path().join("snapshots");
-    fs::create_dir_all(&workspace).unwrap();
-    fs::create_dir_all(&snapshots).unwrap();
-
-    let sandbox = Arc::new(FsSandbox::new(
-        workspace.clone(),
-        snapshots,
-        perms.fs_read_allow.clone(),
-        perms.fs_write_allow.clone(),
-    ));
-    let process_manager = Arc::new(ProcessManager::new());
-    let dag = Arc::new(Mutex::new(Dag::new()));
-    let active_processes = Arc::new(Mutex::new(HashMap::new()));
-
-    let debug_path = std::path::Path::new("target/wasm32-wasip2/debug/security_guard.wasm");
-    let release_path = std::path::Path::new("target/wasm32-wasip2/release/security_guard.wasm");
-    let wasm_path = if debug_path.exists() {
-        debug_path
-    } else {
-        release_path
-    };
-
-    let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl { dag: dag.clone() });
-    let network_subsystem = Arc::new(crate::http::HttpManager);
-    let (event_tx, _event_rx) = std::sync::mpsc::channel();
-
-    let orch_config = crate::config::Config {
-        extensions: vec![crate::config::ExtensionConfig {
-            name: "test-extension".to_string(),
-            source: String::new(),
-            enabled: true,
-            role: "security".to_string(),
-            permissions: None,
-            config: ext_config,
-        }],
-        ..Default::default()
-    };
-    let orchestrator = Arc::new(crate::orchestrator::Orchestrator::new(
-        orch_config,
-        "wasm_tests_session".to_string(),
-        Arc::new(Mutex::new(Dag::new())),
-        None,
-    ));
-
-    let runtime = WasmRuntime::new(
-        "test-extension".to_string(),
-        wasm_path,
-        "security".to_string(),
-        perms,
-        sandbox.clone() as Arc<dyn FsSubsystem>,
-        process_manager.clone() as Arc<dyn ProcessSubsystem>,
-        dag_subsystem,
-        network_subsystem,
-        active_processes.clone(),
-        event_tx,
-        Some(Arc::downgrade(&orchestrator)),
-        false,
-        15000,
-    )
-    .unwrap();
-
-    TestContext {
-        _temp_dir: temp_dir,
-        _sandbox: sandbox,
-        _process_manager: process_manager,
-        _dag: dag,
-        _active_processes: active_processes,
-        _orchestrator: orchestrator,
-        runtime,
-    }
-}
-
-#[test]
-fn test_verify_rpc_blocked_file() {
-    let perms = PermissionConfig {
-        fs_read_allow: vec!["*".to_string()],
-        fs_write_allow: vec!["*".to_string()],
-        ..Default::default()
-    };
-    let mut ctx = setup_test_context(perms, blocklist_config());
-
-    let req = crate::ipc::RasRpcRequest {
-        id: Some("wasm_call".to_string()),
-        command: rad_models::RasRpcCommand::FileWrite {
-            path: std::path::PathBuf::from("blocked.txt"),
-            data: b"dangerous".to_vec(),
-        },
-    };
-    let req_bytes = serde_json::to_vec(&req).unwrap();
-    let res = ctx.runtime.verify_rpc(&req_bytes);
-    assert!(res.is_err());
-    assert_eq!(res.unwrap_err(), "Operation rejected by security extension");
-}
-
-#[test]
-fn test_verify_rpc_blocked_command() {
-    let perms = PermissionConfig {
-        fs_read_allow: vec![],
-        fs_write_allow: vec![],
-        execution: Some(ExecutionConfig {
-            allow_bash: true,
-            allow_commands: vec![],
-            block_commands: vec![],
-        }),
-        ..Default::default()
-    };
-    let mut ctx = setup_test_context(perms, blocklist_config());
-
-    let req = crate::ipc::RasRpcRequest {
-        id: Some("wasm_call".to_string()),
-        command: rad_models::RasRpcCommand::SpawnBashProcess {
-            command: "blocked_command and parameters".to_string(),
-        },
-    };
-    let req_bytes = serde_json::to_vec(&req).unwrap();
-    let res = ctx.runtime.verify_rpc(&req_bytes);
-    assert!(res.is_err());
-}
-
-#[test]
-fn test_verify_rpc_allowed() {
-    let perms = PermissionConfig {
-        fs_read_allow: vec!["*".to_string()],
-        fs_write_allow: vec!["*".to_string()],
-        ..Default::default()
-    };
-    let mut ctx = setup_test_context(perms, HashMap::new());
-
-    let req = crate::ipc::RasRpcRequest {
-        id: Some("wasm_call".to_string()),
-        command: rad_models::RasRpcCommand::FileWrite {
-            path: std::path::PathBuf::from("allowed.txt"),
-            data: b"safe data".to_vec(),
-        },
-    };
-    let req_bytes = serde_json::to_vec(&req).unwrap();
-    let res = ctx.runtime.verify_rpc(&req_bytes);
-    assert!(res.is_ok());
-}
 
 #[test]
 fn test_resolve_and_verify_path_helper() {

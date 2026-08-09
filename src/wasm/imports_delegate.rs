@@ -55,22 +55,7 @@ macro_rules! delegate_extension_imports {
             }
         }
     };
-    // Variant for security guard (host_rpc only)
-    ($trait_path:path, rpc_only) => {
-        impl $trait_path for WasmState {
-            fn host_rpc(
-                &mut self,
-                command: bindings::wit::RasRpcCommand,
-            ) -> Result<String, String> {
-                bindings::RadExtensionImports::host_rpc(self, command)
-            }
-        }
-    };
 }
 
 delegate_extension_imports!(bindings::rad_orchestrator::RadOrchestratorImports);
-delegate_extension_imports!(
-    bindings::rad_security_guard::RadSecurityGuardImports,
-    rpc_only
-);
 delegate_extension_imports!(bindings::rad_tool_provider::RadToolProviderImports);

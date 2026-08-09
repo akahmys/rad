@@ -45,7 +45,6 @@ tempfile = "3.8"
 members = [
     ".",
     "ext/rad-orchestrator",
-    "ext/security-guard",
     "models",
     "crates/rad-abi",
     "crates/rad-sdk",

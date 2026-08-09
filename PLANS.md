@@ -273,7 +273,7 @@ be questioned again:
 - [x] AWU 970: Delete the three verification sites no guest reaches
 - [x] AWU 971: `modules/policy` — the blocklist as a module
 - [x] AWU 972: `mcp` asks `policy`, and `verify_tool_call` goes in the same AWU
-- [ ] AWU 973: Delete `ext/security-guard` and the host's verification machinery
+- [x] AWU 973: Delete `ext/security-guard` and the host's verification machinery
 - [ ] AWU 974: §3.4.4 — write down what is not defended
 - [ ] AWU 975 (optional): remove `modules/mcp`'s `unsafe impl Send`
 
@@ -426,6 +426,44 @@ the code, so it is not re-derived:
   keeps the part that outlived it.
 - Removing `gate::check` fails exactly the three blocking tests and none of the
   opt-in or allow-path ones.
+
+#### AWU 973: Delete `ext/security-guard` and the verification machinery
+- **Objective**: The extension, the host's fan-out, and the WIT surface behind
+  them.
+- **DoD**: 1 extension + 5 modules, suite green, both clippy targets clean.
+- **Done**. Gone: the crate and its workspace member; `verify_rpc_exclude` and
+  `verify_with` (`orchestrator/runner/events.rs`); `WasmRuntime::verify_rpc`
+  and its `security_guard` binding field; the `host_rpc` call site — the last
+  live one, and always an approval, since none of `rad-orchestrator`'s 13
+  commands hit a policy branch; the loader's `"security"` linker and
+  instantiation branches; `bindings::rad_security_guard`; the
+  `delegate_extension_imports!` `rpc_only` arm, whose only consumer it was;
+  and `world rad-security-guard` plus **both** `export verify-rpc` declarations
+  in `wit/rad.wit` — the one on `rad-extension` too, since nothing could invoke
+  it once the host's caller was gone.
+- 269 passed / 0 failed, down exactly 3: the `verify_rpc` tests in
+  `src/wasm/tests.rs`, whose subjects had already moved in AWU 971 and 972.
+  `test_verify_rpc_blocked_file` has no successor on purpose — it drove
+  `block_path_patterns`, and it was the only thing still executing that branch.
+- **The templates are part of the contract, not decoration.** All three WIT
+  copies (`wit/`, `templates/rust/`, `templates/go/`) changed together — the
+  sync gate in `build_all.sh` exists because they have drifted before — and
+  `templates/rust/src/lib.rs` lost its `verify_rpc`, which would otherwise
+  teach a new author to implement a hook the host cannot call. Verified by
+  building `rad-extension-template` against the new WIT.
+- `tests/security_guard_policy_tests.rs` is now `tests/policy_optin_tests.rs`;
+  a test file named after a deleted component is exactly the stale reference
+  this repo keeps catching late.
+- **The installed config will break, and it is worth stating precisely.**
+  `~/.rad/config.json` still carries `security-guard` (role `security`), and
+  `~/.rad/wasm/security_guard.wasm` still exists — so the loader's
+  "missing file, skip silently" path does *not* apply. Probed against the real
+  component: `Failed to create legacy bindings: no function export 'on-event'
+  found`, and `get_or_init_runtimes` propagates that rather than skipping. The
+  same config also still lists `mcp-tool-provider` and `llm-connector`, deleted
+  in stages 5 and 6. Config cleanup stays deferred by decision, so nothing was
+  changed on the machine; the three stale entries want removing before the next
+  real run.
 
 ### 📌 State at the end of stage 6
 

@@ -1,7 +1,10 @@
-// Split out of `multi_extension_tests.rs` to stay under the 300-line file
-// limit — this file is specifically about `security-guard`'s config-driven
-// blocklist policy (Phase 48), while `multi_extension_tests.rs` covers the
-// broader multi-extension verification chain.
+// The opt-in direction of the blocklist, end to end: a `policy` module
+// registered with no config at all blocks nothing.
+//
+// Named after `security-guard` until AWU 973, when the extension it was
+// written against was deleted and the subject became the module. Its sibling
+// `multi_extension_tests.rs` went in AWU 972 with the verification chain it
+// covered.
 use parking_lot::Mutex;
 use rad::config::{Config, CoreConfig, ExecutionConfig, ExtensionConfig, PermissionConfig};
 use rad::dag::Dag;
@@ -44,7 +47,7 @@ fn run_mock_http_server(
 /// is the counterpart to `multi_extension_tests::test_multi_extension_isolated_roles`,
 /// which proves the same wiring actually blocks when patterns ARE configured.
 #[test]
-fn test_security_guard_blocklist_is_opt_in_and_blocks_nothing_when_unconfigured() {
+fn an_unconfigured_policy_module_blocks_nothing() {
     let temp_dir = tempfile::tempdir().unwrap();
     let workspace = temp_dir.path().join("workspace");
     let snapshots = temp_dir.path().join("snapshots");
@@ -143,7 +146,7 @@ fn test_security_guard_blocklist_is_opt_in_and_blocks_nothing_when_unconfigured(
 
     let orchestrator = Arc::new(Orchestrator::new(
         config,
-        "test_multi_role_unconfigured".to_string(),
+        "test_policy_unconfigured".to_string(),
         dag.clone(),
         None,
     ));

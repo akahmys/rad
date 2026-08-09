@@ -78,11 +78,13 @@ pub fn handle_meta(cmd: &RasRpcCommand, ctx: &RpcContext<'_>) -> Result<serde_js
         // `RasRpcCommand::ExecuteTool` is never dispatched via `host_rpc` in
         // practice — real tool execution goes through the `execute-tool`
         // WIT import directly (`src/wasm/imports_tool.rs`), which is what
-        // `rad-orchestrator` (and every extension) actually calls. This
-        // variant only still exists because `imports_tool.rs` constructs
-        // one to describe the call to `verify_rpc_exclude` for security
-        // checks, and `security-guard`'s policy matches on it. Kept here
-        // only to keep this match exhaustive.
+        // `rad-orchestrator` (and every extension) actually calls.
+        //
+        // Until AWU 973 the variant survived because `imports_tool.rs` built
+        // one to describe the call to the security guard, and the guard's
+        // policy matched on it. Both are gone; what keeps it now is the WIT
+        // type, which does not change during the migration. Kept here only to
+        // keep this match exhaustive.
         RasRpcCommand::ExecuteTool { .. } => Err(
             "ExecuteTool is not dispatched via host_rpc; call the execute-tool WIT import directly"
                 .to_string(),
@@ -236,9 +238,9 @@ fn active_llm_profile_json(orch: &crate::orchestrator::Orchestrator) -> serde_js
 
 /// Returns the calling extension's own `config` blob (from
 /// `ExtensionConfig.config` in `~/.rad/config.json`) as a JSON object, so an
-/// extension can be configured (e.g. `security-guard`'s blocklist patterns)
-/// without the host needing to know anything about the shape of that
-/// configuration. Empty object if the extension isn't registered or has no
+/// extension can be configured without the host needing to know anything about
+/// the shape of that configuration. `security-guard`'s blocklist patterns were
+/// the reason this exists; a module's equivalent is `kernel.config`. Empty object if the extension isn't registered or has no
 /// configured `config`.
 fn extension_config_json(
     orch: &crate::orchestrator::Orchestrator,

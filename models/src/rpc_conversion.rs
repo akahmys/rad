@@ -1,8 +1,10 @@
 //! Shared `macro_rules!` definitions that generate the WIT ↔ `RasRpcCommand`
-//! (and `Target`/`TimeoutPolicy`) conversion boilerplate, so each of the 4
-//! crates that previously hand-duplicated this match (`rad` host bindings,
-//! `security-guard`, `mcp-tool-provider`, `rad-orchestrator`) invokes one
-//! shared definition instead of hand-copying ~25 match arms per direction.
+//! (and `Target`/`TimeoutPolicy`) conversion boilerplate, so each crate that
+//! previously hand-duplicated this match invokes one shared definition instead
+//! of hand-copying ~25 match arms per direction. Four crates did when this was
+//! written; the migration has taken it down to two — `rad`'s host bindings and
+//! `rad-orchestrator` — as `security-guard` and `mcp-tool-provider` became
+//! modules, which cross no WIT boundary and so need no conversion at all.
 //!
 //! Each crate's `wit_bindgen::generate!` produces its own local `RasRpcCommand`
 //! type (structurally identical, since all worlds import the same `rad.wit`

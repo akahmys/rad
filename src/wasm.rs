@@ -102,7 +102,6 @@ pub struct WasmRuntime {
     pub store: Store<WasmState>,
     pub extension: Option<bindings::RadExtension>,
     pub orchestrator: Option<bindings::rad_orchestrator::RadOrchestrator>,
-    pub security_guard: Option<bindings::rad_security_guard::RadSecurityGuard>,
     pub tool_provider: Option<bindings::rad_tool_provider::RadToolProvider>,
     pub instance: wasmtime::component::Instance,
     pub role: String,
@@ -131,8 +130,7 @@ impl WasmRuntime {
             } else {
                 Err("Orchestrator bindings missing".to_string())
             }
-        } else if self.role == "security"
-            || self.role == "tool-provider"
+        } else if self.role == "tool-provider"
             || self.role == "context-tools"
             || self.role == "web-access"
         {
@@ -151,52 +149,6 @@ impl WasmRuntime {
     pub fn set_event_tx(&mut self, event_tx: std::sync::mpsc::Sender<RasCoreEvent>) {
         let state = self.store.data_mut();
         state.event_tx = event_tx;
-    }
-
-    pub fn verify_rpc(&mut self, req_bytes: &[u8]) -> Result<(), String> {
-        let request: crate::ipc::RasRpcRequest = serde_json::from_slice(req_bytes)
-            .map_err(|e| format!("Failed to parse request bytes: {e}"))?;
-        let bindings_cmd = bindings::wit::RasRpcCommand::from(request.command.clone());
-        crate::log_host!(
-            "[HOST] verify_rpc for extension '{}': CoreCommand = {:?}, bindings::wit = {:?}",
-            self.store.data().name,
-            request.command,
-            bindings_cmd
-        );
-
-        let ext_name = self.store.data().name.clone();
-
-        if self.role == "security" {
-            if let Some(ref guard) = self.security_guard {
-                let approved = guard
-                    .call_verify_rpc(&mut self.store, &bindings_cmd)
-                    .map_err(|e| format_wasm_error(&ext_name, "verify_rpc", &e))?;
-                if !approved {
-                    return Err("Operation rejected by security extension".to_string());
-                }
-            } else {
-                return Err("Security guard bindings missing".to_string());
-            }
-        } else if self.role == "orchestrator"
-            || self.role == "tool-provider"
-            || self.role == "context-tools"
-            || self.role == "web-access"
-        {
-            // Orchestrator and tool-provider are auto-approved by the host unless targeted by a security guard
-        } else {
-            if let Some(ref ext) = self.extension {
-                let approved = ext
-                    .call_verify_rpc(&mut self.store, &bindings_cmd)
-                    .map_err(|e| format_wasm_error(&ext_name, "verify_rpc", &e))?;
-                if !approved {
-                    return Err("Operation rejected by security extension".to_string());
-                }
-            } else {
-                return Err("Legacy extension bindings missing".to_string());
-            }
-        }
-
-        Ok(())
     }
 
     pub fn get_tools(&mut self) -> Result<String, String> {

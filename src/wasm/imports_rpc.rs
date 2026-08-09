@@ -6,7 +6,6 @@
 /// respectively (split out to stay under the 300-line file limit), with
 /// this file's trait impl methods delegating to them. Cross-world trait
 /// delegation boilerplate lives in `imports_delegate.rs`.
-use crate::ipc::RasRpcRequest;
 use crate::wasm::{WasmState, bindings, permissions, rpc};
 use wasmtime_wasi::WasiView;
 
@@ -23,18 +22,6 @@ impl bindings::RadExtensionImports for WasmState {
             .map_err(|e| format!("Permission denied in extension '{}': {e}", self.name))?;
 
         let orchestrator = self.orchestrator.as_ref().and_then(|w| w.upgrade());
-        if let Some(ref orch) = orchestrator {
-            let req = RasRpcRequest {
-                id: Some("wasm_call".to_string()),
-                command: rpc_cmd.clone(),
-            };
-            if let Ok(buf) = serde_json::to_vec(&req) {
-                orch.verify_rpc_exclude(&self.name, &req, &buf)
-                    .map_err(|e| {
-                        format!("Extension '{}' RPC verification failed: {e}", self.name)
-                    })?;
-            }
-        }
 
         let result = rpc::execute_rpc_command(
             &rpc_cmd,
@@ -64,9 +51,9 @@ impl bindings::RadExtensionImports for WasmState {
         }
     }
 
-    /// The path check and the permission mask remain; the `verify_rpc_exclude`
-    /// call between them is gone (AWU 970). No guest imports `open-file` —
-    /// proven by probe, see `imports_process.rs`.
+    /// The path check and the permission mask remain; the security-guard call
+    /// between them went in AWU 970. No guest imports `open-file` — proven by
+    /// probe, see `imports_process.rs`.
     fn open_file(
         &mut self,
         path: String,

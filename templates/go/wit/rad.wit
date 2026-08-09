@@ -215,7 +215,6 @@ world rad-extension {
 
     // guest functions exported by the extension
     export on-event: func(event: ras-core-event) -> result<_, string>;
-    export verify-rpc: func(command: ras-rpc-command) -> bool;
 }
 
 world rad-orchestrator {
@@ -242,13 +241,6 @@ world rad-orchestrator {
     import open-http-stream: func(url: string, headers: list<tuple<string, string>>, body: string) -> result<stream-handle, string>;
 
     export on-event: func(event: ras-core-event) -> result<_, string>;
-}
-
-world rad-security-guard {
-    use types.{ras-rpc-command, stream-handle, file-handle, execution-handle};
-    
-    import host-rpc: func(command: ras-rpc-command) -> result<string, string>;
-    export verify-rpc: func(command: ras-rpc-command) -> bool;
 }
 
 world rad-tool-provider {

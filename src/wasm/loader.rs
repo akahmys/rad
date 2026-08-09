@@ -56,10 +56,6 @@ impl WasmRuntime {
                 bindings::rad_orchestrator::RadOrchestrator::add_to_linker(&mut linker, |s| s)
                     .map_err(|e| format!("Linker error RadOrchestrator: {e}"))?
             }
-            "security" => {
-                bindings::rad_security_guard::RadSecurityGuard::add_to_linker(&mut linker, |s| s)
-                    .map_err(|e| format!("Linker error RadSecurityGuard: {e}"))?
-            }
             "tool-provider" => {
                 bindings::rad_tool_provider::RadToolProvider::add_to_linker(&mut linker, |s| s)
                     .map_err(|e| format!("Linker error RadToolProvider: {e}"))?
@@ -115,7 +111,6 @@ impl WasmRuntime {
 
         let mut extension = None;
         let mut orchestrator = None;
-        let mut security_guard = None;
         let mut tool_provider = None;
 
         match role.as_str() {
@@ -123,12 +118,6 @@ impl WasmRuntime {
                 orchestrator = Some(
                     bindings::rad_orchestrator::RadOrchestrator::new(&mut store, &instance)
                         .map_err(|e| format!("Failed to create orchestrator bindings: {e}"))?,
-                )
-            }
-            "security" => {
-                security_guard = Some(
-                    bindings::rad_security_guard::RadSecurityGuard::new(&mut store, &instance)
-                        .map_err(|e| format!("Failed to create security bindings: {e}"))?,
                 )
             }
             "tool-provider" => {
@@ -149,7 +138,6 @@ impl WasmRuntime {
             store,
             extension,
             orchestrator,
-            security_guard,
             tool_provider,
             instance,
             role,

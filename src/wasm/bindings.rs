@@ -20,16 +20,6 @@ pub mod rad_orchestrator {
     });
 }
 
-pub mod rad_security_guard {
-    wasmtime::component::bindgen!({
-        path: "wit/rad.wit",
-        world: "rad-security-guard",
-        with: {
-            "radcomp:extension/types": crate::wasm::bindings::rad_extension::radcomp::extension::types,
-        }
-    });
-}
-
 pub mod rad_tool_provider {
     wasmtime::component::bindgen!({
         path: "wit/rad.wit",
