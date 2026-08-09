@@ -606,7 +606,7 @@ unmeasured unknown — pairing that with a 2,061-line port would make a failure
 impossible to attribute.
 
 - [x] AWU 977: Demonstrate the lock-order deadlock
-- [ ] AWU 978: Drive `drain_posts` in production
+- [x] AWU 978: Drive `drain_posts` in production
 - [ ] AWU 979: `llm-openai` from pull to push
 - [ ] AWU 980+: `modules/agent-loop` — split after 978/979 fix the shape
 - [ ] AWU final: delete the old world, the old RPC surface, `models/`'s macros
@@ -637,6 +637,41 @@ impossible to attribute.
   routing stops being load-bearing and the note here should go.
 - **These threads stay wedged for the life of the process**, which is why the
   file is its own test binary with nothing else in it.
+
+#### AWU 978: Drive `drain_posts` in production
+- **Objective**: `post` has existed since AWU 955 and queued into a queue
+  nothing emptied outside a test. A running rad never delivered one.
+- **Done**. `process_event_loop` trades its blocking `recv()` for
+  `recv_timeout(20ms)` and drains at two points.
+  274 passed / 0 failed.
+- **Which thread drains is the whole design decision, not a convenience.**
+  Delivering a post takes the target's lock, and a module handling one may call
+  onward — two locks, nested. AWU 977 showed two threads doing that in opposite
+  orders deadlock. The invariant is now stated in the code: **only the
+  event-loop thread ever holds more than one module lock.** Other threads may
+  `post` (which touches the queue and nothing else) but must not `call` into a
+  module that calls onward. A second draining thread would break it, which is
+  why there is not one.
+- **Two drain sites, and the second is not a latency trim.** If events arrive
+  faster than the tick — which is exactly what an LLM turn is — `recv_timeout`
+  returns `Ok` every iteration and the timeout branch never runs. Without the
+  drain after the handlers the queue starves for the length of the stream.
+  Found by removing each site separately: dropping the tick drain fails two
+  tests, dropping the handler drain fails only
+  `a_steady_event_stream_does_not_starve_the_post_queue`. Each site has a test
+  that is about *it*.
+- **The first version of the test poisoned four unrelated ones.** It used `mcp`
+  in testmode, which needs `RAD_TEST_PORT` — process-global, and the lib tests
+  run in parallel threads, so `rpc_meta_llm_module`'s four endpoint tests
+  started failing. `tests/llm_command_tests.rs` carries a `TEST_MUTEX` for
+  exactly this. A mutex would have worked; using `modules/spawn`, which reads no
+  environment at all and touches a file, needs no shared global.
+- Failed deliveries are logged, not propagated: `post` is fire-and-forget by
+  definition (§3.6.2), and a task must not die because an event had nowhere to
+  go.
+- **Still not covered**: posts queued while no task is running. `run_attempt`
+  owns the loop, so the queue only moves inside a task. Nothing posts outside
+  one today; the kernel owning its own loop is §3.6.7's job.
 
 ### 📜 Stage 6 — what was known before it started (historical)
 
