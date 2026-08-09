@@ -276,6 +276,7 @@ be questioned again:
 - [x] AWU 973: Delete `ext/security-guard` and the host's verification machinery
 - [x] AWU 974: §3.4.4 — write down what is not defended
 - [x] AWU 975: remove `modules/mcp`'s unsafe `Send` claim
+- [x] AWU 976: bring `~/.rad/config.json` to the current architecture
 
 **The open design question is settled: one hook, inside `modules/mcp`.**
 Moving from five call sites to one is not a narrowing of what is enforced —
@@ -454,16 +455,12 @@ the code, so it is not re-derived:
 - `tests/security_guard_policy_tests.rs` is now `tests/policy_optin_tests.rs`;
   a test file named after a deleted component is exactly the stale reference
   this repo keeps catching late.
-- **The installed config will break, and it is worth stating precisely.**
-  `~/.rad/config.json` still carries `security-guard` (role `security`), and
-  `~/.rad/wasm/security_guard.wasm` still exists — so the loader's
-  "missing file, skip silently" path does *not* apply. Probed against the real
-  component: `Failed to create legacy bindings: no function export 'on-event'
-  found`, and `get_or_init_runtimes` propagates that rather than skipping. The
-  same config also still lists `mcp-tool-provider` and `llm-connector`, deleted
-  in stages 5 and 6. Config cleanup stays deferred by decision, so nothing was
-  changed on the machine; the three stale entries want removing before the next
-  real run.
+- **The installed config carries three stale entries.** `~/.rad/config.json`
+  still lists `security-guard`, `mcp-tool-provider` and `llm-connector`, the
+  last two deleted in stages 5 and 6. Config cleanup stays deferred by
+  decision, so nothing on the machine was changed here. **Corrected in AWU 976
+  below** — the failure mode recorded at the time was probed against
+  `~/.rad/wasm/`, and that is not the path this config uses.
 
 #### AWU 974: §3.4.4 — write down what is not defended
 - **Objective**: The sentence `ARCHITECTURE.md` §1.3 was making about
@@ -516,6 +513,59 @@ the code, so it is not re-derived:
   through `testmode`.
 - **Still outstanding, and out of scope here**: `ext/rad-orchestrator` has two
   `unsafe` blocks (`orchestrator/reasoning.rs`). That extension goes in stage 8.
+
+#### AWU 976: the deferred config cleanup, and a correction
+- **Objective**: Bring `~/.rad/config.json` to the current architecture. Asked
+  for explicitly, which is what lifted the deferral.
+- **The AWU 973 note was wrong about which entry breaks, and how.** It probed
+  `~/.rad/wasm/security_guard.wasm` and reported
+  `no function export 'on-event' found`. The config does not point there — every
+  entry names `target/wasm32-wasip2/debug/`, where that component had already
+  been removed. Re-probed at the paths the config actually declares:
+  - `security-guard` — **file absent, skipped silently.** Harmless.
+  - `mcp-tool-provider` — **loads.** Role `tool-provider` still has a world, so
+    the deleted extension's binary was still serving this machine's tools. Not
+    a failure, which is worse: it was working, from a crate that no longer
+    exists in the tree.
+  - `llm-connector` — **fails**: `component imports instance
+    `radcomp:connector/types`, but a matching implementation was not found in
+    the linker`. Its world went in AWU 969, so this config has been failing to
+    boot since **stage 6**, not stage 7.
+- **What changed.** The three extensions are gone, leaving `rad-orchestrator`.
+  `mcp`, `llm-openai` and `policy` were added to `modules`. The MCP server
+  definitions (`core-utilities`, `web-access`) were carried across from the
+  deleted extension's `config` rather than retyped. `policy` gets an empty
+  config because `security-guard` had one — it blocked nothing, and inventing
+  patterns would be a behaviour change smuggled in as cleanup.
+- **Verified by booting it**, not by reading it: `load_config` +
+  `Orchestrator::new` against the real file reports all five modules loaded.
+- The stale copies in `~/.rad/wasm/` are untouched and unused by this config.
+
+### 📌 State at the end of stage 7
+
+- **1 extension** (`rad-orchestrator`) + **5 modules** (`context`, `skills`,
+  `mcp`, `llm-openai`, `policy`), plus four `ship = false` test fixtures
+  (`echo`, `relay`, `spawn`, `net`).
+- 269 passed / 0 failed. Clippy clean on native and `wasm32-wasip2`.
+- **Policy is one hook, inside `modules/mcp`.** The host models no policy at
+  all: no `verify_rpc_exclude`, no `verify_rpc`, no `security` role, no
+  `verify-rpc` anywhere in the WIT.
+- `modules/` contains no `unsafe`.
+
+Carried forward, none of it blocking:
+
+- **The known flake below is still unreproduced.**
+- **Cross-thread lock ordering is unaddressed** (AWU 968). §3.6.1's scheduler
+  is the answer, at stage 8.
+- **`ext/rad-orchestrator` has two `unsafe` blocks**
+  (`orchestrator/reasoning.rs`). That extension goes in stage 8.
+- **`report_tool_inventory`** (`src/orchestrator/runner/runtimes.rs`) is still
+  uncovered.
+- **`runtimes/tests.rs`'s 53-line test function** is still over CODING.md §2's
+  40-line rule, still left alone deliberately.
+- **`execute_tool` and `execute_tool_unverified`** (`src/wasm/imports_tool.rs`)
+  are dead — probed in AWU 972 — and stay only because `wit/rad.wit` declares
+  `execute-tool`. They go with the extension world in stage 8.
 
 ### 📌 State at the end of stage 6
 
