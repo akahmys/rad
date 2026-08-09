@@ -607,9 +607,37 @@ impossible to attribute.
 
 - [x] AWU 977: Demonstrate the lock-order deadlock
 - [x] AWU 978: Drive `drain_posts` in production
-- [ ] AWU 979: `llm-openai` from pull to push
+- [ ] ~~AWU 979: `llm-openai` from pull to push~~ — **premature, see below**
 - [ ] AWU 980+: `modules/agent-loop` — split after 978/979 fix the shape
 - [ ] AWU final: delete the old world, the old RPC surface, `models/`'s macros
+
+#### AWU 979 was mis-scoped, and the reason is worth keeping
+Planned as "fold the polling thread away so the transport pushes chunks".
+Two findings while starting it say otherwise.
+
+- **The polling thread is not part of the hazard.** AWU 977's deadlock needs
+  *both* threads to hold two module locks. `modules/llm-openai` calls nobody —
+  checked, not assumed: the only `dispatch::call`s in any module are `mcp` →
+  `policy` and three `kernel.*` lookups, and a `kernel.*` target takes no module
+  lock at all (`handle_kernel` is pure host). So the polling thread holds
+  exactly one lock, always. The invariant AWU 978 wrote down is not violated by
+  it, and removing it buys no safety.
+- **There is no `post` target yet.** `post` resolves through the registry to a
+  *module*. The consumer of LLM events is still the `rad-orchestrator`
+  extension, reached over the host's `RasCoreEvent` bus. Until `agent-loop` is a
+  module there is nothing for the transport to push *to*, so the conversion has
+  no destination.
+
+A third finding constrains whatever replaces it: **`llm.next` can block for
+~15 seconds.** `Session::pump` loops until it has events or the stream ends, and
+each `read` waits `READ_POLL` (100ms) in the kernel, up to `MAX_PENDING` (150).
+So it can never be pumped from the event-loop thread — that thread also handles
+aborts and drains posts. Either the transport keeps a thread of its own, or
+§3.6.1's async lands. Recorded here because "just call it from the loop" is the
+obvious idea and it is wrong.
+
+The conversion therefore belongs *inside* the `agent-loop` port, as the wiring
+of its event intake, not before it.
 
 #### AWU 977: Demonstrate the lock-order deadlock
 - **Objective**: Decide whether `post` is load-bearing or merely tidy, by
