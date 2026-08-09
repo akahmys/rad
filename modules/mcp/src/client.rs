@@ -15,6 +15,7 @@
 //! argument containing a space. `proc-spawn` takes the argv it already had.
 
 use crate::types::{ByteStream, Process};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -41,12 +42,29 @@ pub struct ActiveMcpServer {
     pub stdout: ByteStream,
 }
 
-// `Process` and `ByteStream` are guest-side resource handles: this module is
-// single-threaded inside its own store, and the kernel serialises calls into it
-// with a per-module lock.
-unsafe impl Send for ActiveMcpServer {}
+thread_local! {
+    /// The live connections.
+    ///
+    /// A `thread_local` rather than a `static Mutex`, following
+    /// `modules/llm-openai/src/session.rs`: `Process` and `ByteStream` are
+    /// guest-side resource handles and so are not `Send`, which a `Mutex<T>`
+    /// would require. This carried an unsafe `Send` claim until AWU 975 — a
+    /// real CODING.md §4 violation, not a preference — and the claim was not
+    /// even needed: a module's store is entered by one caller at a time by
+    /// construction, so there is no second thread for `Send` to be about.
+    static SERVERS: RefCell<Option<HashMap<String, ActiveMcpServer>>> =
+        const { RefCell::new(None) };
+}
 
-pub static SERVERS: Mutex<Option<HashMap<String, ActiveMcpServer>>> = Mutex::new(None);
+/// The names of every live server. Exposed instead of the cell itself so the
+/// borrow cannot be held across a call that re-enters this module.
+pub fn server_names() -> Vec<String> {
+    SERVERS.with_borrow(|s| {
+        s.as_ref()
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default()
+    })
+}
 /// tool name -> server name.
 pub static TOOL_MAPPING: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
 pub static TOOLS_CACHE: Mutex<Option<Vec<crate::tool::Tool>>> = Mutex::new(None);
@@ -75,18 +93,17 @@ pub fn with_server<T>(
     name: &str,
     f: impl FnOnce(&ActiveMcpServer) -> Result<T, String>,
 ) -> Result<T, String> {
-    let guard = SERVERS.lock().map_err(|e| e.to_string())?;
-    let servers = guard.as_ref().ok_or("MCP servers not initialized")?;
-    let server = servers
-        .get(name)
-        .ok_or_else(|| format!("MCP server {name} not found"))?;
-    f(server)
+    SERVERS.with_borrow(|guard| {
+        let servers = guard.as_ref().ok_or("MCP servers not initialized")?;
+        let server = servers
+            .get(name)
+            .ok_or_else(|| format!("MCP server {name} not found"))?;
+        f(server)
+    })
 }
 
 pub fn forget_servers() {
-    if let Ok(mut guard) = SERVERS.lock() {
-        *guard = None;
-    }
+    SERVERS.with_borrow_mut(|guard| *guard = None);
     if let Ok(mut guard) = TOOLS_CACHE.lock() {
         *guard = None;
     }
@@ -141,16 +158,21 @@ fn handshake(name: &str, stdin: &ByteStream, stdout: &ByteStream) -> Result<(), 
 /// connections were confirmed alive and reused. Callers use it to decide
 /// whether cached tool lists are still valid.
 pub fn init_servers() -> Result<bool, String> {
-    let mut guard = SERVERS.lock().map_err(|e| e.to_string())?;
-    if let Some(active) = guard.as_ref().filter(|s| !s.is_empty()) {
-        // An empty write is the cheapest liveness probe: it fails once the
-        // child is gone and its pipe is closed.
-        if active.values().all(|s| s.stdin.write(b"").is_ok()) {
-            return Ok(false);
-        }
+    // Scoped deliberately: the borrow must not span the spawn loop below, which
+    // reaches back into this module. A `Mutex` made that a deadlock; a
+    // `RefCell` makes it a panic, and neither is worth leaving reachable.
+    let reusable = SERVERS.with_borrow(|guard| {
+        guard.as_ref().is_some_and(|active| {
+            // An empty write is the cheapest liveness probe: it fails once the
+            // child is gone and its pipe is closed.
+            !active.is_empty() && active.values().all(|s| s.stdin.write(b"").is_ok())
+        })
+    });
+    if reusable {
+        return Ok(false);
     }
 
-    *guard = None;
+    SERVERS.with_borrow_mut(|guard| *guard = None);
     if let Ok(mut cache) = TOOLS_CACHE.lock() {
         *cache = None;
     }
@@ -198,7 +220,7 @@ pub fn init_servers() -> Result<bool, String> {
     if active.is_empty() {
         Err("no MCP server could be started".to_string())
     } else {
-        *guard = Some(active);
+        SERVERS.with_borrow_mut(|guard| *guard = Some(active));
         Ok(true)
     }
 }

@@ -275,7 +275,7 @@ be questioned again:
 - [x] AWU 972: `mcp` asks `policy`, and `verify_tool_call` goes in the same AWU
 - [x] AWU 973: Delete `ext/security-guard` and the host's verification machinery
 - [x] AWU 974: §3.4.4 — write down what is not defended
-- [ ] AWU 975 (optional): remove `modules/mcp`'s `unsafe impl Send`
+- [x] AWU 975: remove `modules/mcp`'s unsafe `Send` claim
 
 **The open design question is settled: one hook, inside `modules/mcp`.**
 Moving from five call sites to one is not a narrowing of what is enforced —
@@ -493,6 +493,29 @@ the code, so it is not re-derived:
   carrying an export the world no longer requires still instantiates, so the
   breakage runs the opposite way from the one the invariant guards against.
   Recorded there with the evidence, not left as a silent exception.
+
+#### AWU 975: `modules/mcp`'s unsafe `Send` claim
+- **Objective**: CODING.md §4 prohibits `unsafe` outright, and `client.rs`
+  carried one. Not a preference — a violation.
+- **Done**. `SERVERS` becomes a `thread_local` `RefCell`, the shape
+  `modules/llm-openai/src/session.rs` already used. `modules/` now contains no
+  `unsafe` at all.
+- **The claim was never needed.** It existed because `Mutex<T>` requires `T:
+  Send` and `Process`/`ByteStream` are guest resource handles. A module's store
+  is entered by one caller at a time by construction, so there was no second
+  thread for `Send` to be about; the `Mutex` was buying nothing and charging an
+  `unsafe` for it.
+- `TOOL_MAPPING` and `TOOLS_CACHE` stay `static Mutex`: they hold plain data,
+  need no claim, and changing them would be churn.
+- **`init_servers` had to be restructured, not just retyped.** It held the lock
+  across the spawn loop, which reaches back into this module. Under a `Mutex`
+  that was a latent deadlock; under a `RefCell` it would be a panic. The borrow
+  is now scoped to the liveness probe and to the final store.
+- Verified by neutering `server_names`: 5 of `mcp_module_tests`' 6 fail, so the
+  suite does reach the converted path against a real server rather than only
+  through `testmode`.
+- **Still outstanding, and out of scope here**: `ext/rad-orchestrator` has two
+  `unsafe` blocks (`orchestrator/reasoning.rs`). That extension goes in stage 8.
 
 ### 📌 State at the end of stage 6
 

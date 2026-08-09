@@ -24,12 +24,7 @@ pub struct Tool {
 
 /// Issues a live `tools/list` to every server and rebuilds both caches.
 fn fetch_and_cache() -> Result<Vec<Tool>, String> {
-    let names: Vec<String> = crate::client::SERVERS
-        .lock()
-        .map_err(|e| e.to_string())?
-        .as_ref()
-        .map(|m| m.keys().cloned().collect())
-        .unwrap_or_default();
+    let names = crate::client::server_names();
     if names.is_empty() {
         return Err("no MCP servers are running after initialization".to_string());
     }
