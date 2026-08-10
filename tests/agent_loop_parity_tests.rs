@@ -280,6 +280,21 @@ fn the_module_builds_the_same_message_list_the_extension_sends() {
     let built: serde_json::Value = serde_json::from_str(&reply).unwrap();
     let built_messages = built.as_array().expect("an array");
 
+    // The production wiring, which the unit tests above cannot see: they attach
+    // a DAG to a bare kernel by hand, so they would still pass if
+    // `Orchestrator::new` never handed one over. Asked without an explicit dag,
+    // so the only way it can answer is `kernel.dag`.
+    let via_kernel = orchestrator
+        .kernel
+        .lock()
+        .as_ref()
+        .map(|k| k.call("test", "agent-loop", "agent.messages", "{}"))
+        .expect("the kernel is loaded");
+    assert!(
+        via_kernel.is_ok(),
+        "the orchestrator never attached its conversation to the kernel: {via_kernel:?}"
+    );
+
     let sent: Vec<_> = sent_messages.iter().map(essence).collect();
     let built: Vec<_> = built_messages.iter().map(essence).collect();
 

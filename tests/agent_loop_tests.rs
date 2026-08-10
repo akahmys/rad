@@ -232,3 +232,62 @@ fn a_malformed_dag_is_refused_rather_than_yielding_an_empty_conversation() {
         .expect_err("a malformed dag must not answer with a message list");
     assert!(err.contains("bad dag"), "{err}");
 }
+
+/// `kernel.dag` — the (A) decision from AWU 980: host-owned runtime state
+/// reaches a module as a kernel method, beside `kernel.config` and
+/// `kernel.modules`.
+///
+/// Scaffolding with a known expiry: stage 9 makes `dag` a module and this goes
+/// with it. Tested anyway, because "temporary" and "unverified" are not the
+/// same word.
+#[test]
+fn agent_messages_fetches_the_dag_from_the_kernel_when_none_is_given() {
+    let k = kernel();
+    let dag = Arc::new(Mutex::new(rad::dag::Dag::new()));
+    {
+        let mut guard = dag.lock();
+        let n0 = guard.create_node("", "user").unwrap();
+        guard.set_node_text(&n0, "from the kernel").unwrap();
+    }
+    *k.dag.lock() = Some(Arc::clone(&dag));
+
+    let reply = k
+        .call("test", "agent-loop", "agent.messages", "{}")
+        .expect("agent.messages must answer without being handed a dag");
+    let msgs: serde_json::Value = serde_json::from_str(&reply).unwrap();
+    assert_eq!(msgs[1]["content"], "from the kernel", "{msgs}");
+}
+
+/// A kernel with no conversation says so rather than answering with an empty
+/// one. An empty conversation would reach the backend and be blamed on the
+/// model; every module test in `tests/` builds a kernel this way, so the case
+/// is real rather than hypothetical.
+#[test]
+fn a_kernel_with_no_dag_refuses_rather_than_inventing_an_empty_one() {
+    let k = kernel();
+    let err = k
+        .call("test", "agent-loop", "agent.messages", "{}")
+        .expect_err("a kernel with no dag must not answer with a message list");
+    assert!(err.contains("no conversation"), "{err}");
+}
+
+/// The live conversation, not a copy taken when the kernel booted. A module
+/// reading a stale DAG would build every request from the first turn.
+#[test]
+fn kernel_dag_reflects_changes_made_after_it_was_attached() {
+    let k = kernel();
+    let dag = Arc::new(Mutex::new(rad::dag::Dag::new()));
+    *k.dag.lock() = Some(Arc::clone(&dag));
+
+    {
+        let mut guard = dag.lock();
+        let n0 = guard.create_node("", "user").unwrap();
+        guard.set_node_text(&n0, "added afterwards").unwrap();
+    }
+
+    let reply = k
+        .call("test", "agent-loop", "agent.messages", "{}")
+        .unwrap();
+    let msgs: serde_json::Value = serde_json::from_str(&reply).unwrap();
+    assert_eq!(msgs[1]["content"], "added afterwards", "{msgs}");
+}

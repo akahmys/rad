@@ -58,6 +58,19 @@ pub struct KernelShared {
     /// until this was added — a user who had turned HITL on would have lost it
     /// silently. `tests/hitl_tests.rs` is what caught it.
     pub hitl_enabled: std::sync::atomic::AtomicBool,
+    /// The conversation, for `kernel.dag`.
+    ///
+    /// **Scaffolding with a known expiry.** §9.3's stage 9 makes `dag` a module
+    /// of its own, at which point `agent-loop` asks *it* and this field and its
+    /// method go together. It exists because `agent-loop` has to read the
+    /// conversation to build a request and stage 8 must not leave that in the
+    /// host — the alternative was pulling stage 9 forward, which the DAG's
+    /// entanglement with snapshots and rollback makes a much larger step
+    /// (PLANS.md, AWU 980's open question).
+    ///
+    /// `Option` because a kernel can be built without one: every module test in
+    /// `tests/` does, and none of them needs a conversation.
+    pub dag: Mutex<Option<Arc<Mutex<crate::dag::Dag>>>>,
     /// Connect and per-chunk-heartbeat budgets for `net-open`.
     ///
     /// One per kernel, where the extension host has one per extension
@@ -143,6 +156,7 @@ impl KernelShared {
             processes: Arc::new(crate::process::ProcessManager::new()),
             workspace: workspace.into(),
             hitl_enabled: std::sync::atomic::AtomicBool::new(false),
+            dag: Mutex::new(None),
             llm_timeout_policy: Arc::new(Mutex::new(crate::ipc::TimeoutPolicy::Dynamic {
                 heartbeat_timeout_ms: Self::DEFAULT_HEARTBEAT_MS,
                 max_silent_wait_ms: Self::DEFAULT_HEARTBEAT_MS,
@@ -188,6 +202,14 @@ impl KernelShared {
                 let registry = self.registry.lock();
                 serde_json::to_string(&registry.module_names()).map_err(|e| e.to_string())
             }
+            // Read-only, and deliberately so: a module that could *write* the
+            // DAG would be reimplementing snapshots and rollback through a
+            // keyhole. Writing stays on the RPC surface until stage 9 moves the
+            // DAG wholesale.
+            "kernel.dag" => match self.dag.lock().as_ref() {
+                Some(dag) => serde_json::to_string(&*dag.lock()).map_err(|e| e.to_string()),
+                None => Err("this kernel has no conversation attached".to_string()),
+            },
             other => Err(format!("the kernel does not provide '{other}'")),
         }
     }

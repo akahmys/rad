@@ -34,12 +34,16 @@ pub struct EventRes {
 #[derive(serde::Deserialize)]
 pub struct TurnReq {}
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Default)]
 pub struct MessagesReq {
-    /// The DAG, as the host serialises it for `GetDag`. Passed in rather than
-    /// fetched: a module has no way to ask the host for it yet, and inventing
-    /// one here would prejudge a decision recorded in PLANS.md.
-    pub dag: serde_json::Value,
+    /// The DAG, when a caller has one to hand.
+    ///
+    /// Omitted, the module asks the kernel for it. Both exist on purpose: the
+    /// kernel is the real source, and the explicit form is what
+    /// `tests/agent_loop_parity_tests.rs` needs to compare against a DAG as it
+    /// was at a past instant rather than as it is now.
+    #[serde(default)]
+    pub dag: Option<serde_json::Value>,
 }
 
 /// A malformed event is reported, not swallowed.
@@ -73,8 +77,16 @@ fn turn_start(_req: TurnReq) -> serde_json::Value {
 /// windowing is positional and can split an `assistant`/`tool` pair across the
 /// boundary, creating an orphan that was not there before.
 fn messages(req: MessagesReq) -> Result<serde_json::Value, Error> {
+    let raw = if let Some(dag) = req.dag {
+        dag
+    } else {
+        let reply = crate::dispatch::call("kernel", "kernel.dag", "{}")
+            .map_err(|e| Error::io(format!("kernel.dag: {e}")))?;
+        serde_json::from_str(&reply)
+            .map_err(|e| Error::invalid(format!("kernel.dag returned no dag: {e}")))?
+    };
     let dag: messages::Dag =
-        serde_json::from_value(req.dag).map_err(|e| Error::invalid(format!("bad dag: {e}")))?;
+        serde_json::from_value(raw).map_err(|e| Error::invalid(format!("bad dag: {e}")))?;
 
     let mut out = vec![serde_json::json!({
         "role": "system",

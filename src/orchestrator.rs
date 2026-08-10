@@ -96,6 +96,15 @@ impl Orchestrator {
         let process_manager = Arc::new(ProcessManager::new());
         let active_processes = Arc::new(Mutex::new(HashMap::new()));
         let kernel = boot_kernel(&config);
+        // After boot, because `boot` builds the kernel before any module can
+        // ask. Handing it the same `Arc` the orchestrator holds rather than a
+        // copy: `kernel.dag` must answer with the live conversation, not a
+        // snapshot taken at startup.
+        *kernel.dag.lock() = Some(Arc::clone(&dag));
+        // After boot, because `boot` builds the kernel before any module can
+        // ask. Handing it the same `Arc` the orchestrator holds rather than a
+        // copy: `kernel.dag` must answer with the live conversation, not a
+        // snapshot taken at startup.
 
         Self {
             config: Mutex::new(config),

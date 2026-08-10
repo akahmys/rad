@@ -611,12 +611,38 @@ impossible to attribute.
 - [x] AWU 979 (revised): `modules/agent-loop` — the event intake
 - [x] AWU 980: `llm.rs` — the pure core (DAG walk, orphan filter, system prompt)
 - [x] AWU 981: verify AWU 980's port against the extension (differential)
-- [ ] AWU 982: `kernel.dag` / `kernel.llm-profile`, then `orchestrator.rs` (282)
+- [x] AWU 982: `kernel.dag` — decision (A), scaffolding with a stage-9 expiry
+- [ ] AWU 983: `orchestrator.rs` — the event state machine (282)
 - [ ] AWU 982: `runner/done.rs` + `inline_tool_calls.rs` (565)
 - [ ] AWU 983: `reasoning.rs` (the two `unsafe` blocks) / `digest` /
       `context_recovery` / `tool` (428)
 - [ ] AWU 984: delete the extension, the old world, the old RPC surface, and
       `models/`'s conversion macros
+
+#### AWU 982: `kernel.dag`
+- **Objective**: Decision (A) from AWU 980 — host-owned runtime state reaches a
+  module as a kernel method. 308 passed / 0 failed.
+- **Done**. `KernelShared::dag`, the `kernel.dag` arm beside `kernel.config` and
+  `kernel.modules`, wired from `Orchestrator::new`, and `agent.messages` asking
+  for it when no DAG is handed in.
+- **Scaffolding, and the expiry is written where the field is.** Stage 9 makes
+  `dag` a module and both this field and its method go with it. Recorded in the
+  code rather than only here, because that is where someone will find it.
+- **`kernel.llm-profile` is not in this AWU.** The DAG arrives as an `Arc` that
+  `Orchestrator::new` already holds; the config does not — it is a plain
+  `Mutex<Config>` inside the orchestrator, so exposing it means either changing
+  its ownership or giving the kernel a `Weak<Orchestrator>`. Neither is a
+  decision to make in passing, and nothing needs the profile until compaction
+  budgeting moves.
+- **Read-only on purpose.** A module that could write the DAG would be
+  reimplementing snapshots and rollback through a keyhole.
+- **The unit tests could not have caught the production wiring.** They attach a
+  DAG to a bare kernel by hand, so they pass whether or not `Orchestrator::new`
+  ever hands one over. The parity test now asks `agent.messages` *without* an
+  explicit DAG, which only works through `kernel.dag`. Verified by deleting the
+  wiring line: the parity test fails, the ten module tests stay green.
+- Both keeps its explicit-DAG form too, because the differential needs a
+  conversation as it was at a past instant rather than as it is now.
 
 #### AWU 981: the differential AWU 980 asked for
 - **Objective**: Find out whether the module's copy actually matches the
