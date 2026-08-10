@@ -59,5 +59,6 @@ members = [
     "modules/skills",
     "modules/policy",
     "modules/agent-loop",
+    "modules/dag",
     "templates/rust",
 ]

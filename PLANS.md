@@ -541,6 +541,48 @@ the code, so it is not re-derived:
   `Orchestrator::new` against the real file reports all five modules loaded.
 - The stale copies in `~/.rad/wasm/` are untouched and unused by this config.
 
+### 🚧 In progress: stage 9 (`dag` / `ui-repl` → modules)
+
+Decision **(A)**: the `dag` module owns the graph and persists it itself, rather
+than being a window onto storage the host keeps.
+
+**The crash risk was weighed down, not waved away.** The first framing made
+"prove the conversation survives a trap" a gate on the whole stage. Measured:
+`save_session` already runs after every completed task, so the host's exposure
+was one in-flight turn — and today an extension crash mid-turn already costs
+that turn. The module saves on *every* mutation, which is strictly better, and
+the gate came off.
+
+- [x] AWU 985: `modules/dag` — the graph and its persistence
+- [ ] AWU 986: route the host's readers and writers through it
+- [ ] AWU 987: the terminal half (`WriteStdout`, thin: `rpc_terminal.rs` is 15
+      lines and `route_event_to_terminal` is a no-op)
+- [ ] AWU 988: delete the host's copy of both
+
+#### AWU 985: `modules/dag`
+- **Objective**: The graph as a module, owning its own storage.
+  332 passed / 0 failed.
+- **Done**. `modules/dag/{lib.rs,graph.rs,store.rs}`, `src/dag/tests.rs` moved
+  across unchanged as `graph/tests.rs`, plus `store/tests.rs` and
+  `tests/dag_module_tests.rs`.
+- **The graph is copied operation for operation.** It is the one piece of state
+  a session cannot lose, so the port is mechanical — including the two
+  conditional `current_node_id` rules in `merge_nodes` and `delete_node` that
+  each took a bug to find.
+- **One method did not come across.** `set_node_semantic_references` has no
+  production caller in the host either: `tests/repo_map_tests.rs` is the only
+  thing that calls it, so the host's copy is kept alive by a test alone. The
+  *field* stays, because it is in the on-disk shape. Worth deleting from
+  `models/src/dag.rs` when that file goes.
+- **Saving is part of mutating, not a separate call.** The only way to change
+  the graph from outside `store.rs` is through `mutate`, which saves. A caller
+  cannot forget.
+- **The file is byte-compatible with `src/session.rs`** — same path, same
+  shape — which is what lets AWU 986 swap the producer with no migration step.
+- Verified by commenting out the save: three `store` tests fail and so does
+  `a_second_kernel_attaching_to_the_session_sees_the_same_conversation`, which
+  is the property decision (A) rests on.
+
 ### 📌 State at the end of stage 7
 
 - **1 extension** (`rad-orchestrator`) + **5 modules** (`context`, `skills`,
