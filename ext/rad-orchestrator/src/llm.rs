@@ -141,25 +141,34 @@ fn active_llm_model() -> Option<String> {
     val.get("model")?.as_str().map(ToString::to_string)
 }
 
-pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
+/// The raw message list, from `modules/agent-loop` when it is loaded.
+///
+/// `None` means nothing served it — no module, or a reply this cannot read —
+/// and the caller falls back to the copy below. The same bridge every stage of
+/// the migration has used: which surface answers becomes a deployment question
+/// rather than a code change.
+///
+/// `extension_id` is "agent" rather than "agent-loop" because the host's bridge
+/// routes on `<extension_id>.<method>`, and the module provides `agent.messages`.
+fn assembled_by_module() -> Option<Vec<Message>> {
+    let val = call_host(RasRpcCommand::CallExtension {
+        extension_id: "agent".to_string(),
+        method: "messages".to_string(),
+        arguments: "{}".to_string(),
+    })
+    .ok()?;
+    serde_json::from_str(val.as_str()?).ok()
+}
+
+/// What `agent-loop` would have built, built here. Kept as the fallback while
+/// the module is optional, and it is what `tests/agent_loop_parity_tests.rs`
+/// compares against — delete it and the differential has nothing to differ
+/// from.
+fn assembled_locally() -> Result<Vec<Message>, String> {
     let dag_val = call_host(RasRpcCommand::GetDag)?;
     let dag: Dag =
         serde_json::from_value(dag_val).map_err(|e| format!("Failed to parse Dag: {e}"))?;
-    let messages = traverse_dag_messages(&dag);
-
-    // Windowing/compaction happens in the `context-tools` `optimize` call
-    // below, not here; this function only reconstructs the raw list.
-    let (history_limit, budget_scale) = crate::orchestrator::STATE
-        .lock()
-        .ok()
-        .and_then(|g| {
-            g.as_ref()
-                .map(|s| (s.max_history_messages, s.context_budget_scale_percent))
-        })
-        .unwrap_or((None, 100));
-    let max_history_messages = history_limit.unwrap_or(30);
-
-    let filtered_messages = filter_orphaned_tool_messages(messages);
+    let filtered_messages = filter_orphaned_tool_messages(traverse_dag_messages(&dag));
 
     // Computed from the full, pre-optimization message list so no activity
     // is ever missed, then attached to the system message below — which
@@ -179,6 +188,26 @@ pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
         tool_calls: None,
     }];
     all_messages.extend(filtered_messages);
+    Ok(all_messages)
+}
+
+pub fn load_messages_from_dag() -> Result<Vec<Message>, String> {
+    // Windowing/compaction happens in the `context-tools` `optimize` call
+    // below, not here; this function only reconstructs the raw list.
+    let (history_limit, budget_scale) = crate::orchestrator::STATE
+        .lock()
+        .ok()
+        .and_then(|g| {
+            g.as_ref()
+                .map(|s| (s.max_history_messages, s.context_budget_scale_percent))
+        })
+        .unwrap_or((None, 100));
+    let max_history_messages = history_limit.unwrap_or(30);
+
+    let all_messages = match assembled_by_module() {
+        Some(msgs) => msgs,
+        None => assembled_locally()?,
+    };
 
     // Split system message and non-system messages for context optimization
     let mut system_msg = None;

@@ -114,7 +114,7 @@ fn module(name: &str, artefact: &str) -> ModuleConfig {
     }
 }
 
-fn config_for(dir: &std::path::Path) -> rad::config::Config {
+fn config_for(dir: &std::path::Path, with_agent_loop: bool) -> rad::config::Config {
     let workspace = dir.join("workspace");
     let snapshots = dir.join("snapshots");
     fs::create_dir_all(&workspace).unwrap();
@@ -137,12 +137,110 @@ fn config_for(dir: &std::path::Path) -> rad::config::Config {
             permissions: Some(permissions()),
             config: HashMap::new(),
         }],
-        modules: vec![
-            module("llm-openai", "llm_openai_module"),
-            module("agent-loop", "agent_loop_module"),
-        ],
+        modules: {
+            let mut m = vec![module("llm-openai", "llm_openai_module")];
+            if with_agent_loop {
+                m.push(module("agent-loop", "agent_loop_module"));
+            }
+            m
+        },
         ..Default::default()
     }
+}
+
+/// Runs one turn against a capturing backend and returns the message list that
+/// reached the wire.
+fn messages_on_the_wire(with_agent_loop: bool) -> Vec<serde_json::Value> {
+    let temp = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let captured = Arc::new(Mutex::new(None));
+    let dag_at_request = Arc::new(Mutex::new(None));
+
+    let config = config_for(temp.path(), with_agent_loop);
+    let dag = seeded_dag(&temp.path().join("snapshots"));
+    let _server = capturing_server(
+        &format!("127.0.0.1:{port}"),
+        Arc::clone(&captured),
+        Arc::clone(&dag),
+        Arc::clone(&dag_at_request),
+    );
+    // SAFETY: process-global, serialised by `TEST_MUTEX` in the caller.
+    unsafe { std::env::set_var("RAD_TEST_PORT", port.to_string()) };
+
+    let orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(
+        config,
+        "parity".to_string(),
+        dag,
+        None,
+    ));
+    orchestrator
+        .run_task("go".to_string())
+        .expect("task spawning failed");
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(30) && orchestrator.is_running() {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(!orchestrator.is_running(), "the turn never finished");
+
+    let body = captured
+        .lock()
+        .clone()
+        .expect("the backend never received a request");
+    let sent: serde_json::Value = serde_json::from_str(&body).unwrap();
+    sent["messages"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no messages in the request: {sent}"))
+        .iter()
+        .map(essence)
+        .collect()
+}
+
+/// The module now *serves* the extension's message assembly (AWU 984), so the
+/// two implementations can be compared by the only thing that distinguishes
+/// them: whether `agent-loop` is loaded at all.
+///
+/// This replaces the earlier shape, which compared the extension's request
+/// against a `agent.messages` call made from the test. That stopped meaning
+/// anything the moment the extension started asking the module — it would have
+/// been comparing the module against itself.
+#[test]
+fn the_request_is_the_same_with_and_without_the_module() {
+    let _lock = TEST_MUTEX
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+
+    let with_module = messages_on_the_wire(true);
+    let without_module = messages_on_the_wire(false);
+
+    assert_eq!(
+        with_module, without_module,
+        "routing message assembly through agent-loop changed the request.\n\
+         with: {with_module:#?}\nwithout: {without_module:#?}"
+    );
+
+    // Asserted on the shared result so agreement cannot come from both paths
+    // producing nothing.
+    let roles: Vec<_> = with_module.iter().map(|m| m["role"].clone()).collect();
+    assert_eq!(
+        roles,
+        vec!["system", "user", "assistant", "tool", "user"],
+        "the fixture did not exercise what it was built to exercise"
+    );
+    assert!(
+        !with_module
+            .iter()
+            .any(|m| m["tool_call_id"] == "call_never_made"),
+        "the orphan survived, so neither path is filtering"
+    );
+    assert!(
+        with_module[0]["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("notes.md"),
+        "the digest never fired, so this compares nothing about it"
+    );
 }
 
 /// A conversation with everything the walk and the filter have opinions about:
@@ -209,116 +307,4 @@ fn essence(msg: &serde_json::Value) -> serde_json::Value {
         "tool_call_id": msg.get("tool_call_id").cloned().unwrap_or(serde_json::Value::Null),
         "tool_calls": calls,
     })
-}
-
-#[test]
-fn the_module_builds_the_same_message_list_the_extension_sends() {
-    let _lock = TEST_MUTEX
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let temp = tempfile::tempdir().unwrap();
-
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    drop(listener);
-    let captured = Arc::new(Mutex::new(None));
-    let dag_at_request = Arc::new(Mutex::new(None));
-    // SAFETY: process-global, serialised by `TEST_MUTEX`.
-    unsafe { std::env::set_var("RAD_TEST_PORT", port.to_string()) };
-
-    let config = config_for(temp.path());
-    let dag = seeded_dag(&temp.path().join("snapshots"));
-    let _server = capturing_server(
-        &format!("127.0.0.1:{port}"),
-        Arc::clone(&captured),
-        Arc::clone(&dag),
-        Arc::clone(&dag_at_request),
-    );
-    let orchestrator = Arc::new(rad::orchestrator::Orchestrator::new(
-        config,
-        "parity".to_string(),
-        dag.clone(),
-        None,
-    ));
-
-    orchestrator
-        .run_task("go".to_string())
-        .expect("task spawning failed");
-    let started = Instant::now();
-    while started.elapsed() < Duration::from_secs(30) && orchestrator.is_running() {
-        std::thread::sleep(Duration::from_millis(50));
-    }
-    assert!(!orchestrator.is_running(), "the turn never finished");
-
-    // What the extension actually sent.
-    let body = captured
-        .lock()
-        .clone()
-        .expect("the backend never received a request, so there is nothing to compare");
-    let sent: serde_json::Value = serde_json::from_str(&body)
-        .unwrap_or_else(|e| panic!("request body was not JSON: {e}\n{body}"));
-    let sent_messages = sent["messages"]
-        .as_array()
-        .unwrap_or_else(|| panic!("no messages in the request: {sent}"));
-
-    // What the module makes of the same DAG — the one the extension read, not
-    // the one the turn left behind.
-    let dag_json = dag_at_request
-        .lock()
-        .clone()
-        .expect("no DAG was captured alongside the request");
-    let reply = orchestrator
-        .kernel
-        .lock()
-        .as_ref()
-        .map(|k| {
-            k.call(
-                "test",
-                "agent-loop",
-                "agent.messages",
-                &serde_json::json!({ "dag": dag_json }).to_string(),
-            )
-        })
-        .expect("the kernel is loaded")
-        .expect("agent.messages must answer");
-    let built: serde_json::Value = serde_json::from_str(&reply).unwrap();
-    let built_messages = built.as_array().expect("an array");
-
-    // The production wiring, which the unit tests above cannot see: they attach
-    // a DAG to a bare kernel by hand, so they would still pass if
-    // `Orchestrator::new` never handed one over. Asked without an explicit dag,
-    // so the only way it can answer is `kernel.dag`.
-    let via_kernel = orchestrator
-        .kernel
-        .lock()
-        .as_ref()
-        .map(|k| k.call("test", "agent-loop", "agent.messages", "{}"))
-        .expect("the kernel is loaded");
-    assert!(
-        via_kernel.is_ok(),
-        "the orchestrator never attached its conversation to the kernel: {via_kernel:?}"
-    );
-
-    let sent: Vec<_> = sent_messages.iter().map(essence).collect();
-    let built: Vec<_> = built_messages.iter().map(essence).collect();
-
-    assert_eq!(
-        built, sent,
-        "the module's message list differs from what the extension sent.\n\
-         module: {built:#?}\nextension: {sent:#?}"
-    );
-
-    // Asserted separately so a shared bug — both dropping everything, or both
-    // keeping the orphan — cannot pass as agreement.
-    let roles: Vec<_> = sent.iter().map(|m| m["role"].clone()).collect();
-    assert_eq!(
-        roles,
-        vec!["system", "user", "assistant", "tool", "user"],
-        "the fixture did not exercise what it was built to exercise; the \
-         trailing user turn is the task instruction itself"
-    );
-    assert!(
-        !sent.iter().any(|m| m["tool_call_id"] == "call_never_made"),
-        "the orphan survived, so neither implementation is filtering"
-    );
 }

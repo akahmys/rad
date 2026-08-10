@@ -615,10 +615,40 @@ impossible to attribute.
 - [ ] AWU 983: `orchestrator.rs` — the event state machine (282)
 - [ ] AWU 982: `runner/done.rs` + `inline_tool_calls.rs` (565)
 - [x] AWU 983: `digest`, and the port gap the differential had missed
-- [ ] **Blocked on stage 9** — see below. `orchestrator.rs`, `runner/done.rs`
+- [x] AWU 984: route the extension's message assembly through the module
+- [ ] **Blocked on stage 9** — see AWU 983. `orchestrator.rs`, `runner/done.rs`
       and `reasoning.rs` cannot move until the DAG and the terminal do.
 - [ ] AWU final: delete the extension, the old world, the old RPC surface, and
       `models/`'s conversion macros
+
+#### AWU 984: the module serves the extension
+- **Objective**: Stage 8 pauses here (the fork AWU 983 recorded), but not with
+  `agent-loop` as an unused parallel implementation. What was ported is now
+  what runs. 315 passed / 0 failed.
+- **Done**. `ext/rad-orchestrator/src/llm.rs`'s `load_messages_from_dag` asks
+  `agent-loop` for the raw message list and falls back to its own copy when no
+  module answers — the same bridge stages 3-7 used, and no new kernel surface:
+  `agent.messages` already reads the conversation through `kernel.dag`.
+- **Why not simply stop.** A parallel implementation nothing calls is the thing
+  that rots: the extension's copy is what would keep working, and the module's
+  would drift until the day it was switched on. Making it load-bearing now means
+  every real turn exercises it.
+- **The seam is compaction.** The module builds system-with-digest plus the
+  filtered conversation; `context-tools` windowing and the second orphan filter
+  stay in the extension, because they need `GetActiveLlmProfile` and the turn's
+  retry state. Cutting there took no new methods.
+- `extension_id` is `"agent"`, not `"agent-loop"`: the host's bridge routes on
+  `<extension_id>.<method>`, and the module provides `agent.messages`.
+- **The parity test had to change shape or become meaningless.** It compared
+  the extension's request against an `agent.messages` call made from the test —
+  which, once the extension started asking the module, would have compared the
+  module against itself. It now runs the same turn twice, with and without
+  `agent-loop` loaded, and compares what reaches the wire. That is a real
+  differential of the two implementations and stays one.
+- **Verified the module is the one serving**, by marking its system prompt and
+  watching the test fail. Without that check, "the requests match" would be
+  equally consistent with the bridge never firing and both runs using the
+  fallback.
 
 #### AWU 983: `digest`, and a gap the differential had missed
 - **Objective**: Move `orchestrator.rs`'s state machine. **It cannot move yet**,
