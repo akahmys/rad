@@ -206,10 +206,21 @@ impl KernelShared {
             // DAG would be reimplementing snapshots and rollback through a
             // keyhole. Writing stays on the RPC surface until stage 9 moves the
             // DAG wholesale.
-            "kernel.dag" => match self.dag.lock().as_ref() {
-                Some(dag) => serde_json::to_string(&*dag.lock()).map_err(|e| e.to_string()),
-                None => Err("this kernel has no conversation attached".to_string()),
-            },
+            "kernel.dag" => {
+                // The `dag` module first, since it owns the graph once loaded
+                // (stage 9's decision (A)). Routed through `call` rather than
+                // `deliver` so the target lands on the call stack and the cycle
+                // check still applies — `handle_kernel` runs before `call`
+                // pushes anything, so reaching `deliver` directly would leave a
+                // module able to re-enter itself through the kernel.
+                if self.provider_of("dag.get").is_some() {
+                    return self.call(from, "dag", "dag.get", "{}");
+                }
+                match self.dag.lock().as_ref() {
+                    Some(dag) => serde_json::to_string(&*dag.lock()).map_err(|e| e.to_string()),
+                    None => Err("this kernel has no conversation attached".to_string()),
+                }
+            }
             other => Err(format!("the kernel does not provide '{other}'")),
         }
     }

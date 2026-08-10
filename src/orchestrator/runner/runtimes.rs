@@ -123,6 +123,7 @@ impl Orchestrator {
     ) -> Result<WasmRuntime, String> {
         let dag_subsystem = Arc::new(crate::dag::DagSubsystemImpl {
             dag: self.dag.clone(),
+            kernel: self.kernel.lock().clone(),
         });
         WasmRuntime::new(
             ext.name.clone(),

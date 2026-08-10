@@ -20,8 +20,13 @@ fn wasm(name: &str) -> PathBuf {
     panic!("{name}.wasm not built for wasm32-wasip2; run cargo build --target wasm32-wasip2")
 }
 
-fn kernel() -> Arc<KernelShared> {
-    let shared = KernelShared::new();
+/// Each kernel gets its own workspace. The module writes its session file
+/// relative to the workspace the kernel preopens as its `.`, so a shared
+/// default would put every test's conversation in one file inside the repo —
+/// which is what the first version did, and why two of them started failing
+/// only when the whole suite ran.
+fn kernel(workspace: &std::path::Path) -> Arc<KernelShared> {
+    let shared = KernelShared::with_workspace(workspace);
     let rt = ModuleRuntime::load(
         "dag",
         &wasm("dag_module"),
@@ -48,22 +53,15 @@ fn call(k: &Arc<KernelShared>, method: &str, payload: serde_json::Value) -> serd
     serde_json::from_str(&reply).unwrap_or_else(|e| panic!("{method} returned non-JSON: {e}"))
 }
 
-fn open(k: &Arc<KernelShared>, ws: &tempfile::TempDir, session: &str) {
-    call(
-        k,
-        "dag.open",
-        serde_json::json!({
-            "workspace": ws.path().to_string_lossy(),
-            "session_id": session
-        }),
-    );
+fn open(k: &Arc<KernelShared>, session: &str) {
+    call(k, "dag.open", serde_json::json!({ "session_id": session }));
 }
 
 #[test]
 fn a_conversation_can_be_built_and_read_back_through_dispatch() {
     let ws = tempfile::tempdir().unwrap();
-    let k = kernel();
-    open(&k, &ws, "s");
+    let k = kernel(ws.path());
+    open(&k, "s");
 
     let root = call(
         &k,
@@ -99,8 +97,8 @@ fn a_conversation_can_be_built_and_read_back_through_dispatch() {
 #[test]
 fn dag_get_returns_the_shape_existing_readers_parse() {
     let ws = tempfile::tempdir().unwrap();
-    let k = kernel();
-    open(&k, &ws, "s");
+    let k = kernel(ws.path());
+    open(&k, "s");
     call(
         &k,
         "dag.create_node",
@@ -121,8 +119,8 @@ fn dag_get_returns_the_shape_existing_readers_parse() {
 #[test]
 fn an_operation_on_a_missing_node_comes_back_as_an_error() {
     let ws = tempfile::tempdir().unwrap();
-    let k = kernel();
-    open(&k, &ws, "s");
+    let k = kernel(ws.path());
+    open(&k, "s");
 
     let err = k
         .call(
@@ -138,12 +136,18 @@ fn an_operation_on_a_missing_node_comes_back_as_an_error() {
 /// The module persists on every mutation, so a second kernel — a restart, or
 /// §3.6.6's reload after a trap — attaching to the same session sees the same
 /// conversation. This is the property stage 9's decision (A) rests on.
+///
+/// **On its own this test agrees with itself.** Its first version passed while
+/// the module was writing to a path the host cannot read, because both writes
+/// and reads went through the same mangled path.
+/// `dag_module_bridge_tests::what_the_host_wrote_is_on_disk_where_session_rs_looks_for_it`
+/// is what catches that, by reading with `rad::session::load_session`.
 #[test]
 fn a_second_kernel_attaching_to_the_session_sees_the_same_conversation() {
     let ws = tempfile::tempdir().unwrap();
 
-    let first = kernel();
-    open(&first, &ws, "shared");
+    let first = kernel(ws.path());
+    open(&first, "shared");
     let id = call(
         &first,
         "dag.create_node",
@@ -159,8 +163,8 @@ fn a_second_kernel_attaching_to_the_session_sees_the_same_conversation() {
     );
 
     // A wholly separate instance, with its own store and its own memory.
-    let second = kernel();
-    open(&second, &ws, "shared");
+    let second = kernel(ws.path());
+    open(&second, "shared");
     let dag = call(&second, "dag.get", serde_json::json!({}));
     assert_eq!(
         dag["nodes"][&id]["text"], "survives a reload",
@@ -170,7 +174,8 @@ fn a_second_kernel_attaching_to_the_session_sees_the_same_conversation() {
 
 #[test]
 fn the_module_declares_every_method_the_host_will_need() {
-    let k = kernel();
+    let ws = tempfile::tempdir().unwrap();
+    let k = kernel(ws.path());
     for method in [
         "dag.open",
         "dag.get",

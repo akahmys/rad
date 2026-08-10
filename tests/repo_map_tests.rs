@@ -54,7 +54,10 @@ fn setup_runtime(
     let network = Arc::new(MockNetwork);
 
     let wasm_path = "target/wasm32-wasip2/debug/rad_orchestrator.wasm";
-    let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl { dag: dag.clone() });
+    let dag_subsystem = Arc::new(rad::dag::DagSubsystemImpl {
+        dag: dag.clone(),
+        kernel: None,
+    });
     let (event_tx, event_rx) = std::sync::mpsc::channel();
 
     let runtime = WasmRuntime::new(

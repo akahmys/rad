@@ -16,7 +16,6 @@ use rad_sdk::Error;
 
 #[derive(serde::Deserialize)]
 pub struct OpenReq {
-    pub workspace: String,
     pub session_id: String,
 }
 
@@ -58,12 +57,12 @@ pub struct OkRes {
     pub ok: bool,
 }
 
+/// The workspace is not a parameter, deliberately. The kernel preopens it as
+/// this module's `.`, so a path relative to it is the only one that names the
+/// same directory the host does — see `store::session_path`.
 fn open(req: OpenReq) -> Result<OkRes, Error> {
-    let OpenReq {
-        workspace,
-        session_id,
-    } = req;
-    store::open(&workspace, &session_id).map_err(Error::io)?;
+    let OpenReq { session_id } = req;
+    store::open(".", &session_id).map_err(Error::io)?;
     Ok(OkRes { ok: true })
 }
 

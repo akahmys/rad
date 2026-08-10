@@ -26,12 +26,23 @@ struct State {
     path: PathBuf,
 }
 
-/// `<workspace>/.rad/sessions/<session_id>.json` — byte for byte where
-/// `src/session.rs` puts it, so a session written by either side is readable by
-/// the other. That compatibility is what lets AWU 986 route the host through
-/// this module without a migration step.
-fn session_path(workspace: &str, session_id: &str) -> PathBuf {
-    PathBuf::from(workspace)
+/// `<base>/.rad/sessions/<session_id>.json` — where `src/session.rs` puts it,
+/// so a session written by either side is readable by the other. That
+/// compatibility is what lets AWU 986 route the host through this module
+/// without a migration step.
+///
+/// **`base` is "." in the module, and it must be.** The kernel preopens the
+/// workspace as the guest's `.` (`src/kernel/loader.rs`), so a *host-absolute*
+/// workspace path handed in here does not name the same directory: WASI
+/// resolves it under the preopen, and `/tmp/ws/.rad/...` becomes
+/// `<workspace>/tmp/ws/.rad/...`. That is exactly what the first version did.
+/// It went unnoticed because the module's own tests read back through the same
+/// mangled path and agreed with themselves; only reading with
+/// `rad::session::load_session` showed the file was not where the host looks.
+/// The parameter survives for the unit tests below, which run natively where
+/// no preopen is in the way.
+fn session_path(base: &str, session_id: &str) -> PathBuf {
+    PathBuf::from(base)
         .join(".rad")
         .join("sessions")
         .join(format!("{session_id}.json"))
@@ -41,8 +52,8 @@ fn session_path(workspace: &str, session_id: &str) -> PathBuf {
 ///
 /// A missing file is an empty graph, not an error: that is what starting a new
 /// session looks like.
-pub(crate) fn open(workspace: &str, session_id: &str) -> Result<(), String> {
-    let path = session_path(workspace, session_id);
+pub(crate) fn open(base: &str, session_id: &str) -> Result<(), String> {
+    let path = session_path(base, session_id);
     let dag = match std::fs::read_to_string(&path) {
         Ok(json) => serde_json::from_str(&json)
             .map_err(|e| format!("session file '{}' is unreadable: {e}", path.display()))?,

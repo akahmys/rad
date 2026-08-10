@@ -554,10 +554,42 @@ that turn. The module saves on *every* mutation, which is strictly better, and
 the gate came off.
 
 - [x] AWU 985: `modules/dag` — the graph and its persistence
-- [ ] AWU 986: route the host's readers and writers through it
+- [x] AWU 986: route the host's readers and writers through it
 - [ ] AWU 987: the terminal half (`WriteStdout`, thin: `rpc_terminal.rs` is 15
       lines and `route_event_to_terminal` is a no-op)
 - [ ] AWU 988: delete the host's copy of both
+
+#### AWU 986: the host writes through the module
+- **Objective**: One source of truth. 337 passed / 0 failed.
+- **Done**. `DagSubsystemImpl`'s five operations go to the module when one is
+  loaded; `kernel.dag` asks it too; `Orchestrator::new` opens the session on it.
+- **The host's `Arc` is demoted to a cache, not kept as a second owner.** Every
+  mutation refreshes it from the module's reply. That is what lets the readers
+  still holding it directly — `src/main.rs`'s auto-save, `command/tree.rs`,
+  `command/compact.rs` — keep working untouched. They move in AWU 988 and the
+  field goes with them. Dual *ownership* was rejected: two writable copies
+  diverge, and nothing on either side can see it.
+- **`kernel.dag` routes through `call`, not `deliver`.** `handle_kernel` runs
+  before `call` pushes anything onto the stack, so reaching `deliver` directly
+  would let a module re-enter itself through the kernel with the cycle check
+  looking on.
+- **A real bug, found only by reading the way the host reads.** The module was
+  writing to a *host-absolute* workspace path. The kernel preopens the workspace
+  as the guest's `.`, so WASI resolved `/tmp/ws/.rad/...` **under** the preopen:
+  the file landed at `<workspace>/tmp/ws/.rad/sessions/…`. Every module-side test
+  passed, because writes and reads went through the same mangled path and agreed
+  with each other. It surfaced the moment a test read with
+  `rad::session::load_session`. `dag.open` now takes only a session id and the
+  module resolves relative to `.`.
+- **Self-consistency is not verification.** That is the second time this stage:
+  a test can confirm a component agrees with itself while the thing it has to
+  agree with is somewhere else entirely. The cross-check now lives in
+  `dag_module_bridge_tests`, and `dag_module_tests` points at it.
+- **A second self-inflicted one, caught by running the whole suite.** The module
+  writes relative to the kernel's workspace, and the test kernels used the
+  default — the repo root — so every test shared one session file and collided
+  in parallel. Each test kernel now has its own workspace. It passed in
+  isolation and failed together, which is the only way that shows up.
 
 #### AWU 985: `modules/dag`
 - **Objective**: The graph as a module, owning its own storage.

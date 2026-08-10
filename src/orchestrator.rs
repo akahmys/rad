@@ -101,6 +101,19 @@ impl Orchestrator {
         // copy: `kernel.dag` must answer with the live conversation, not a
         // snapshot taken at startup.
         *kernel.dag.lock() = Some(Arc::clone(&dag));
+        // The module owns the graph when one is loaded, so it has to be told
+        // which session it is holding. Same file the host reads, so both agree
+        // at boot and diverge only if one of them stops going through the
+        // other — which is what `dag_module_bridge_tests` watches for.
+        if kernel.provider_of("dag.open").is_some() {
+            // No workspace: the kernel preopens it as the module's `.`, so a
+            // host-absolute path would name a different directory inside the
+            // guest's view.
+            let payload = serde_json::json!({ "session_id": session_id }).to_string();
+            if let Err(e) = kernel.call("host", "dag", "dag.open", &payload) {
+                eprintln!("\x1b[33mWarning: dag module could not open the session: {e}\x1b[0m");
+            }
+        }
         // After boot, because `boot` builds the kernel before any module can
         // ask. Handing it the same `Arc` the orchestrator holds rather than a
         // copy: `kernel.dag` must answer with the live conversation, not a
