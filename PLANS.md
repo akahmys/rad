@@ -609,13 +609,50 @@ impossible to attribute.
 - [x] AWU 978: Drive `drain_posts` in production
 - [ ] ~~AWU 979: `llm-openai` from pull to push~~ — **premature, see below**
 - [x] AWU 979 (revised): `modules/agent-loop` — the event intake
-- [ ] AWU 980: `llm.rs` — request assembly and response parsing (299 lines)
+- [x] AWU 980: `llm.rs` — the pure core (DAG walk, orphan filter, system prompt)
 - [ ] AWU 981: `orchestrator.rs` — the event state machine (282)
 - [ ] AWU 982: `runner/done.rs` + `inline_tool_calls.rs` (565)
 - [ ] AWU 983: `reasoning.rs` (the two `unsafe` blocks) / `digest` /
       `context_recovery` / `tool` (428)
 - [ ] AWU 984: delete the extension, the old world, the old RPC surface, and
       `models/`'s conversion macros
+
+#### AWU 980: `llm.rs`'s pure core
+- **Objective**: Move the parts of message assembly that are functions of their
+  input. 304 passed / 0 failed.
+- **Done**. `modules/agent-loop/src/messages.rs` and its 12 unit tests, plus
+  `agent.messages` across dispatch.
+- **`llm.rs` did not move whole, and the reason is a decision still open.** Its
+  other half asks the host questions — `GetDag`, `GetActiveLlmProfile`,
+  `CallExtension` to `context-tools`, `GenerateLlmStream`, `WriteStdout` — and a
+  module has no way to ask most of those. `CallExtension` and
+  `GenerateLlmStream` already have module answers (`context-tools.optimize`,
+  `llm.generate`); **`GetDag` and `GetActiveLlmProfile` do not.**
+- **The open question, which decides AWU 981's shape**: how does a module reach
+  host-owned runtime state?
+  - **(A) kernel methods** — `kernel.dag`, `kernel.llm-profile`, beside the
+    existing `kernel.config` and `kernel.modules`. §3.6.7 already registers the
+    kernel as a dispatch target, so this is not a new concept. Cost: stage 9
+    makes `dag` its own module, so `kernel.dag` is scaffolding with a known
+    expiry.
+  - **(B) the host pushes state in** with the turn. Keeps the traversal in the
+    module but leaves turn orchestration in the host, which is what stage 8
+    exists to remove.
+  - **(C) pull stage 9's `dag` module forward.** Cleanest end state; the DAG is
+    wired into snapshots and rollback, so it is a large reordering.
+  - Recommendation: **(A)**, with the expiry recorded rather than discovered.
+- `read_rule_file` shrinks: a `FileRead` RPC that decoded a `Vec<u8>` out of
+  JSON becomes `std::fs::read_to_string`, because §3.1 puts the filesystem on
+  WASI.
+- **The base system prompt is copied verbatim.** It is what every transcript so
+  far has been produced against; rewording it would be a behaviour change
+  wearing a port's clothes.
+- Both halves were shown to be load-bearing: neutering the orphan filter fails
+  3 tests, removing the walk's `reverse()` fails 1, and they are different tests.
+- **Not yet verified against the extension.** Nothing compares the two
+  implementations on the same DAG — the extension's copy is still what runs. The
+  differential only becomes possible when AWU 981 can drive both, and that is
+  the first thing it should do.
 
 #### AWU 979 (revised): `modules/agent-loop` — the event intake
 - **Objective**: The module exists, and the transport's events reach it, before

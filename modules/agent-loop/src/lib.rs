@@ -15,6 +15,7 @@
 #![deny(clippy::pedantic)]
 
 mod intake;
+mod messages;
 
 use rad_sdk::Error;
 
@@ -32,6 +33,14 @@ pub struct EventRes {
 
 #[derive(serde::Deserialize)]
 pub struct TurnReq {}
+
+#[derive(serde::Deserialize)]
+pub struct MessagesReq {
+    /// The DAG, as the host serialises it for `GetDag`. Passed in rather than
+    /// fetched: a module has no way to ask the host for it yet, and inventing
+    /// one here would prejudge a decision recorded in PLANS.md.
+    pub dag: serde_json::Value,
+}
 
 /// A malformed event is reported, not swallowed.
 ///
@@ -57,6 +66,26 @@ fn turn_start(_req: TurnReq) -> serde_json::Value {
     intake::snapshot()
 }
 
+/// The message list a request would be built from: the DAG walked into
+/// messages, orphaned tool replies dropped, and the system prompt in front.
+///
+/// The filter runs here and must run again after compaction — count-based
+/// windowing is positional and can split an `assistant`/`tool` pair across the
+/// boundary, creating an orphan that was not there before.
+fn messages(req: MessagesReq) -> Result<serde_json::Value, Error> {
+    let dag: messages::Dag =
+        serde_json::from_value(req.dag).map_err(|e| Error::invalid(format!("bad dag: {e}")))?;
+
+    let mut out = vec![serde_json::json!({
+        "role": "system",
+        "content": messages::system_prompt(),
+    })];
+    for msg in messages::filter_orphaned_tool_messages(messages::traverse(&dag)) {
+        out.push(serde_json::to_value(msg).map_err(|e| Error::invalid(e.to_string()))?);
+    }
+    Ok(serde_json::Value::Array(out))
+}
+
 rad_sdk::module! {
     wit: "../../wit/kernel/kernel.wit",
     name: "agent-loop",
@@ -65,5 +94,6 @@ rad_sdk::module! {
         "agent.event" => event,
         "agent.turn" => rad_sdk::infallible(turn),
         "agent.turn.start" => rad_sdk::infallible(turn_start),
+        "agent.messages" => messages,
     }
 }

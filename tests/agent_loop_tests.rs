@@ -168,3 +168,67 @@ fn the_module_declares_the_methods_the_host_posts_to() {
         );
     }
 }
+
+/// `agent.messages` across dispatch: the DAG in, an OpenAI-shaped message array
+/// out, system prompt first.
+///
+/// The walk and the filter are unit-tested; what only exists here is the
+/// envelope — that the host's `GetDag` JSON deserialises into the module's own
+/// `Dag` shape. The module declares a narrower struct than `rad_models::Dag`
+/// (no `next_node_index`, no `semantic_references`), so this is where a field
+/// the host emits and the module rejects would show up.
+#[test]
+fn agent_messages_turns_a_dag_into_a_request_message_list() {
+    let k = kernel();
+    // Exactly what `RasRpcCommand::GetDag` returns, extra fields and all.
+    let dag = serde_json::json!({
+        "nodes": {
+            "n0": { "id": "n0", "parent_ids": [], "node_type": "user", "text": "hello" },
+            "n1": { "id": "n1", "parent_ids": ["n0"], "node_type": "assistant",
+                    "text": "hi", "semantic_references": null }
+        },
+        "current_node_id": "n1",
+        "next_node_index": 2
+    });
+
+    let reply = k
+        .call(
+            "test",
+            "agent-loop",
+            "agent.messages",
+            &serde_json::json!({ "dag": dag }).to_string(),
+        )
+        .expect("agent.messages must answer");
+    let msgs: serde_json::Value = serde_json::from_str(&reply).unwrap();
+    let msgs = msgs.as_array().expect("an array of messages");
+
+    assert_eq!(msgs.len(), 3, "system + two turns: {msgs:?}");
+    assert_eq!(msgs[0]["role"], "system");
+    assert!(
+        msgs[0]["content"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("expert coding assistant"),
+        "the system prompt is not the one the model has been tuned against"
+    );
+    assert_eq!(msgs[1]["role"], "user");
+    assert_eq!(msgs[1]["content"], "hello");
+    assert_eq!(msgs[2]["role"], "assistant");
+}
+
+/// A DAG that is not one comes back as an error rather than an empty
+/// conversation — an empty message list would reach the backend and be blamed
+/// on the model.
+#[test]
+fn a_malformed_dag_is_refused_rather_than_yielding_an_empty_conversation() {
+    let k = kernel();
+    let err = k
+        .call(
+            "test",
+            "agent-loop",
+            "agent.messages",
+            &serde_json::json!({ "dag": "not a dag" }).to_string(),
+        )
+        .expect_err("a malformed dag must not answer with a message list");
+    assert!(err.contains("bad dag"), "{err}");
+}
