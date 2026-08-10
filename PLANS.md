@@ -610,12 +610,41 @@ impossible to attribute.
 - [ ] ~~AWU 979: `llm-openai` from pull to push~~ — **premature, see below**
 - [x] AWU 979 (revised): `modules/agent-loop` — the event intake
 - [x] AWU 980: `llm.rs` — the pure core (DAG walk, orphan filter, system prompt)
-- [ ] AWU 981: `orchestrator.rs` — the event state machine (282)
+- [x] AWU 981: verify AWU 980's port against the extension (differential)
+- [ ] AWU 982: `kernel.dag` / `kernel.llm-profile`, then `orchestrator.rs` (282)
 - [ ] AWU 982: `runner/done.rs` + `inline_tool_calls.rs` (565)
 - [ ] AWU 983: `reasoning.rs` (the two `unsafe` blocks) / `digest` /
       `context_recovery` / `tool` (428)
 - [ ] AWU 984: delete the extension, the old world, the old RPC surface, and
       `models/`'s conversion macros
+
+#### AWU 981: the differential AWU 980 asked for
+- **Objective**: Find out whether the module's copy actually matches the
+  extension, rather than only matching its own tests. 305 passed / 0 failed.
+- **Done**. `tests/agent_loop_parity_tests.rs`. **They match.**
+- **The comparison point is the wire.** The extension's message list is private,
+  inside a component, built from host RPCs — unreachable from a test. But every
+  turn sends it to the backend, so a mock server that keeps the request body has
+  the real answer. The fixture DAG carries a user turn, an assistant turn with a
+  tool call, its matching reply, and an **orphan** reply whose call was never
+  made.
+- **The first run reported a difference that was the test's own doing**, and it
+  is worth keeping: the module's list had one extra `assistant` message. The
+  DAG was read *after* the turn, by which time the assistant's reply was a node;
+  the extension's request had been built before it existed. The server now
+  snapshots the DAG at the moment the request arrives. A differential that
+  compares two different inputs finds differences that mean nothing, and would
+  have sent me looking for a porting bug that was not there.
+- **The second failure was the fixture's sanity check**, which expected four
+  roles where there are five — the task instruction is itself a user turn. The
+  parity assertion had already passed by then.
+- **Verified it can detect divergence, twice.** Neutering the module's orphan
+  filter fails it, and rewording one word of the system prompt fails it. Without
+  those, "they match" would be indistinguishable from "the test compares
+  nothing".
+- The orphan is asserted absent from the *extension's* list separately, so a
+  shared bug — both keeping it, or both dropping everything — cannot pass as
+  agreement.
 
 #### AWU 980: `llm.rs`'s pure core
 - **Objective**: Move the parts of message assembly that are functions of their
