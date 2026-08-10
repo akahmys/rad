@@ -156,7 +156,11 @@ fn seeded_dag(snapshots: &std::path::Path) -> Arc<Mutex<Dag>> {
         "tool_calls": [{
             "id": "call_kept",
             "type": "function",
-            "function": { "name": "write", "arguments": "{}" }
+            // A real `path`, so `digest::build_digest_addendum` has something
+            // to report. With `{}` here the digest is empty and the comparison
+            // holds without ever exercising it — which is how AWU 980 shipped
+            // without the digest and AWU 981 failed to notice.
+            "function": { "name": "write", "arguments": "{\"path\":\"notes.md\"}" }
         }]
     })
     .to_string();

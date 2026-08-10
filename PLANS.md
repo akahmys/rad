@@ -614,10 +614,42 @@ impossible to attribute.
 - [x] AWU 982: `kernel.dag` — decision (A), scaffolding with a stage-9 expiry
 - [ ] AWU 983: `orchestrator.rs` — the event state machine (282)
 - [ ] AWU 982: `runner/done.rs` + `inline_tool_calls.rs` (565)
-- [ ] AWU 983: `reasoning.rs` (the two `unsafe` blocks) / `digest` /
-      `context_recovery` / `tool` (428)
-- [ ] AWU 984: delete the extension, the old world, the old RPC surface, and
+- [x] AWU 983: `digest`, and the port gap the differential had missed
+- [ ] **Blocked on stage 9** — see below. `orchestrator.rs`, `runner/done.rs`
+      and `reasoning.rs` cannot move until the DAG and the terminal do.
+- [ ] AWU final: delete the extension, the old world, the old RPC surface, and
       `models/`'s conversion macros
+
+#### AWU 983: `digest`, and a gap the differential had missed
+- **Objective**: Move `orchestrator.rs`'s state machine. **It cannot move yet**,
+  and measuring why is most of what this AWU produced. 315 passed / 0 failed.
+- **The remaining extension's host-RPC inventory, counted rather than guessed**:
+  `WriteStdout` 22, DAG writes (`CreateNode` 4, `SetNodeText` 4, `TakeSnapshot`
+  1, `CheckoutSnapshot` 1) 10, `GetDag` 5, `CompleteTask` 5,
+  `GetActiveLlmProfile` 2, and one each of `ReportTokenUsage`, `GetTools`,
+  `GenerateLlmStream`, `FileRead`, `CallExtension`.
+- **The terminal and DAG *writes* are stage 9's, not stage 8's.** §9.3 puts
+  `dag` and `ui-repl` in stage 9, and `orchestrator.rs` (16 RPCs),
+  `runner/done.rs` (16) and `reasoning.rs` (9) are made of them. Moving them now
+  means adding a batch of kernel methods that stage 9 then deletes — far more
+  scaffolding than `kernel.dag` was. **The dependency runs the other way from
+  the plan's ordering, for these three files.** Recorded as a decision for the
+  next session, not taken here.
+- **What did move**: `digest.rs` and its tests, verbatim but for one import.
+  `context_recovery.rs` and `inline_tool_calls.rs` were copied and then put
+  back — their consumers are in the blocked files, and a module carrying
+  unreachable code is what CODING.md §3 forbids and clippy rejects. A thing
+  moves with its consumer.
+- **`digest` was already missing from AWU 980's port, and AWU 981 did not
+  catch it.** `load_messages_from_dag` appends the digest to the system prompt;
+  `agent.messages` did not. The differential passed anyway because its fixture's
+  tool call carried `arguments: "{}"` — no `path`, no `command`, so the digest
+  was empty and the comparison never exercised it. The fixture now carries a
+  real path. **Confirmed in that order**: strengthened fixture fails, digest
+  wired, fixture passes.
+- The lesson is about the fixture, not the port: a differential is only as good
+  as the behaviour its input provokes, and "they agree" over an input that
+  reaches neither implementation's interesting path means nothing.
 
 #### AWU 982: `kernel.dag`
 - **Objective**: Decision (A) from AWU 980 — host-owned runtime state reaches a

@@ -14,6 +14,7 @@
 //! (AWU 978).
 #![deny(clippy::pedantic)]
 
+mod digest;
 mod intake;
 mod messages;
 
@@ -88,11 +89,20 @@ fn messages(req: MessagesReq) -> Result<serde_json::Value, Error> {
     let dag: messages::Dag =
         serde_json::from_value(raw).map_err(|e| Error::invalid(format!("bad dag: {e}")))?;
 
-    let mut out = vec![serde_json::json!({
-        "role": "system",
-        "content": messages::system_prompt(),
-    })];
-    for msg in messages::filter_orphaned_tool_messages(messages::traverse(&dag)) {
+    let filtered = messages::filter_orphaned_tool_messages(messages::traverse(&dag));
+
+    // The digest goes on the *system* message, and that placement is the whole
+    // point: `load_messages_from_dag` splits the system message out before
+    // compaction and re-attaches it afterwards, so it is the one part of the
+    // request no windowing can drop. A digest attached anywhere else would be
+    // the first thing discarded when history grows.
+    let mut system = messages::system_prompt();
+    if let Some(addendum) = digest::build_digest_addendum(&filtered) {
+        system.push_str(&addendum);
+    }
+
+    let mut out = vec![serde_json::json!({ "role": "system", "content": system })];
+    for msg in filtered {
         out.push(serde_json::to_value(msg).map_err(|e| Error::invalid(e.to_string()))?);
     }
     Ok(serde_json::Value::Array(out))
