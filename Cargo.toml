@@ -60,5 +60,6 @@ members = [
     "modules/policy",
     "modules/agent-loop",
     "modules/dag",
+    "modules/ui",
     "templates/rust",
 ]

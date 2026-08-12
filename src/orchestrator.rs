@@ -105,6 +105,9 @@ impl Orchestrator {
         // which session it is holding. Same file the host reads, so both agree
         // at boot and diverge only if one of them stops going through the
         // other — which is what `dag_module_bridge_tests` watches for.
+        // The terminal is a process-wide singleton with no context to thread a
+        // handle through, so it is given the kernel here rather than at each call.
+        crate::terminal::get_terminal().attach_kernel(Arc::clone(&kernel));
         if kernel.provider_of("dag.open").is_some() {
             // No workspace: the kernel preopens it as the module's `.`, so a
             // host-absolute path would name a different directory inside the

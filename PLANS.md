@@ -555,9 +555,39 @@ the gate came off.
 
 - [x] AWU 985: `modules/dag` — the graph and its persistence
 - [x] AWU 986: route the host's readers and writers through it
-- [ ] AWU 987: the terminal half (`WriteStdout`, thin: `rpc_terminal.rs` is 15
-      lines and `route_event_to_terminal` is a no-op)
+- [x] AWU 987: the terminal half — `modules/ui`
 - [ ] AWU 988: delete the host's copy of both
+
+#### AWU 987: `modules/ui`
+- **Objective**: The terminal's output half as a module. 349 passed / 0 failed.
+- **Done**. `modules/ui/{lib.rs,screen.rs,screen/tests.rs}`, `src/terminal.rs`
+  routed through it, and `tests/ui_module_tests.rs` for the seam.
+- **The whole state machine moved, not just the printing.** `write_log` defers
+  while a response is streaming and flushes when it stops, so a host that kept
+  the state while a module printed the tokens would have two halves of one
+  decision — the divergence AWU 986 spent its length avoiding.
+- **Input stays in the host.** Reading a line blocks, and suspending only the
+  caller is what §3.6.1's async is for, which stage 8 deferred. `ui-repl` is
+  therefore half a module for now, and the REPL loop is the other half.
+- **`write_raw` is deleted rather than routed.** It was a fourth reader of the
+  state, and with a module loaded the host's copy freezes at `Idle` —
+  `set_state` delegates and returns before touching it — so raw bytes would
+  have printed straight through a streamed response. It had no callers at all:
+  `route_event_to_terminal` stopped feeding it when it became a no-op. A latent
+  trap rather than a live bug, and the reason is recorded on the struct so the
+  next person adds a `ui` method instead of a fifth reader.
+- **`get_terminal()` is a process-wide singleton**, so the tests serialise on a
+  mutex — `attach_kernel` replaces what it points at, and parallel tests would
+  fight over it. The same reason `llm_command_tests.rs` serialises.
+- Verified by neutering the host's routing: three of the five tests fail and the
+  two fallback ones stay green, so each is about something different.
+- **Reviewed before finishing, and two things came out of it.** Clippy was
+  failing with four `needless_pass_by_value` errors on both targets — the same
+  lint `agent-loop` and `dag` each hit. And the module had no consumer at all:
+  no config entry, no test, nothing loading it. That is exactly the state AWU
+  984 called out as the thing that rots, one step short of the bridge.
+- `CONFIG.md`'s module example was three behind — `dag`, `agent-loop` and `ui`
+  are now documented, and the example is checked to still parse as JSON.
 
 #### AWU 986: the host writes through the module
 - **Objective**: One source of truth. 337 passed / 0 failed.

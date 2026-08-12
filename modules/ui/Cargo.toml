@@ -1,0 +1,17 @@
+[package]
+name = "ui-module"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+# Terminal output, as a kernel module (ARCHITECTURE-NEXT.md §9.3 stage 9).
+# The `ui-repl` of §5's tree, minus the input half: reading a line blocks, and
+# suspending only the caller needs §3.6.1's async, which stage 8 deferred.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rad-sdk = { path = "../../crates/rad-sdk" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+wit-bindgen = { workspace = true }

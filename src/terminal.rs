@@ -15,9 +15,25 @@ pub enum TerminalState {
 /// Unified terminal output controller.
 /// Manages standard output printing, thinking indicator display/erasure,
 /// and log buffering during task execution to prevent prompt corruption.
+///
+/// **`write_raw` was removed in AWU 987.** It read the state directly, and with
+/// a `ui` module loaded that copy freezes at `Idle` — `set_state` delegates and
+/// returns before touching it — so raw bytes would have printed straight
+/// through a streaming response. It had no callers: `route_event_to_terminal`
+/// stopped feeding it when it became a no-op, to keep process output from
+/// polluting the REPL layout. Anything that needs it again should add a `ui`
+/// method rather than a fourth reader of a state that lives elsewhere.
 pub struct TerminalController {
     state: Mutex<TerminalState>,
     deferred_buffer: Mutex<Vec<String>>,
+    /// The `ui` module, when one is loaded. It owns the state machine then;
+    /// the two fields above go unused and are deleted in AWU 988 along with
+    /// the rest of the host's copy.
+    ///
+    /// Set once at boot rather than passed in per call, because the callers
+    /// reach this through `get_terminal()` — a process-wide singleton with no
+    /// context to thread a handle through.
+    kernel: Mutex<Option<std::sync::Arc<crate::kernel::KernelShared>>>,
 }
 
 impl TerminalController {
@@ -27,11 +43,39 @@ impl TerminalController {
         Self {
             state: Mutex::new(TerminalState::Idle),
             deferred_buffer: Mutex::new(Vec::new()),
+            kernel: Mutex::new(None),
         }
+    }
+
+    /// Hands the controller the kernel, so it can find a `ui` module. Called
+    /// once, from `Orchestrator::new`.
+    pub fn attach_kernel(&self, kernel: std::sync::Arc<crate::kernel::KernelShared>) {
+        *self.kernel.lock() = Some(kernel);
+    }
+
+    /// Runs one call on the `ui` module, or `None` if nothing provides it.
+    fn on_module(&self, method: &str, payload: &serde_json::Value) -> Option<()> {
+        let kernel = self.kernel.lock().clone()?;
+        kernel.provider_of(method)?;
+        // A terminal write that fails is not worth failing a task over, and
+        // there is nowhere to report it that is not itself the terminal.
+        let _ = kernel.call("host", "ui", method, &payload.to_string());
+        Some(())
     }
 
     /// Sets the terminal state and handles transition actions (e.g. erasing Thinking indicator).
     pub fn set_state(&self, new_state: TerminalState) {
+        let name = match new_state {
+            TerminalState::Idle => "idle",
+            TerminalState::Thinking => "thinking",
+            TerminalState::Streaming => "streaming",
+        };
+        if self
+            .on_module("ui.state", &serde_json::json!({ "state": name }))
+            .is_some()
+        {
+            return;
+        }
         let mut state_guard = self.state.lock();
         let old_state = *state_guard;
         if old_state == new_state {
@@ -68,6 +112,12 @@ impl TerminalController {
 
     /// Outputs a response token from LLM stream, transitioning to `Streaming` state automatically.
     pub fn write_llm_token(&self, token: &str) {
+        if self
+            .on_module("ui.token", &serde_json::json!({ "text": token }))
+            .is_some()
+        {
+            return;
+        }
         self.set_state(TerminalState::Streaming);
         print!("{token}");
         let _ = std::io::Write::flush(&mut std::io::stdout());
@@ -76,6 +126,12 @@ impl TerminalController {
     /// Outputs a system log/event.
     /// If LLM execution is active, defers output to memory buffer to avoid display pollution.
     pub fn write_log(&self, log: String) {
+        if self
+            .on_module("ui.log", &serde_json::json!({ "text": log }))
+            .is_some()
+        {
+            return;
+        }
         let state_guard = self.state.lock();
         match *state_guard {
             TerminalState::Idle => {
@@ -83,29 +139,6 @@ impl TerminalController {
                 let _ = std::io::Write::flush(&mut std::io::stdout());
             }
             TerminalState::Thinking | TerminalState::Streaming => {
-                let mut buffer_guard = self.deferred_buffer.lock();
-                buffer_guard.push(log);
-            }
-        }
-    }
-
-    /// Outputs raw bytes to stdout or stderr.
-    /// If LLM execution is active, defers output as a string to memory buffer.
-    pub fn write_raw(&self, data: &[u8], is_stderr: bool) {
-        use std::io::Write;
-        let state_guard = self.state.lock();
-        match *state_guard {
-            TerminalState::Idle => {
-                if is_stderr {
-                    let _ = std::io::stderr().write_all(data);
-                    let _ = std::io::stderr().flush();
-                } else {
-                    let _ = std::io::stdout().write_all(data);
-                    let _ = std::io::stdout().flush();
-                }
-            }
-            TerminalState::Thinking | TerminalState::Streaming => {
-                let log = String::from_utf8_lossy(data).into_owned();
                 let mut buffer_guard = self.deferred_buffer.lock();
                 buffer_guard.push(log);
             }

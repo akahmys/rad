@@ -153,6 +153,33 @@ The config file supports JSON with comments (JSONC). The following example regis
           "web-access": { "command": "~/.cargo/bin/web-access-mcp", "args": [] }
         }
       }
+    },
+    {
+      // The conversation graph. With this loaded the module owns it and saves
+      // it after every change; without it the host keeps its own copy and
+      // saves once per completed task, as it always did. Either way the file
+      // is the same `<workspace>/.rad/sessions/<session_id>.json`, so a
+      // session written by one is readable by the other.
+      "name": "dag",
+      "source": "~/.rad/wasm/dag_module.wasm",
+      "enabled": true
+    },
+    {
+      // The reasoning and tool loop. Partly moved: it builds the message list
+      // a request is made from, while `rad-orchestrator` still runs the turn.
+      // Removing it falls back to the extension's own copy of that assembly.
+      "name": "agent-loop",
+      "source": "~/.rad/wasm/agent_loop_module.wasm",
+      "enabled": true
+    },
+    {
+      // Terminal output — the streaming state and the log buffering that keeps
+      // a log line from landing in the middle of a response. Input is not here:
+      // reading a line blocks, and suspending only the caller needs the async
+      // runtime that has not landed yet, so the REPL loop stays in the host.
+      "name": "ui",
+      "source": "~/.rad/wasm/ui_module.wasm",
+      "enabled": true
     }
   ]
 }
