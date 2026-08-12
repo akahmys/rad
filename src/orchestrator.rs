@@ -138,6 +138,30 @@ impl Orchestrator {
         }
     }
 
+    /// The conversation, from whoever owns it.
+    ///
+    /// The single read path. Callers used to lock `self.dag` directly, which
+    /// was correct only while the host owned the graph; with a `dag` module
+    /// loaded that field is a cache, and stage 9 is removing it. Going through
+    /// here means the last step — deleting the field — touches this function
+    /// and not every reader.
+    ///
+    /// # Panics
+    ///
+    /// Never: a module that answers with something unreadable falls back to the
+    /// host's copy rather than failing a `/tree` or a `/compact`.
+    #[must_use]
+    pub fn conversation(&self) -> crate::dag::Dag {
+        if let Some(kernel) = self.kernel.lock().clone()
+            && kernel.provider_of("dag.get").is_some()
+            && let Ok(reply) = kernel.call("host", "dag", "dag.get", "{}")
+            && let Ok(dag) = serde_json::from_str(&reply)
+        {
+            return dag;
+        }
+        self.dag.lock().clone()
+    }
+
     /// Runs one operation on the `dag` module, if one is loaded.
     ///
     /// A no-op without a module, which is the fallback every rad that does not
@@ -145,15 +169,25 @@ impl Orchestrator {
     /// calls sit alongside a host-side change that has already happened, and
     /// failing the caller would leave the two further apart, not closer.
     fn on_dag_module(&self, method: &str, payload: &serde_json::Value) {
-        let Some(kernel) = self.kernel.lock().clone() else {
-            return;
-        };
-        if kernel.provider_of(method).is_none() {
-            return;
-        }
-        if let Err(e) = kernel.call("host", "dag", method, &payload.to_string()) {
+        if let Some(Err(e)) = self.try_dag_module(method, payload) {
             crate::log_host!("[HOST] {method} failed: {e}");
         }
+    }
+
+    /// The same call, with the outcome handed back.
+    ///
+    /// `None` still means "no module"; the two exist separately because most
+    /// callers sit beside a host-side change that has already happened and have
+    /// nothing useful to do with a failure, while `/compact` is reporting to a
+    /// person and does.
+    pub(crate) fn try_dag_module(
+        &self,
+        method: &str,
+        payload: &serde_json::Value,
+    ) -> Option<Result<String, String>> {
+        let kernel = self.kernel.lock().clone()?;
+        kernel.provider_of(method)?;
+        Some(kernel.call("host", "dag", method, &payload.to_string()))
     }
 
     /// Resets the current session by saving it and creating a new empty session ID.
@@ -263,14 +297,12 @@ impl Orchestrator {
             }
         }
 
-        let mut dag_guard = self.dag.lock();
-        if !dag_guard.nodes.contains_key(node_id) {
+        if !self.conversation().nodes.contains_key(node_id) {
             return Err(format!("Node '{node_id}' not found in DAG"));
         }
 
         self.sandbox.checkout_snapshot(node_id)?;
-        dag_guard.current_node_id = Some(node_id.to_string());
-        drop(dag_guard);
+        self.dag.lock().current_node_id = Some(node_id.to_string());
         // Same reason as `reset_session`: the module still points at the old
         // tip otherwise, and the next turn parents off it and undoes the
         // rollback a turn later, where it looks like nothing to do with this.

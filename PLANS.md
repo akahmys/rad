@@ -556,7 +556,12 @@ the gate came off.
 - [x] AWU 985: `modules/dag` — the graph and its persistence
 - [x] AWU 986: route the host's readers and writers through it
 - [x] AWU 987: the terminal half — `modules/ui`
-- [ ] AWU 988: delete the host's copy of both
+- [x] AWU 988: rollback/reset through the module, and dedup the graph type
+- [x] AWU 989: one read path, one write path — every host reader and writer of
+      the conversation now goes through `Orchestrator::conversation()` or the
+      module
+- [ ] AWU 990: delete `Orchestrator::dag` and make the module required
+      (25 `Orchestrator::new` sites, 9 `DagSubsystemImpl` sites)
 
 #### AWU 988: two divergences AWU 986 shipped
 - **Found while sizing the next unit**, not by a failing test: `reset_session`
@@ -582,6 +587,33 @@ the gate came off.
   AWU 987's unloaded module, and this. A bridge is only as good as the paths
   the tests take across it, and "the operations I thought of" is not the same
   set as "the operations that exist".
+
+#### AWU 989: one read path, one write path
+- **Objective**: Stop the host touching the conversation directly, so that
+  deleting its copy is a change to one function rather than to every reader.
+  348 passed / 0 failed.
+- **`Orchestrator::conversation()`** is now the single read path: it asks the
+  module and falls back to the cache. `command/handlers.rs` (×2),
+  `command/compact.rs` and `rollback` were locking the `Arc` directly, which was
+  correct only while the host owned the graph.
+- **`/compact`'s merge was a write nobody had noticed.** It called
+  `merge_nodes` on the host's copy, which the next refresh would have undone —
+  the same shape as AWU 988's rollback, a fourth instance of the same class. It
+  goes through `dag.merge_nodes` now.
+- Two tests added for paths that had none: the merge, and that
+  `conversation()` returns the module's graph rather than the cache — asserted
+  against a graph written *straight to the module*, so a cache that happened to
+  agree could not pass it.
+- Verified by making `conversation()` read the cache only: exactly those two
+  fail, the other eight stay green.
+- **A test wanted `try_dag_module`, which is `pub(crate)`.** It drives the
+  kernel directly instead. Widening visibility to suit a test is the wrong
+  direction — the same call AWU 986 made when it put the drain's tests in a
+  companion file rather than exposing the loop.
+- **Left for AWU 990**, which is the churn: `Orchestrator::dag` and
+  `DagSubsystemImpl::dag` still exist as the fallback, and 25 construction sites
+  plus 9 subsystem sites depend on them. Removing them is what makes the module
+  required and finishes §9.3's "the Core that remains is the kernel".
 
 #### AWU 988 (second half): the module shares the host's graph
 - **`modules/dag` no longer carries a copy of `Dag`.** It depends on

@@ -37,7 +37,7 @@ pub(super) fn cmd_session(_args: &str, orchestrator: &Arc<Orchestrator>) -> Comm
     let mut status_msg = format!("Session ID: {session_id}\n");
 
     {
-        let dag_guard = orchestrator.dag.lock();
+        let dag_guard = orchestrator.conversation();
         let total_nodes = dag_guard.nodes.len();
         let current_node = dag_guard.current_node_id.as_deref().unwrap_or("None");
         let _ = write!(
@@ -91,7 +91,7 @@ pub(super) fn cmd_new(_args: &str, orchestrator: &Arc<Orchestrator>) -> CommandR
 }
 
 pub(super) fn cmd_tree(_args: &str, orchestrator: &Arc<Orchestrator>) -> CommandResult {
-    let dag_guard = orchestrator.dag.lock();
+    let dag_guard = orchestrator.conversation();
     let tree_str = tree::render_dag_tree(&dag_guard);
     CommandResult::StatusInfo(tree_str)
 }

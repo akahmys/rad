@@ -112,7 +112,7 @@ pub fn run_compact(orchestrator: &Arc<Orchestrator>) -> String {
 /// `"system"` so a summary node still counts as real conversation content
 /// instead of silently disappearing from future compaction passes.
 fn collect_candidates(orchestrator: &Arc<Orchestrator>) -> Vec<(String, String, String)> {
-    let dag = orchestrator.dag.lock();
+    let dag = orchestrator.conversation();
     let mut candidates = Vec::new();
     let mut current_id = dag.current_node_id.clone();
 
@@ -187,10 +187,21 @@ fn persist_compaction(
 
     let summary_text = format!("[Compacted summary] {summary}");
     let mut merged_count = 0usize;
-    let mut dag = orchestrator.dag.lock();
     for run in &mergeable_runs {
-        match dag.merge_nodes(run, &summary_text) {
-            Ok(_) => merged_count += run.len(),
+        // Through the module when one is loaded: merging in the host's copy
+        // alone would be undone by the next refresh, the same way AWU 988's
+        // rollback was.
+        let payload = serde_json::json!({ "node_ids": run, "summary_text": summary_text });
+        let outcome = match orchestrator.try_dag_module("dag.merge_nodes", &payload) {
+            Some(reply) => reply.map(|_| ()),
+            None => orchestrator
+                .dag
+                .lock()
+                .merge_nodes(run, &summary_text)
+                .map(|_| ()),
+        };
+        match outcome {
+            Ok(()) => merged_count += run.len(),
             Err(e) => return format!("\x1b[1;31mFailed to persist compaction: {e}\x1b[0m"),
         }
     }

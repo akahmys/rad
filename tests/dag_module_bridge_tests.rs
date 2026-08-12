@@ -269,3 +269,86 @@ fn after_a_reset_the_module_writes_to_the_new_session_not_the_old_one() {
         Some("new session")
     );
 }
+
+/// `/compact` merges nodes. Merging in the host's copy alone would be undone by
+/// the next refresh — the same shape as AWU 988's rollback, and it had no test
+/// until the readers were routed through one path.
+#[test]
+fn compaction_merges_in_the_module() {
+    let dir = tempfile::tempdir().unwrap();
+    let orch = orchestrator(dir.path(), true);
+    let dag = subsystem(&orch);
+
+    let a = dag.create_node("", "user").unwrap();
+    dag.set_node_text(&a, "one").unwrap();
+    let b = dag.create_node(&a, "assistant").unwrap();
+    dag.set_node_text(&b, "two").unwrap();
+
+    // Through the kernel, which is what the orchestrator's own helper does —
+    // reached this way rather than by widening that method's visibility to suit
+    // a test.
+    let merged = orch
+        .kernel
+        .lock()
+        .as_ref()
+        .map(|k| {
+            k.call(
+                "host",
+                "dag",
+                "dag.merge_nodes",
+                &serde_json::json!({ "node_ids": [&a, &b], "summary_text": "[Compacted] both" })
+                    .to_string(),
+            )
+        })
+        .expect("a module is loaded")
+        .expect("merge should succeed");
+    let merged: serde_json::Value = serde_json::from_str(&merged).unwrap();
+    let merged_id = merged["id"].as_str().expect("an id").to_string();
+
+    // Read back the way `/tree` and `/status` do.
+    let after = orch.conversation();
+    assert_eq!(
+        after.nodes.len(),
+        1,
+        "both nodes should have merged: {after:?}"
+    );
+    assert_eq!(
+        after.nodes.get(&merged_id).map(|n| n.text.as_str()),
+        Some("[Compacted] both")
+    );
+}
+
+/// `conversation()` is the one read path, and it must show the module's graph
+/// rather than the host's cache. Asserted against a graph the cache has never
+/// seen: written straight to the module, with no host mutation to refresh it.
+#[test]
+fn conversation_reads_the_module_not_the_cache() {
+    let dir = tempfile::tempdir().unwrap();
+    let orch = orchestrator(dir.path(), true);
+
+    let id = orch
+        .kernel
+        .lock()
+        .as_ref()
+        .map(|k| {
+            k.call(
+                "host",
+                "dag",
+                "dag.create_node",
+                &serde_json::json!({ "node_type": "user" }).to_string(),
+            )
+        })
+        .expect("a module is loaded")
+        .expect("create should succeed");
+    let id: serde_json::Value = serde_json::from_str(&id).unwrap();
+    let id = id["id"].as_str().unwrap().to_string();
+
+    assert!(
+        orch.dag.lock().nodes.is_empty(),
+        "the cache should not have been refreshed by a direct module call"
+    );
+    assert!(
+        orch.conversation().nodes.contains_key(&id),
+        "conversation() returned the stale cache instead of the module's graph"
+    );
+}
