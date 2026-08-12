@@ -583,6 +583,29 @@ the gate came off.
   the tests take across it, and "the operations I thought of" is not the same
   set as "the operations that exist".
 
+#### AWU 988 (second half): the module shares the host's graph
+- **`modules/dag` no longer carries a copy of `Dag`.** It depends on
+  `rad-models` and uses `rad_models::Dag`, the same type the host uses.
+  346 passed / 0 failed.
+- **AWU 985 copied it for no reason.** `rad-models` depends on serde and nothing
+  else, and `ext/rad-orchestrator` had already been building against it for
+  `wasm32-wasip2` for stages — so a module could always have simply used it.
+  171 lines of graph and 107 of duplicated tests are gone; the six graph tests
+  now run once, in the host, instead of twice against two copies.
+- **Two copies of the one structure a session cannot lose is two things to keep
+  in step**, and nothing was keeping them: `dag.get`'s shape agreeing with the
+  host's was a *test result* rather than a fact about the code. It is now true
+  by construction.
+- **The first control for that did not discriminate.** Adding a field to `Dag`
+  left the module building fine, because it only ever constructs one through
+  `Dag::new()`. Renaming `create_node` — a method the module actually calls —
+  fails its build with 2 errors, which is what shows the type is genuinely
+  shared.
+- Still duplicated, and next: `models/src/dag.rs` remains the host's
+  implementation *and* the module's, which is correct. What is still doubled is
+  the *graph state* — the host's `Arc` cache beside the module's copy — and that
+  is what the last unit of stage 9 removes.
+
 #### AWU 987: `modules/ui`
 - **Objective**: The terminal's output half as a module. 349 passed / 0 failed.
 - **Done**. `modules/ui/{lib.rs,screen.rs,screen/tests.rs}`, `src/terminal.rs`
@@ -649,9 +672,12 @@ the gate came off.
 #### AWU 985: `modules/dag`
 - **Objective**: The graph as a module, owning its own storage.
   332 passed / 0 failed.
-- **Done**. `modules/dag/{lib.rs,graph.rs,store.rs}`, `src/dag/tests.rs` moved
+- **Done**. `modules/dag/{lib.rs,graph.rs,store.rs}`, `src/dag/tests.rs` copied
   across unchanged as `graph/tests.rs`, plus `store/tests.rs` and
   `tests/dag_module_tests.rs`.
+  **Corrected below (AWU 988):** this entry originally said the tests *moved*.
+  They were copied — the originals stayed, because `models/src/dag.rs` was still
+  the host's live implementation. The copy itself was unnecessary.
 - **The graph is copied operation for operation.** It is the one piece of state
   a session cannot lose, so the port is mechanical — including the two
   conditional `current_node_id` rules in `merge_nodes` and `delete_node` that

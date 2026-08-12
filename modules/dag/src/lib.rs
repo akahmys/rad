@@ -1,15 +1,20 @@
 //! The conversation graph, as a kernel module (ARCHITECTURE-NEXT.md §9.3).
 //!
 //! Stage 9's decision (A): the module owns the graph and persists it itself,
-//! rather than being a window onto storage the host still owns. The graph moves
-//! from `models/src/dag.rs` unchanged; what is new is that saving happens here,
-//! on every mutation, instead of once per completed task in `src/main.rs`.
+//! rather than being a window onto storage the host still owns. What is new is
+//! that saving happens here, on every mutation, instead of once per completed
+//! task in `src/main.rs`.
+//!
+//! The graph itself is `rad_models::Dag`, the same type the host uses, not a
+//! port of it. AWU 985 copied it and AWU 988 undid that: `rad-models` depends
+//! on serde and nothing else, so a module can simply use it — and two copies of
+//! the one structure a session cannot lose is two things to keep in step, for
+//! no gain.
 //!
 //! The host reads and writes it through these methods during the migration
 //! (AWU 986) and stops holding a copy at all when that lands.
 #![deny(clippy::pedantic)]
 
-mod graph;
 mod store;
 
 use rad_sdk::Error;

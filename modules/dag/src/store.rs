@@ -10,7 +10,7 @@
 //! task, so a crash already cost the turn in progress. Saving on every mutation
 //! here is strictly better than that, and cheap — a session file is a few
 //! kilobytes and a turn writes a handful of nodes.
-use crate::graph::Dag;
+use rad_models::Dag;
 use std::cell::RefCell;
 use std::path::PathBuf;
 

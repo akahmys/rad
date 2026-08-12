@@ -15,6 +15,12 @@ tempfile = "3.8"
 
 [dependencies]
 rad-sdk = { path = "../../crates/rad-sdk" }
+# The graph itself, not a copy of it. `rad-models` depends on serde and nothing
+# else, and `ext/rad-orchestrator` already proves it builds for wasm32-wasip2 —
+# so there is no reason for this module to carry its own `Dag`, and every
+# reason not to: two copies of the one structure a session cannot lose is two
+# things to keep in step.
+rad-models = { path = "../../models" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 wit-bindgen = { workspace = true }

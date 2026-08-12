@@ -594,6 +594,7 @@ dependencies = [
 name = "dag-module"
 version = "0.1.0"
 dependencies = [
+ "rad-models",
  "rad-sdk",
  "serde",
  "serde_json",
