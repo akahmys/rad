@@ -558,6 +558,31 @@ the gate came off.
 - [x] AWU 987: the terminal half — `modules/ui`
 - [ ] AWU 988: delete the host's copy of both
 
+#### AWU 988: two divergences AWU 986 shipped
+- **Found while sizing the next unit**, not by a failing test: `reset_session`
+  and `rollback` both write the host's `Arc` *directly*, and AWU 986's bridge
+  tests only ever exercised create/set/get. 352 passed / 0 failed.
+- **Rollback was silently undone one turn later.** The pointer moved in the
+  host's cache; the module kept pointing at the old tip, so the next
+  `create_node` parented off *that* and the refresh copied the result back over
+  the cache. The failure would have surfaced a turn after the rollback, looking
+  like nothing to do with it. Fixed with `dag.set_current`.
+- **A reset left the module holding the old conversation**, which the next
+  mutation copied straight back. Fixed by opening the new session on the module.
+- **The first fix for that was worse than the bug.** A `dag.reset` that cleared
+  the graph in place *saved through the still-open handle*, overwriting the
+  session that had just been archived. It passed the reset test — clearing does
+  clear — and only failed once a test asked which *file* the module was writing
+  to afterwards. `dag.open(new_id)` does both halves correctly, so `dag.reset`
+  is gone from the host, the module and the store, with the reason recorded on
+  `store::open` where someone would go looking for one.
+- Each fix was controlled separately: removing `dag.set_current` fails only the
+  rollback test, removing `dag.open` fails only the two reset tests.
+- **The pattern is the same one three times now** — AWU 986's absolute path,
+  AWU 987's unloaded module, and this. A bridge is only as good as the paths
+  the tests take across it, and "the operations I thought of" is not the same
+  set as "the operations that exist".
+
 #### AWU 987: `modules/ui`
 - **Objective**: The terminal's output half as a module. 349 passed / 0 failed.
 - **Done**. `modules/ui/{lib.rs,screen.rs,screen/tests.rs}`, `src/terminal.rs`

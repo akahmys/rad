@@ -98,6 +98,25 @@ fn delete_node(req: NodeReq) -> Result<OkRes, Error> {
     Ok(OkRes { ok: true })
 }
 
+/// Moves the conversation pointer, which is what a rollback does.
+///
+/// Separate from `create_node`'s implicit move because a rollback names a node
+/// that already exists. The host did this to its own copy alone until AWU 988;
+/// the module kept pointing at the old tip, so the next turn parented off it
+/// and undid the rollback.
+fn set_current(req: NodeReq) -> Result<OkRes, Error> {
+    let NodeReq { node_id } = req;
+    store::mutate(|dag| {
+        if !dag.nodes.contains_key(&node_id) {
+            return Err(format!("Node '{node_id}' not found"));
+        }
+        dag.current_node_id = Some(node_id.clone());
+        Ok(())
+    })
+    .map_err(Error::invalid)?;
+    Ok(OkRes { ok: true })
+}
+
 /// The whole graph, in the shape `GetDag` returns and `kernel.dag` returns —
 /// the one every existing reader already parses.
 fn get(_req: GetReq) -> Result<serde_json::Value, Error> {
@@ -116,5 +135,6 @@ rad_sdk::module! {
         "dag.set_node_text" => set_node_text,
         "dag.merge_nodes"   => merge_nodes,
         "dag.delete_node"   => delete_node,
+        "dag.set_current"   => set_current,
     }
 }

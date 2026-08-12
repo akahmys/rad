@@ -50,6 +50,11 @@ fn session_path(base: &str, session_id: &str) -> PathBuf {
 
 /// Attaches to a session, loading it if the file is there.
 ///
+/// **This is also how a session is reset**, and there is deliberately no
+/// separate "clear" operation. Clearing in place would save through the handle
+/// that is still open, overwriting the session that was just archived — which
+/// is exactly what a first attempt at it did.
+///
 /// A missing file is an empty graph, not an error: that is what starting a new
 /// session looks like.
 pub(crate) fn open(base: &str, session_id: &str) -> Result<(), String> {

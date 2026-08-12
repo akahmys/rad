@@ -138,6 +138,24 @@ impl Orchestrator {
         }
     }
 
+    /// Runs one operation on the `dag` module, if one is loaded.
+    ///
+    /// A no-op without a module, which is the fallback every rad that does not
+    /// configure one runs. Failures are logged rather than propagated: these
+    /// calls sit alongside a host-side change that has already happened, and
+    /// failing the caller would leave the two further apart, not closer.
+    fn on_dag_module(&self, method: &str, payload: &serde_json::Value) {
+        let Some(kernel) = self.kernel.lock().clone() else {
+            return;
+        };
+        if kernel.provider_of(method).is_none() {
+            return;
+        }
+        if let Err(e) = kernel.call("host", "dag", method, &payload.to_string()) {
+            crate::log_host!("[HOST] {method} failed: {e}");
+        }
+    }
+
     /// Resets the current session by saving it and creating a new empty session ID.
     ///
     /// # Errors
@@ -154,6 +172,19 @@ impl Orchestrator {
         let new_id = new_session_id();
         self.session_id.lock().clone_from(&new_id);
         *self.dag.lock() = crate::dag::Dag::new();
+        // The module owns the graph when one is loaded, so clearing the host's
+        // copy alone leaves it holding the old conversation — which the next
+        // mutation copies straight back over the cache. Opening the new session
+        // does both halves: the module loads an empty graph *and* starts
+        // writing to the new file. A separate "clear" step is worse than
+        // useless here — it saves through the still-open handle, overwriting
+        // the session that was just archived, which
+        // `after_a_reset_the_module_writes_to_the_new_session_not_the_old_one`
+        // caught.
+        self.on_dag_module(
+            "dag.open",
+            &serde_json::json!({ "session_id": new_id.clone() }),
+        );
 
         // And save the empty one, so the new id exists on disk immediately.
         crate::session::save_session(workspace, &new_id, &self.dag.lock())?;
@@ -239,6 +270,14 @@ impl Orchestrator {
 
         self.sandbox.checkout_snapshot(node_id)?;
         dag_guard.current_node_id = Some(node_id.to_string());
+        drop(dag_guard);
+        // Same reason as `reset_session`: the module still points at the old
+        // tip otherwise, and the next turn parents off it and undoes the
+        // rollback a turn later, where it looks like nothing to do with this.
+        self.on_dag_module(
+            "dag.set_current",
+            &serde_json::json!({ "node_id": node_id }),
+        );
 
         Ok(())
     }

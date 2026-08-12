@@ -170,3 +170,102 @@ fn what_the_host_wrote_is_on_disk_where_session_rs_looks_for_it() {
         Some("durable")
     );
 }
+
+/// Rolling back moves the conversation pointer. With the module owning the
+/// graph, moving it in the host's cache alone leaves the module still pointing
+/// at the old tip — and the next `create_node` parents off *that*, so the
+/// rollback is silently undone one turn later.
+#[test]
+fn a_rollback_moves_the_pointer_in_the_module_too() {
+    let dir = tempfile::tempdir().unwrap();
+    let orch = orchestrator(dir.path(), true);
+    let dag = subsystem(&orch);
+
+    let first = dag.create_node("", "user").unwrap();
+    dag.set_node_text(&first, "first").unwrap();
+    std::fs::create_dir_all(dir.path().join("snapshots").join(&first)).unwrap();
+    let second = dag.create_node(&first, "assistant").unwrap();
+    dag.set_node_text(&second, "second").unwrap();
+
+    orch.rollback(&first).expect("rollback should succeed");
+
+    let from_module = orch
+        .kernel
+        .lock()
+        .as_ref()
+        .map(|k| k.call("test", "dag", "dag.get", "{}"))
+        .expect("the kernel is loaded")
+        .expect("dag.get must answer");
+    let from_module: serde_json::Value = serde_json::from_str(&from_module).unwrap();
+    assert_eq!(
+        from_module["current_node_id"],
+        first.as_str(),
+        "the module still points at the old tip, so the next turn will undo the rollback"
+    );
+}
+
+/// Starting a new session clears the conversation. Clearing only the host's
+/// cache leaves the module holding the old one, which the next mutation copies
+/// straight back over the cache — and the module also keeps writing to the
+/// session file it was opened with.
+#[test]
+fn resetting_the_session_clears_the_module_too() {
+    let dir = tempfile::tempdir().unwrap();
+    let orch = orchestrator(dir.path(), true);
+    let dag = subsystem(&orch);
+
+    let id = dag.create_node("", "user").unwrap();
+    dag.set_node_text(&id, "from the old session").unwrap();
+
+    orch.reset_session().expect("reset should succeed");
+
+    let from_module = orch
+        .kernel
+        .lock()
+        .as_ref()
+        .map(|k| k.call("test", "dag", "dag.get", "{}"))
+        .expect("the kernel is loaded")
+        .expect("dag.get must answer");
+    let from_module: serde_json::Value = serde_json::from_str(&from_module).unwrap();
+    assert_eq!(
+        from_module["nodes"].as_object().map(serde_json::Map::len),
+        Some(0),
+        "the module kept the old conversation: {from_module}"
+    );
+}
+
+/// Which *file* the module writes to after a reset. Clearing its memory is only
+/// half of it: still pointed at the old session, the next node would overwrite
+/// the conversation that was just archived with an empty one.
+#[test]
+fn after_a_reset_the_module_writes_to_the_new_session_not_the_old_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let orch = orchestrator(dir.path(), true);
+    let dag = subsystem(&orch);
+    let workspace = dir.path().join("workspace");
+    let workspace = workspace.to_string_lossy().to_string();
+
+    let id = dag.create_node("", "user").unwrap();
+    dag.set_node_text(&id, "archived").unwrap();
+
+    let new_id = orch.reset_session().expect("reset should succeed");
+    let fresh = dag.create_node("", "user").unwrap();
+    dag.set_node_text(&fresh, "new session").unwrap();
+
+    // The session that ended still holds what it held.
+    let old = rad::session::load_session(&workspace, "bridge")
+        .expect("the archived session should still be readable");
+    assert_eq!(
+        old.nodes.get(&id).map(|n| n.text.as_str()),
+        Some("archived"),
+        "the module overwrote the archived session"
+    );
+
+    // And the new one holds the new conversation.
+    let current = rad::session::load_session(&workspace, &new_id)
+        .expect("the new session should have been written");
+    assert_eq!(
+        current.nodes.get(&fresh).map(|n| n.text.as_str()),
+        Some("new session")
+    );
+}
