@@ -3,7 +3,7 @@
 **Trigger**: Completion of every AWU $\rightarrow$ Perform Audit $\rightarrow$ Update `PLANS.md`.
 
 ## 📋 Planning Audit
-- **Integrity**: Maintain `PLANS.md` structure (No deletion of past logs/roadmap).
+- **Integrity**: Maintain `PLANS.md` structure. Nothing open — a roadmap entry, an unstarted AWU, a carried-forward item — is ever deleted. A completed AWU's record lives in its commit message, with a one-line index row here (PLANNING.md §6).
 - **Atomicity**: Ensure AWU is a single, completed unit.
 - **Consistency**: Ensure `PLANS.md` reflects the current state.
 - **No Omission**: Do not omit unstarted AWUs or roadmap items.
