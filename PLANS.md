@@ -170,6 +170,30 @@ and 6, and the rule since is that a bulk edit carries asserts for what it remove
   exception already taken: `~/.rad/config.json` was brought current in AWU 976
   and 987 because it had stopped booting.
 
+### 📋 Queued for when the migration finishes
+
+**Merge `ARCHITECTURE.md` and `ARCHITECTURE-NEXT.md`, and fold still-current
+rationale out of `PLANS-ARCHIVE.md` into the result.** One pass, not three:
+once the migration lands, "NEXT" *is* the architecture, and deciding what each
+archived decision still explains is the same judgement as deciding what belongs
+in the merged document.
+
+Deliberately after, not before. Stages 8 and 9 still have to delete
+`rad-orchestrator`, the old WIT worlds and the old RPC surface — so a good part
+of what `PLANS-ARCHIVE.md` explains is about to stop being current. Extracting
+it now would mean moving rationale for things scheduled for deletion.
+
+Two measurements the pass should not re-derive:
+
+- **`PLANS-ARCHIVE.md` cannot be dropped in favour of git.** 31 of its 45 AWUs
+  have no commit naming them — the `(AWU nnn)` subject convention only starts
+  around AWU 948. Unlike the Phase 71 records, deleting these would lose them.
+- **It is not a straight move into `ARCHITECTURE.md` either.** Most of it
+  concerns components that no longer exist (`llm-connector`,
+  `mcp-tool-provider`, `security-guard`, `skill-tool-provider`) or verification
+  results true only at the time. `ARCHITECTURE.md` describes what *is*;
+  separating the two needs the 1,118 lines read and judged one entry at a time.
+
 ### 📌 State at the end of stage 7
 
 - **1 extension** (`rad-orchestrator`) + **5 modules** (`context`, `skills`,
@@ -208,5 +232,8 @@ scratch.
 ### 📚 Earlier phases
 
 Phase 70 and everything before it moved to `PLANS-ARCHIVE.md` when this file
-passed 2,400 lines. Nothing in the migration has needed to consult them.
+passed 2,400 lines. Nothing in the migration has needed to consult them — but
+they are not redundant with git: 31 of their 45 AWUs predate the `(AWU nnn)`
+commit-subject convention and exist nowhere else. See the queued documentation
+pass above.
 
